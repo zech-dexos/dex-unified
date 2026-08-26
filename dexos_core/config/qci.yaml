@@ -1,0 +1,4 @@
+enabled: true
+thresholds:
+  min_confidence: 0.80
+  max_risk: 0.20

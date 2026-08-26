@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic
+httpx
+gtts
+discord.py
+firebase-admin>=7.0.0
+google-generativeai==0.8.6
+stripe
+grpcio>=1.75.0
+setuptools

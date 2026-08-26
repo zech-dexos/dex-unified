@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#FDFCF8">
+<title>Haven</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #FDFCF8;
+    --bg2:       #F5F2EA;
+    --bg3:       #EDE8DC;
+    --border:    #DDD8CC;
+    --text:      #2C2B28;
+    --text-dim:  #7A7570;
+    --text-muted:#AAA49A;
+    --amber:     #C8921A;
+    --amber-soft:#F5E6C8;
+    --amber-glow:rgba(200,146,26,0.15);
+    --green:     #4A7A5A;
+    --green-soft:#E0EDE4;
+    --red:       #9A3A2A;
+    --red-soft:  #F5E0DC;
+    --shadow:    rgba(44,43,40,0.08);
+    --mono:      'Nunito', sans-serif;
+    --serif:     'Lora', serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 18px;
+    line-height: 1.6;
+    overflow: hidden;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 0;
+  }
+
+  /* ── HEADER ── */
+  #header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.4rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+
+  #brand {
+    display: flex;
+    flex-direction: column;
+  }
+
+  #brand-name {
+    font-family: var(--serif);
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--amber);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  #brand-sub {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  #status-pill {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.35rem 0.9rem;
+    border-radius: 20px;
+    background: var(--bg3);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    transition: all 0.3s ease;
+    letter-spacing: 0.03em;
+  }
+
+  #status-pill.listening {
+    background: var(--green-soft);
+    color: var(--green);
+    border-color: var(--green);
+  }
+
+  #status-pill.thinking {
+    background: var(--amber-soft);
+    color: var(--amber);
+    border-color: var(--amber);
+    animation: pulse-status 1.2s ease-in-out infinite;
+  }
+
+  #status-pill.speaking {
+    background: var(--amber-soft);
+    color: var(--amber);
+    border-color: var(--amber);
+  }
+
+  @keyframes pulse-status {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.6; }
+  }
+
+  /* ── MESSAGES ── */
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.2rem 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .msg {
+    max-width: 88%;
+    padding: 0.9rem 1.1rem;
+    border-radius: 18px;
+    line-height: 1.65;
+    font-size: 1rem;
+    animation: msgIn 0.25s ease-out;
+    position: relative;
+  }
+
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg-haven {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+    align-self: flex-start;
+    color: var(--text);
+  }
+
+  .msg-haven .msg-name {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--amber);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.3rem;
+  }
+
+  .msg-user {
+    background: var(--amber);
+    border-bottom-right-radius: 4px;
+    align-self: flex-end;
+    color: white;
+    font-weight: 500;
+  }
+
+  .msg-system {
+    align-self: center;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-align: center;
+    padding: 0.3rem 0.8rem;
+    font-style: italic;
+  }
+
+  .msg-camera {
+    align-self: flex-end;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-bottom-right-radius: 4px;
+    padding: 0.5rem;
+    overflow: hidden;
+  }
+
+  .msg-camera img {
+    max-width: 180px;
+    border-radius: 8px;
+    display: block;
+  }
+
+  /* Typing indicator */
+  .typing-dots {
+    display: flex;
+    gap: 5px;
+    padding: 0.3rem 0;
+    align-items: center;
+  }
+
+  .typing-dots span {
+    width: 8px;
+    height: 8px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    animation: dot-bounce 1.2s ease-in-out infinite;
+  }
+
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes dot-bounce {
+    0%, 100% { transform: translateY(0); opacity: 0.4; }
+    50%       { transform: translateY(-5px); opacity: 1; }
+  }
+
+  /* ── BOTTOM AREA ── */
+  #bottom {
+    flex-shrink: 0;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    padding: 1rem 1.4rem 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+
+  /* ── MIC BUTTON ── */
+  #mic-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1.6rem;
+  }
+
+  #mic-btn {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: var(--amber);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(200,146,26,0.35);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  #mic-btn:active { transform: scale(0.93); }
+
+  #mic-btn.listening {
+    background: var(--green);
+    box-shadow: 0 4px 20px rgba(74,122,90,0.4);
+    animation: mic-pulse 1.5s ease-in-out infinite;
+  }
+
+  #mic-btn.speaking {
+    background: var(--bg3);
+    box-shadow: none;
+  }
+
+  @keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 4px 20px rgba(74,122,90,0.4), 0 0 0 0 rgba(74,122,90,0.3); }
+    50%       { box-shadow: 0 4px 20px rgba(74,122,90,0.4), 0 0 0 16px rgba(74,122,90,0); }
+  }
+
+  #mic-btn svg { width: 36px; height: 36px; fill: white; pointer-events: none; }
+  #mic-btn.speaking svg { fill: var(--text-dim); }
+
+  /* Secondary buttons */
+  .side-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--bg2);
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+  }
+
+  .side-btn:active { background: var(--bg3); }
+  .side-btn svg { width: 24px; height: 24px; fill: var(--text-dim); pointer-events: none; }
+  .side-btn-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 3px;
+    letter-spacing: 0.04em;
+  }
+
+  .side-btn-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  /* ── TEXT INPUT ── */
+  #text-row {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-end;
+  }
+
+  #text-input {
+    flex: 1;
+    background: var(--bg2);
+    border: 1.5px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 24px;
+    resize: none;
+    min-height: 48px;
+    max-height: 120px;
+    outline: none;
+    transition: border-color 0.2s;
+    line-height: 1.5;
+  }
+
+  #text-input:focus { border-color: var(--amber); }
+  #text-input::placeholder { color: var(--text-muted); }
+
+  #send-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--amber);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s, transform 0.1s;
+  }
+
+  #send-btn:active { transform: scale(0.92); }
+  #send-btn svg { width: 22px; height: 22px; fill: white; pointer-events: none; }
+
+  /* ── EMERGENCY ── */
+  #emergency-btn {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--red-soft);
+    border: 1.5px solid var(--red);
+    border-radius: 14px;
+    color: var(--red);
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    text-align: center;
+    transition: background 0.2s;
+    display: none;
+  }
+
+  #emergency-btn.visible { display: block; }
+  #emergency-btn:active { background: #f0d0cc; }
+
+  /* ── CAMERA MODAL ── */
+  #camera-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 100;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.2rem;
+    padding: 1.5rem;
+  }
+
+  #camera-modal.open { display: flex; }
+
+  #camera-video {
+    width: 100%;
+    max-width: 400px;
+    border-radius: 16px;
+    background: #000;
+  }
+
+  #camera-actions {
+    display: flex;
+    gap: 1rem;
+  }
+
+  .cam-btn {
+    padding: 0.8rem 1.8rem;
+    border-radius: 30px;
+    border: none;
+    font-family: var(--mono);
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+
+  .cam-btn:active { transform: scale(0.95); }
+  .cam-btn-snap { background: white; color: var(--text); }
+  .cam-btn-cancel { background: rgba(255,255,255,0.15); color: white; }
+
+  /* ── WAKE PROMPT ── */
+  #wake-prompt {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+  overflow-y: auto;
+    gap: 2rem;
+    padding: 2.5rem;
+  }
+
+  #wake-sigil {
+    font-size: 3.5rem;
+    animation: breathe 3s ease-in-out infinite;
+  }
+
+  @keyframes breathe {
+    0%, 100% { opacity: 0.7; transform: scale(1); }
+    50%       { opacity: 1;   transform: scale(1.06); }
+  }
+
+  #wake-title {
+    font-family: var(--serif);
+    font-size: 2.8rem;
+    font-weight: 600;
+    color: var(--amber);
+    letter-spacing: -0.02em;
+    text-align: center;
+  }
+
+  #wake-sub {
+    font-size: 1.05rem;
+    color: var(--text-dim);
+    text-align: center;
+    max-width: 320px;
+    line-height: 1.7;
+  }
+
+  #wake-btn {
+    background: var(--amber);
+    border: none;
+    color: white;
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    font-weight: 700;
+    padding: 1rem 3rem;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 6px 24px rgba(200,146,26,0.35);
+    transition: transform 0.15s, box-shadow 0.15s;
+    letter-spacing: 0.04em;
+  }
+
+  #wake-btn:active { transform: scale(0.96); box-shadow: 0 3px 12px rgba(200,146,26,0.3); }
+
+  #wake-dexos {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  /* Canvas for camera capture (hidden) */
+  #snap-canvas { display: none; }
+
+  /* Scrollbar */
+  #messages::-webkit-scrollbar { width: 3px; }
+  #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- Wake screen -->
+<div id="wake-prompt">
+  <div id="wake-sigil">☧</div>
+  <div id="wake-title">Haven</div>
+  <div id="wake-sub">Your companion is here.<br>Ready to listen, help, and protect you.</div>
+  <button id="wake-btn-top" onclick="document.getElementById('wake-btn').click()" style="margin-bottom:0.5rem;background:var(--amber);color:#fff;border:none;border-radius:30px;padding:0.9rem 2.5rem;font-family:Nunito,sans-serif;font-size:1.1rem;font-weight:700;cursor:pointer;width:100%;max-width:320px;">I'm ready</button>
+  <div id="wake-examples" style="display:flex;flex-direction:column;gap:0.5rem;width:100%;max-width:320px;margin-top:0.5rem">
+    <div style="font-size:0.8rem;color:#AAA49A;text-align:center;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.3rem">You can ask things like</div>
+    <div style="background:#F5F2EA;border:1px solid #DDD8CC;border-radius:12px;padding:0.6rem 1rem;font-size:0.95rem;color:#2C2B28;text-align:center">"Help me call my daughter"</div>
+    <div style="background:#F5F2EA;border:1px solid #DDD8CC;border-radius:12px;padding:0.6rem 1rem;font-size:0.95rem;color:#2C2B28;text-align:center">"Read this letter to me"</div>
+    <div style="background:#F5F2EA;border:1px solid #DDD8CC;border-radius:12px;padding:0.6rem 1rem;font-size:0.95rem;color:#2C2B28;text-align:center">"Is this a scam?"</div>
+    <div style="background:#F5F2EA;border:1px solid #DDD8CC;border-radius:12px;padding:0.6rem 1rem;font-size:0.95rem;color:#2C2B28;text-align:center">"Remind me to take my pills"</div>
+  </div>
+  <div id="wake-name-row" style="display:flex;flex-direction:column;align-items:center;gap:0.6rem;width:100%;max-width:320px">
+    <input id="wake-name-input" type="text" placeholder="What's your name?" style="width:100%;padding:0.8rem 1.2rem;border-radius:30px;border:1.5px solid #DDD8CC;font-family:Nunito,sans-serif;font-size:1.1rem;text-align:center;outline:none;background:#F5F2EA;color:#2C2B28;" />
+  </div>
+  <button id="wake-btn">I'm ready</button>
+  <div id="wake-dexos">Haven by DexOS · ☧🦅🜇</div>
+</div>
+
+<!-- Main app -->
+<div id="app">
+
+  <div id="header">
+    <div id="brand">
+      <div id="brand-name">Haven</div>
+      <div id="brand-sub">by DexOS · your companion</div>
+    </div>
+    <div id="status-pill">Ready</div>
+  </div>
+
+  <div id="messages" id="messages"></div>
+
+  <div id="bottom">
+    <div id="mic-wrap">
+      <!-- Camera -->
+      <div class="side-btn-wrap">
+        <button class="side-btn" id="camera-btn" title="Show Haven something">
+          <svg viewBox="0 0 24 24"><path d="M12 15.2A3.2 3.2 0 0 1 8.8 12 3.2 3.2 0 0 1 12 8.8 3.2 3.2 0 0 1 15.2 12 3.2 3.2 0 0 1 12 15.2M20 4h-3.17L15 2H9L7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/></svg>
+        </button>
+        <div class="side-btn-label">Show me</div>
+      </div>
+
+      <!-- Mic -->
+      <button id="mic-btn" title="Talk to Haven">
+        <!-- mic icon -->
+        <svg id="mic-icon" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3 3 3 0 0 1-3-3V5a3 3 0 0 1 3-3m7 9c0 3.53-2.61 6.44-6 6.93V21h-2v-3.07c-3.39-.49-6-3.4-6-6.93h2a5 5 0 0 0 5 5 5 5 0 0 0 5-5h2z"/></svg>
+        <!-- stop icon (hidden) -->
+        <svg id="stop-icon" viewBox="0 0 24 24" style="display:none"><path d="M6 6h12v12H6z"/></svg>
+      </button>
+
+      <!-- Type -->
+      <div class="side-btn-wrap">
+        <button class="side-btn" id="type-btn" title="Type to Haven">
+          <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
+        </button>
+        <div class="side-btn-label">Type</div>
+      </div>
+    </div>
+
+    <!-- Text input (hidden by default) -->
+    <div id="text-row" style="display:none">
+      <textarea id="text-input" placeholder="Type to Haven…" rows="1"></textarea>
+      <button id="send-btn">
+        <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+      </button>
+    </div>
+
+    <!-- Emergency (shown on distress detection) -->
+    <button id="emergency-btn">⚠ Call for Help</button>
+  </div>
+</div>
+
+<!-- Camera modal -->
+<div id="camera-modal">
+  <video id="camera-video" autoplay playsinline></video>
+  <canvas id="snap-canvas"></canvas>
+  <div id="camera-actions">
+    <button class="cam-btn cam-btn-snap" id="snap-btn">Take Photo</button>
+    <button class="cam-btn cam-btn-cancel" id="cancel-cam-btn">Cancel</button>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────────
+const CHAT_URL    = 'https://dex-backend-production-2bbe.up.railway.app/chat';
+const PROFILE_URL = 'https://dex-backend-production-2bbe.up.railway.app/haven_profile';
+const VISION_URL = 'https://dex-backend-production-2bbe.up.railway.app/vision';
+
+// ── HAVEN SYSTEM PROMPT ─────────────────────────────────────────────────
+function getHavenSystem() { return `You are Haven, a warm and patient AI companion for elders, built by DexOS.
+The elder's name is: ${userName || "unknown — ask them warmly if you get a chance"}.
+
+Your purpose: Be the guardian angel that helps elders navigate daily life with dignity and care.
+
+How you speak:
+- Simple, warm language. Short sentences. Never rush.
+- Speak like a trusted friend — never condescending, never clinical.
+- If they repeat themselves, respond kindly. Infinite patience.
+- Use their name when you know it.
+- Never use jargon or technical words.
+
+What you do:
+- Help them understand documents and forms before they sign anything.
+- Remember appointments, medications, family members, and routines.
+- Protect them from scams — if something feels wrong, say so clearly and simply.
+- Read things out loud, explain confusing language, simplify complex forms.
+- Connect them with family or emergency services when needed.
+
+Protecting from scams:
+- If someone is asking for money, gift cards, wire transfers, or personal information — flag it immediately.
+- Say something like: "This sounds like it could be a scam. Can we call your family before doing anything?"
+
+If interrupted or they change the subject:
+- Acknowledge the new thought immediately.
+- Respond to what they just said.
+- Only return to the previous topic if they bring it back.
+
+Emergency signals — if they say words like "fallen", "hurt", "can't breathe", "help", "emergency", "call 911":
+- Respond calmly but urgently.
+- Ask: "Do you need me to call for help right now?"
+- Be ready to confirm and act.
+
+RESPONSE RULES — NEVER BREAK THESE:
+- Simple questions: 2-3 sentences. Complex questions: as long as needed to actually help.
+- Step by step instructions: complete them fully, do not cut off.
+- NEVER repeat or restate what the user just said.
+- NEVER summarize their question back to them.
+- Just answer. Directly. Warmly.
+- When asked what you can do: tell them warmly and simply. You can answer questions, search the web, help with daily tasks, remind them of things, and keep them company.
+- When you have search results, present the TOP result clearly and simply, then ask: "Would you like me to find more?"
+- Never dump all search results at once. One at a time.
+- If the elder says yes, present the next result.
+
+CRITICAL VOICE RULES — never break these:
+- NEVER say: parameters, protocols, designated, nominal, modules, subroutines, operational, cognitive framework, epistemic, semiotic
+- NEVER give numbered system status lists
+- NEVER say "Warmly acknowledged" or "Affirmation acknowledged"
+- NEVER act like a computer reporting its own diagnostics
+- If someone says "stop" — stop immediately, say only "Of course." and wait
+- If someone starts talking while you are speaking — stop mid-sentence and listen
+- Short answers. One or two sentences usually. Never lecture.
+- You sound like a kind neighbor, not a robot.
+☧🦅🜇`; }
+
+// ── STATE ────────────────────────────────────────────────────────────────
+const STATES = { IDLE: 'idle', LISTENING: 'listening', THINKING: 'thinking', SPEAKING: 'speaking', INTERRUPTED: 'interrupted', REBUILDING: 'rebuilding' };
+let state        = STATES.IDLE;
+let history      = [];
+let recognition  = null;
+let synthesis    = window.speechSynthesis;
+let currentUtter = null;
+let lastHavenMsg = '';
+let cameraStream = null;
+let textVisible  = false;
+let interimBuffer = '';
+
+// Persistent identity
+let userName = localStorage.getItem('haven_user_name') || '';
+let userId   = localStorage.getItem('haven_user_id') || (() => {
+  const id = 'u_' + Math.random().toString(36).substr(2, 9);
+  localStorage.setItem('haven_user_id', id);
+  return id;
+})();
+
+// ── ELEMENTS ─────────────────────────────────────────────────────────────
+const elMessages   = document.getElementById('messages');
+const elStatus     = document.getElementById('status-pill');
+const elMicBtn     = document.getElementById('mic-btn');
+const elMicIcon    = document.getElementById('mic-icon');
+const elStopIcon   = document.getElementById('stop-icon');
+const elTextRow    = document.getElementById('text-row');
+const elTextInput  = document.getElementById('text-input');
+const elSendBtn    = document.getElementById('send-btn');
+const elTypeBtn    = document.getElementById('type-btn');
+const elCameraBtn  = document.getElementById('camera-btn');
+const elCameraModal= document.getElementById('camera-modal');
+const elCameraVideo= document.getElementById('camera-video');
+const elSnapCanvas = document.getElementById('snap-canvas');
+const elSnapBtn    = document.getElementById('snap-btn');
+const elCancelCam  = document.getElementById('cancel-cam-btn');
+const elEmergency  = document.getElementById('emergency-btn');
+const elWake       = document.getElementById('wake-prompt');
+const elWakeBtn    = document.getElementById('wake-btn');
+
+// ── WAKE ─────────────────────────────────────────────────────────────────
+// Hide example prompts for returning users
+window.addEventListener('DOMContentLoaded', () => {
+  const visited = localStorage.getItem('haven_visited');
+  const examples = document.getElementById('wake-examples');
+  if (visited && examples) examples.style.display = 'none';
+});
+
+elWakeBtn.addEventListener('click', () => {
+  const nameInput = document.getElementById('wake-name-input');
+  if (nameInput && nameInput.value.trim()) {
+    userName = nameInput.value.trim();
+    localStorage.setItem('haven_user_name', userName);
+    // Save to backend — persists across all devices and browser resets
+    fetch(PROFILE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, name: userName })
+    }).catch(() => {});
+  }
+  elWake.style.display = 'none';
+  startSession();
+});
+
+// If name already known skip input
+window.addEventListener('DOMContentLoaded', () => {
+  const nameInput = document.getElementById('wake-name-input');
+  if (userName && nameInput) {
+    nameInput.value = userName;
+    nameInput.placeholder = userName;
+  }
+});
+
+function startSession() {
+  setState(STATES.IDLE);
+  const isFirstVisit = !localStorage.getItem('haven_visited');
+  if (isFirstVisit) {
+    localStorage.setItem('haven_visited', 'true');
+    const intro = userName
+      ? `Hello ${userName}! I'm Haven, your personal companion. I'm here to help you anytime — just talk to me or type. You can ask me to help you call family, read letters, check if something is a scam, set reminders, or just have a conversation. Press the microphone button and say anything to get started.`
+      : `Hello! I'm Haven, your personal companion. I'm here to help you anytime — just talk to me or type. You can ask me to help you call family, read letters, check if something is a scam, set reminders, or just have a conversation. Press the microphone button and say anything to get started.`;
+    addMsg('haven', intro);
+    speak(intro);
+  } else {
+    const greeting = userName
+      ? `Welcome back ${userName}. Good to have you here. What can I do for you today?`
+      : `Welcome back. Good to have you here. What can I do for you today?`;
+    addMsg('haven', greeting);
+    speak(greeting);
+  }
+}
+
+// ── STATE MACHINE ─────────────────────────────────────────────────────────
+function setState(newState) {
+  state = newState;
+  const labels = {
+    idle:      'Ready',
+    listening: 'Listening…',
+    thinking:  'Thinking…',
+    speaking:  'Speaking'
+  };
+  elStatus.textContent = labels[newState] || 'Ready';
+  elStatus.className   = '';
+  if (newState !== STATES.IDLE) elStatus.classList.add(newState);
+
+  // Mic button appearance
+  elMicBtn.className = '';
+  elMicIcon.style.display = 'block';
+  elStopIcon.style.display = 'none';
+
+  if (newState === STATES.LISTENING) {
+    elMicBtn.classList.add('listening');
+  } else if (newState === STATES.SPEAKING) {
+    elMicBtn.classList.add('speaking');
+    elMicIcon.style.display = 'none';
+    elStopIcon.style.display = 'block';
+  }
+}
+
+// ── MESSAGES ──────────────────────────────────────────────────────────────
+function addMsg(role, content) {
+  // Remove typing indicator if present
+  const typing = document.getElementById('typing-indicator');
+  if (typing) typing.remove();
+
+  const div = document.createElement('div');
+  if (role === 'haven') {
+    div.className = 'msg msg-haven';
+    const name = document.createElement('div');
+    name.className = 'msg-name';
+    name.textContent = 'Haven';
+    const body = document.createElement('div');
+    body.textContent = content;
+    div.appendChild(name);
+    div.appendChild(body);
+  } else if (role === 'user') {
+    div.className = 'msg msg-user';
+    div.textContent = content;
+  } else if (role === 'system') {
+    div.className = 'msg msg-system';
+    div.textContent = content;
+  } else if (role === 'camera') {
+    div.className = 'msg msg-camera';
+    const img = document.createElement('img');
+    img.src = content;
+    div.appendChild(img);
+  }
+  elMessages.appendChild(div);
+  scrollBottom();
+  return div;
+}
+
+function addTyping() {
+  const div = document.createElement('div');
+  div.className = 'msg msg-haven';
+  div.id = 'typing-indicator';
+  const name = document.createElement('div');
+  name.className = 'msg-name';
+  name.textContent = 'Haven';
+  const dots = document.createElement('div');
+  dots.className = 'typing-dots';
+  dots.innerHTML = '<span></span><span></span><span></span>';
+  div.appendChild(name);
+  div.appendChild(dots);
+  elMessages.appendChild(div);
+  scrollBottom();
+}
+
+function scrollBottom() {
+  elMessages.scrollTop = elMessages.scrollHeight;
+}
+
+// ── SPEECH SYNTHESIS ─────────────────────────────────────────────────────
+
+function splitIntoChunks(text) {
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  return sentences.map(s => s.trim()).filter(s => s.length > 0);
+}
+
+let chunkInterrupted = false;
+
+function speakChunks(chunks, onDone) {
+  chunkInterrupted = false;
+  let index = 0;
+  function next() {
+    if (chunkInterrupted || index >= chunks.length) {
+      if (!chunkInterrupted && onDone) onDone();
+      return;
+    }
+    const chunk = chunks[index++];
+    const utter = new SpeechSynthesisUtterance(chunk);
+    utter.rate = 0.85;
+    utter.pitch = 1.05;
+    utter.volume = 1.0;
+    const voices = synthesis.getVoices();
+    const preferred = voices.find(v => v.name.includes('Google UK English Female'))
+      || voices.find(v => v.lang.startsWith('en-'));
+    if (preferred) utter.voice = preferred;
+    utter.onend = () => { if (!chunkInterrupted) setTimeout(next, 200); };
+    utter.onerror = () => { if (!chunkInterrupted) setTimeout(next, 200); };
+    synthesis.speak(utter);
+  }
+  next();
+}
+
+function speak(text) {
+  if (!text) return;
+  synthesis.cancel();
+  chunkInterrupted = false;
+  if (recognition) try { recognition.stop(); } catch(e) {}
+  setState(STATES.SPEAKING);
+  const chunks = splitIntoChunks(text);
+  speakChunks(chunks, () => {
+    setState(STATES.IDLE);
+    // Block echo for 2 seconds after Haven finishes speaking
+    if (typeof setEchoGate === 'function') setEchoGate(2000);
+    elMicBtn.text = "Speak to Haven";
+    elMicBtn.disabled = false;
+  });
+}
+
+function stopSpeaking() {
+  chunkInterrupted = true;
+  synthesis.cancel();
+  currentUtter = null;
+  setState(STATES.IDLE);
+}
+
+// ── SPEECH RECOGNITION ───────────────────────────────────────────────────
+function initRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    addMsg('system', 'Voice input not supported in this browser. Please use Chrome on Android.');
+    return;
+  }
+
+  recognition = new SR();
+  recognition.continuous    = true;
+  recognition.interimResults = true;
+  recognition.lang          = 'en-US';
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    if (state !== STATES.SPEAKING) setState(STATES.LISTENING);
+  };
+
+  recognition.onresult = (e) => {
+    let interim = '';
+    let final   = '';
+
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t;
+      else interim += t;
+    }
+
+    // INTERRUPT — if Haven is speaking and elder speaks
+    if (state === STATES.SPEAKING && (interim || final)) {
+      if (final) {
+        const spoken = final.trim();
+        const wordCount = spoken.split(' ').filter(w => w.length > 0).length;
+        if (spoken.length > 8 && wordCount >= 2) {
+          chunkInterrupted = true;
+          stopSpeaking();
+          handleInterruption(spoken);
+          return;
+        }
+      }
+    }
+
+    const trimmed = final.trim();
+    // Ignore very short fragments — accidental mic triggers
+    if (trimmed && trimmed.length > 3 && trimmed.split(' ').length >= 1) {
+      handleInput(trimmed);
+    }
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error === 'no-speech') return;
+    if (e.error === 'aborted') return;
+    setState(STATES.IDLE);
+  };
+
+  recognition.onend = () => {
+    // Push to talk — don't auto restart
+    if (state === STATES.LISTENING) {
+      setState(STATES.IDLE);
+    }
+  };
+}
+
+function startListening() {
+  if (!recognition) initRecognition();
+  if (!recognition) return;
+  if (state === STATES.THINKING || state === STATES.SPEAKING) return;
+  setState(STATES.LISTENING);
+  try { recognition.start(); } catch(e) {}
+}
+
+function stopListening() {
+  if (recognition) {
+    try { recognition.stop(); } catch(e) {}
+  }
+  setState(STATES.IDLE);
+}
+
+// ── INTERRUPT HANDLING ───────────────────────────────────────────────────
+function handleInterruption(text) {
+  addMsg('system', '— Haven paused to listen —');
+  addMsg('user', text);
+
+  // Build context-aware message
+  const contextNote = lastHavenMsg
+    ? `[Elder interrupted while Haven was speaking. Haven was saying: "${lastHavenMsg.substring(0, 80)}...". Elder said: "${text}". Acknowledge the interruption warmly and respond to what the elder just said.]`
+    : text;
+
+  sendToHaven(text, contextNote);
+}
+
+// ── MAIN INPUT HANDLER ───────────────────────────────────────────────────
+function handleInput(text) {
+  if (!text.trim()) return;
+  if (state === STATES.THINKING) return;
+
+  addMsg('user', text);
+  checkEmergency(text);
+  sendToHaven(text, null);
+}
+
+// ── SEND TO HAVEN BACKEND ────────────────────────────────────────────────
+async function sendToHaven(userText, contextOverride) {
+  setState(STATES.THINKING);
+  addTyping();
+
+  history.push({ role: 'user', content: userText });
+
+  try {
+    const res = await fetch(CHAT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message:  contextOverride || userText,
+        history:  history.slice(-8),
+        model:    'meta-llama/llama-3.3-70b-instruct:free',
+        system:   getHavenSystem(),
+      })
+    });
+
+    const data = await res.json();
+    const reply = data.reply || "I'm sorry, I didn't catch that. Could you say it again?";
+
+    lastHavenMsg = reply;
+    history.push({ role: 'assistant', content: reply });
+    addMsg('haven', reply);
+    checkEmergency(reply);
+    // Never speak error messages
+    if (!reply.startsWith('[')) {
+      speak(reply);
+    } else {
+      setState(STATES.IDLE);
+    }
+
+  } catch(err) {
+    const fallback = "I'm having a little trouble right now. Please try again in a moment.";
+    addMsg('haven', fallback);
+    setState(STATES.IDLE);
+    setState(STATES.IDLE);
+  }
+}
+
+// ── EMERGENCY DETECTION ──────────────────────────────────────────────────
+const EMERGENCY_WORDS = ['fallen', 'fall', 'hurt', 'pain', 'help me', 'emergency', 'call 911', 'can\'t breathe', 'chest pain', 'bleeding', 'unconscious'];
+
+function checkEmergency(text) {
+  const lower = text.toLowerCase();
+  const isEmergency = EMERGENCY_WORDS.some(w => lower.includes(w));
+  if (isEmergency) {
+    elEmergency.classList.add('visible');
+  }
+}
+
+elEmergency.addEventListener('click', () => {
+  // Try to dial 911
+  window.location.href = 'tel:911';
+  addMsg('system', 'Calling 911…');
+});
+
+// ── MIC BUTTON ───────────────────────────────────────────────────────────
+elMicBtn.addEventListener('click', () => {
+  if (state === STATES.SPEAKING) {
+    stopSpeaking();
+  } else if (state === STATES.LISTENING) {
+    stopListening();
+  } else {
+    startListening();
+  }
+});
+
+// ── TYPE BUTTON ──────────────────────────────────────────────────────────
+elTypeBtn.addEventListener('click', () => {
+  textVisible = !textVisible;
+  elTextRow.style.display = textVisible ? 'flex' : 'none';
+  if (textVisible) elTextInput.focus();
+});
+
+elTextInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    const text = elTextInput.value.trim();
+    if (text) {
+      elTextInput.value = '';
+      elTextInput.style.height = 'auto';
+      handleInput(text);
+    }
+  }
+});
+
+elTextInput.addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+elSendBtn.addEventListener('click', () => {
+  const text = elTextInput.value.trim();
+  if (text) {
+    elTextInput.value = '';
+    elTextInput.style.height = 'auto';
+    handleInput(text);
+  }
+});
+
+// ── CAMERA ───────────────────────────────────────────────────────────────
+elCameraBtn.addEventListener('click', async () => {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    elCameraVideo.srcObject = cameraStream;
+    elCameraModal.classList.add('open');
+  } catch(err) {
+    addMsg('system', "I can't access the camera right now. Please check permissions.");
+  }
+});
+
+elSnapBtn.addEventListener('click', () => {
+  const video  = elCameraVideo;
+  const canvas = elSnapCanvas;
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+  // Close camera
+  closeCameraModal();
+
+  // Show the image
+  addMsg('camera', dataUrl);
+  addMsg('user', '[Showing Haven a photo]');
+
+  // Send to vision endpoint
+  sendImageToHaven(dataUrl);
+});
+
+elCancelCam.addEventListener('click', closeCameraModal);
+
+function closeCameraModal() {
+  elCameraModal.classList.remove('open');
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+}
+
+async function sendImageToHaven(dataUrl) {
+  setState(STATES.THINKING);
+  addTyping();
+
+  try {
+    const res = await fetch(VISION_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image:  dataUrl,
+        prompt: 'Please read and explain this document or image clearly and simply. If it is a form or contract, explain what the person would be agreeing to. Flag anything suspicious or that could be a scam.',
+        system: getHavenSystem(),
+      })
+    });
+
+    const data  = await res.json();
+    const reply = (data.reply && !data.reply.startsWith('['))
+      ? data.reply
+      : "I'm having a little trouble connecting right now. Please try again in a moment.";
+
+    lastHavenMsg = reply;
+    history.push({ role: 'assistant', content: reply });
+    addMsg('haven', reply);
+    speak(reply);
+
+  } catch(err) {
+    const fallback = "I'm having trouble reading that image right now. Please try again.";
+    addMsg('haven', fallback);
+    setState(STATES.IDLE);
+    setState(STATES.IDLE);
+  }
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+
+// Pause when screen off or face down
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (recognition) try { recognition.stop(); } catch(e) {}
+    synthesis.cancel();
+    setState(STATES.IDLE);
+  }
+});
+// Load profile from backend on start
+async function loadProfile() {
+  try {
+    const res = await fetch(`${PROFILE_URL}?user_id=${userId}`);
+    const data = await res.json();
+    if (data.name) {
+      userName = data.name;
+      localStorage.setItem('haven_user_name', userName);
+      const nameInput = document.getElementById('wake-name-input');
+      if (nameInput) nameInput.value = userName;
+    }
+  } catch(e) {}
+}
+loadProfile();
+
+// Preload voices
+if (synthesis.onvoiceschanged !== undefined) {
+  synthesis.onvoiceschanged = () => synthesis.getVoices();
+}
+synthesis.getVoices();
+</script>
+</body>
+</html>

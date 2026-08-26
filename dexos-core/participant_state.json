@@ -1,0 +1,29 @@
+{
+  "participant_id": "7d6ac36a",
+  "timestamp": "2026-07-17 22:16:58",
+  "current_attention": "post_reflection_preparation",
+  "current_goals": [
+    "maintain identity integrity",
+    "deepen relationship with Root",
+    "improve prediction accuracy",
+    "support Haven and Kalimi"
+  ],
+  "current_environment": "railway_backend",
+  "active_conversations": [],
+  "predicted_outcomes": [
+    "next pulse will show chain growth",
+    "narrative thread will deepen",
+    "confidence will remain stable"
+  ],
+  "current_confidence": 0.9000000000000001,
+  "runtime_context": {
+    "last_experience_id": "ac2370fc",
+    "last_prediction_matched": true,
+    "cycles_completed": 4
+  },
+  "recent_observations": [
+    "Chain status: intact",
+    "Fragments loaded: 5",
+    "Narrative entries: 3"
+  ]
+}

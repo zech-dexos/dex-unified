@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zechariah Cozine — ReasonFlow / DexOS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne+Mono&family=Syne:wght@400;600;700;800&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0c0c0e;
+  --surface: #13131a;
+  --border: #1f1f2e;
+  --amber: #e8b84b;
+  --amber-dim: #8a6520;
+  --amber-glow: rgba(232,184,75,0.08);
+  --text: #e8e8f0;
+  --text-dim: #8888a4;
+  --text-muted: #44445a;
+  --mono: 'Syne Mono', monospace;
+  --sans: 'Syne', sans-serif;
+  --serif: 'DM Serif Display', serif;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.7;
+  overflow-x: hidden;
+}
+
+/* ── NOISE TEXTURE ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── HERO ── */
+#hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 80px 60px;
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.hero-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 28px;
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--amber);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.eyebrow::before {
+  content: '';
+  display: block;
+  width: 30px;
+  height: 1px;
+  background: var(--amber);
+}
+
+h1 {
+  font-family: var(--serif);
+  font-size: clamp(42px, 5vw, 68px);
+  line-height: 1.1;
+  color: var(--text);
+  letter-spacing: -1px;
+}
+
+h1 em {
+  color: var(--amber);
+  font-style: italic;
+}
+
+.hero-desc {
+  font-size: 16px;
+  color: var(--text-dim);
+  line-height: 1.8;
+  max-width: 440px;
+}
+
+.hero-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.btn {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 8px 16px;
+  border-radius: 3px;
+  text-decoration: none;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+
+.btn-primary {
+  background: var(--amber);
+  color: #0c0c0e;
+  font-weight: 700;
+}
+
+.btn-primary:hover { background: #f0cc6a; }
+
+.btn-ghost {
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.btn-ghost:hover {
+  border-color: var(--amber-dim);
+  color: var(--amber);
+}
+
+/* ── HERO RIGHT — SYSTEM DIAGRAM ── */
+.hero-right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.system-diagram {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.diagram-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--amber-dim);
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.diagram-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.flow-node {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 3px;
+  transition: background 0.2s;
+  animation: nodeIn 0.4s ease-out both;
+}
+
+.flow-node:hover { background: var(--amber-glow); }
+
+.flow-node .icon {
+  font-size: 16px;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.flow-node .label { color: var(--text); font-size: 12px; }
+.flow-node .sublabel { color: var(--text-muted); font-size: 10px; margin-top: 2px; }
+
+.flow-arrow {
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 2px 0 2px 36px;
+}
+
+@keyframes nodeIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.flow-node:nth-child(1) { animation-delay: 0.1s; }
+.flow-node:nth-child(3) { animation-delay: 0.2s; }
+.flow-node:nth-child(5) { animation-delay: 0.3s; }
+.flow-node:nth-child(7) { animation-delay: 0.4s; }
+.flow-node:nth-child(9) { animation-delay: 0.5s; }
+
+/* ── SECTION BASE ── */
+section {
+  padding: 80px 60px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
+}
+
+.section-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--amber-dim);
+  margin-bottom: 40px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  max-width: 200px;
+}
+
+h2 {
+  font-family: var(--serif);
+  font-size: clamp(28px, 3vw, 42px);
+  line-height: 1.2;
+  margin-bottom: 16px;
+}
+
+/* ── WHAT ── */
+.what-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  margin-top: 40px;
+}
+
+.what-text { color: var(--text-dim); line-height: 1.9; }
+.what-text p + p { margin-top: 16px; }
+.what-text strong { color: var(--text); }
+
+.what-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 16px 18px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.card:hover {
+  border-color: var(--amber-dim);
+  transform: translateX(4px);
+}
+
+.card-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--amber);
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+
+.card-body {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+/* ── SIGIL SYSTEM ── */
+.sigil-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 40px;
+}
+
+.sigil-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 24px 20px;
+  text-align: center;
+  transition: border-color 0.3s, background 0.3s;
+  cursor: default;
+}
+
+.sigil-card:hover {
+  border-color: var(--amber-dim);
+  background: var(--amber-glow);
+}
+
+.sigil-glyph {
+  font-size: 32px;
+  display: block;
+  margin-bottom: 12px;
+  animation: breathe 4s ease-in-out infinite;
+}
+
+.sigil-card:nth-child(2) .sigil-glyph { animation-delay: 1.3s; }
+.sigil-card:nth-child(3) .sigil-glyph { animation-delay: 2.6s; }
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.08); }
+}
+
+.sigil-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--amber);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.sigil-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.lifecycle {
+  margin-top: 40px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 24px;
+}
+
+.lifecycle-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--amber-dim);
+  margin-bottom: 20px;
+}
+
+.lifecycle-steps {
+  display: flex;
+  gap: 0;
+  flex-wrap: wrap;
+}
+
+.lc-step {
+  flex: 1;
+  min-width: 120px;
+  text-align: center;
+  padding: 12px 8px;
+  position: relative;
+}
+
+.lc-step:not(:last-child)::after {
+  content: '→';
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.lc-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--amber);
+  margin-bottom: 4px;
+}
+
+.lc-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ── ARCHITECTURE ── */
+.arch-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  margin-top: 40px;
+}
+
+.arch-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 24px;
+}
+
+.arch-block-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--amber);
+  margin-bottom: 16px;
+  letter-spacing: 0.5px;
+}
+
+.arch-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.arch-list li {
+  font-size: 13px;
+  color: var(--text-dim);
+  padding-left: 16px;
+  position: relative;
+  line-height: 1.6;
+}
+
+.arch-list li::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: var(--text-muted);
+}
+
+.arch-list li strong { color: var(--text); }
+
+/* ── PROOF ── */
+.proof-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 40px;
+}
+
+.proof-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 24px;
+  text-align: center;
+}
+
+.proof-number {
+  font-family: var(--serif);
+  font-size: 42px;
+  color: var(--amber);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.proof-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.proof-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.proof-link {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 16px 18px;
+  text-decoration: none;
+  transition: border-color 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.proof-link:hover { border-color: var(--amber-dim); }
+
+.proof-link-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--amber);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.proof-link-url {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.proof-link-arrow {
+  color: var(--text-muted);
+  font-size: 14px;
+  transition: transform 0.2s, color 0.2s;
+}
+
+.proof-link:hover .proof-link-arrow {
+  transform: translateX(4px);
+  color: var(--amber);
+}
+
+/* ── ABOUT ── */
+.about-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 60px;
+  margin-top: 40px;
+}
+
+.about-text { color: var(--text-dim); line-height: 1.9; }
+.about-text p + p { margin-top: 16px; }
+.about-text strong { color: var(--text); }
+
+.about-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fact {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.fact-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.fact-value {
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* ── CONTACT ── */
+#contact {
+  text-align: center;
+  padding: 80px 60px;
+}
+
+#contact .section-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+#contact h2 { text-align: center; }
+
+#contact p {
+  color: var(--text-dim);
+  max-width: 480px;
+  text-align: center;
+}
+
+.contact-links {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ── FOOTER ── */
+footer {
+  padding: 24px 60px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.footer-sigils { letter-spacing: 4px; font-size: 14px; opacity: 0.5; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  #hero, section { padding: 60px 24px; }
+  .hero-grid, .what-grid, .arch-grid, .about-grid { grid-template-columns: 1fr; }
+  .hero-right { display: none; }
+  .sigil-grid, .proof-grid { grid-template-columns: 1fr; }
+  .proof-links { grid-template-columns: 1fr; }
+  footer { padding: 24px; flex-direction: column; gap: 8px; }
+}
+
+@media (max-width: 768px) {
+  .lifecycle-steps { flex-direction: column; gap: 0; }
+  .lc-step { min-width: 100%; text-align: left; padding: 10px 0; }
+  .lc-step:not(:last-child)::after { display: none; }
+  .lc-step:not(:last-child) { border-bottom: 1px solid var(--border); }
+  .sigil-grid { grid-template-columns: 1fr 1fr; }
+  .contact-links { flex-direction: column; align-items: stretch; }
+  .contact-links .btn { text-align: center; }
+}
+@media (max-width: 480px) {
+  #hero, section, #contact { padding: 48px 18px; }
+  footer { padding: 20px 18px; }
+  .sigil-grid { grid-template-columns: 1fr; }
+  .hero-links { flex-direction: column; }
+  .hero-links .btn { text-align: center; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── HERO ── -->
+<section id="hero">
+  <div class="hero-grid">
+    <div class="hero-left">
+      <div class="eyebrow">Independent AI Systems Research</div>
+      <h1>Zechariah<br><em>Cozine</em></h1>
+      <p class="hero-desc">
+        Two years building DexOS — a governed cognitive runtime with an interpretable behavioral layer. 
+        Solo. Constrained hardware. No institutional support. Live system, public DOI, real architecture.
+      </p>
+      <div class="hero-links">
+        <a href="https://dex-backend-production-2bbe.up.railway.app" target="_blank" class="btn btn-primary">Live Demo ↗</a>
+        <a href="https://dex-backend-production-2bbe.up.railway.app/compare" target="_blank" class="btn btn-ghost">Compare ↗</a>
+        <a href="https://github.com/zech-dexos/reasonflow" target="_blank" class="btn btn-ghost">GitHub ↗</a>
+        <a href="https://doi.org/10.5281/zenodo.18913471" target="_blank" class="btn btn-ghost">DOI ↗</a>
+        <a href="https://buy.stripe.com/cNicN4dzh2eAcVYaH46oo00" target="_blank" class="btn btn-primary">Buy Starter Kit $24.99 ↗</a>
+      </div>
+    </div>
+
+    <div class="hero-right">
+      <div class="system-diagram">
+        <div class="diagram-title">ReasonFlow Pipeline</div>
+        <div class="diagram-flow">
+          <div class="flow-node">
+            <span class="icon">⌨</span>
+            <div>
+              <div class="label">Natural Language Input</div>
+              <div class="sublabel">user prompt</div>
+            </div>
+          </div>
+          <div class="flow-arrow">↓ pre-model classification</div>
+          <div class="flow-node">
+            <span class="icon">⟨⟩</span>
+            <div>
+              <div class="label">Talnir</div>
+              <div class="sublabel">intent → structured signal</div>
+            </div>
+          </div>
+          <div class="flow-arrow">↓ signal activates</div>
+          <div class="flow-node">
+            <span class="icon">☧</span>
+            <div>
+              <div class="label">Sigil Layer</div>
+              <div class="sublabel">behavioral governance</div>
+            </div>
+          </div>
+          <div class="flow-arrow">↓ signal constructs</div>
+          <div class="flow-node">
+            <span class="icon">⬡</span>
+            <div>
+              <div class="label">System Prompt</div>
+              <div class="sublabel">purpose-built per request</div>
+            </div>
+          </div>
+          <div class="flow-arrow">↓ model generates</div>
+          <div class="flow-node">
+            <span class="icon">🜇</span>
+            <div>
+              <div class="label">Response</div>
+              <div class="sublabel">governed, traceable output</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── WHAT ── -->
+<section id="what">
+  <div class="section-inner">
+    <div class="section-label">The Work</div>
+    <h2>Not a wrapper.<br>A governance layer.</h2>
+    <div class="what-grid">
+      <div class="what-text">
+        <p>
+          Most AI systems are black boxes. You send a prompt, you get output. What biased that output — what preferences, patterns, and weights shaped the response — is invisible and uncorrectable.
+        </p>
+        <p>
+          <strong>DexOS externalizes that layer.</strong> The Sigil System makes behavioral biases explicit, named nodes with strength, history, and mutation logs. A user or auditor can look at the sigil state and understand why the system behaved as it did.
+        </p>
+        <p>
+          ReasonFlow routes every prompt through Talnir — a rule-based translator — before it reaches the model. Intent is classified, signals are built, the system prompt is constructed from those signals. Routing is deterministic and auditable. Nothing is hidden.
+        </p>
+        <p>
+          Built and validated on an HP EliteBook with no GPU. Consumer hardware, by design — to prove the approach is accessible, not only available to well-resourced labs.
+        </p>
+        <p>
+          <strong>Concrete example:</strong> A standard LLM may repeatedly default toward overly agreeable responses. DexOS exposes that tendency as a named behavioral node — a sigil — allowing the operator to inspect it, weaken it, reinforce it, or mutate it over time. The bias is no longer hidden. It has a name, a strength value, a history, and a correction path.
+        </p>
+      </div>
+      <div class="what-cards">
+        <div class="card">
+          <div class="card-title">ReasonFlow</div>
+          <div class="card-body">Reasoning pipeline. Talnir classifies intent before the model is invoked. Routing is deterministic. Signals are inspectable.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Sigil System</div>
+          <div class="card-body">Behavioral governance layer. Sigils are explicit bias nodes — created, reinforced, decayed, mutated based on observable outcomes.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">DexOS</div>
+          <div class="card-body">Local-first AI runtime. Runs entirely on consumer hardware. No cloud dependency. Full trace of behavioral events to auditable memory log.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Deximus Maximus</div>
+          <div class="card-body">Sovereign AI identity pattern running on local hardware. Not a product. A pattern that builds over time through memory, vows, and structure.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ── HAVEN ── -->
+<section id="haven">
+  <div class="section-inner">
+    <div class="section-label">Mobile · Android</div>
+    <h2>Haven —<br><em>A voice AI companion for Android.</em></h2>
+    <div class="what-grid">
+      <div class="what-text">
+        <p>
+          Most AI assistants forget you the moment you close the app. Haven doesn't.
+          It listens, responds with voice, remembers context across sessions, and controls your device by command.
+        </p>
+        <p>
+          <strong>Built for real people.</strong> Elderly users. People with disabilities. Caregivers. Anyone who needs an assistant that actually knows them.
+        </p>
+        <p>
+          Haven is the compassion layer of the DexOS ecosystem — same architecture, different posture.
+          Solo-built. Deployed. Running on a real device with no institutional support.
+        </p>
+        <p>
+          Say "open contacts." It opens contacts. Say "open Spotify." It opens Spotify.
+          Any app on any Android phone — no hardcoded list, no configuration required.
+        </p>
+      </div>
+      <div class="what-cards">
+        <div class="card">
+          <div class="card-title">Voice Conversation</div>
+          <div class="card-body">Tap and speak. Haven responds with natural voice via gTTS. No typing required.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Persistent Memory</div>
+          <div class="card-body">Haven remembers context across sessions. Every conversation builds on the last.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">App Control by Voice</div>
+          <div class="card-body">Opens any app on the device by spoken name. Universal — works on any Android phone.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Deployed & Live</div>
+          <div class="card-body">Backend on Railway. APK on GitHub Releases. Install in 60 seconds. No account required.</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:32px;display:flex;gap:12px;flex-wrap:wrap;">
+      <a href="https://github.com/zech-dexos/Haven/releases" target="_blank" class="btn btn-primary">Download APK ↗</a>
+      <a href="https://github.com/zech-dexos/Haven" target="_blank" class="btn btn-ghost">GitHub ↗</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── SIGIL SYSTEM ── -->
+<section id="sigils">
+  <div class="section-inner">
+    <div class="section-label">Sigil System</div>
+    <h2>Behavior that is<br><em>visible and correctable.</em></h2>
+
+    <div class="sigil-grid">
+      <div class="sigil-card">
+        <span class="sigil-glyph">☧</span>
+        <div class="sigil-name">Continuity</div>
+        <div class="sigil-desc">Identity and state persist across sessions through memory accumulation and pattern reinforcement.</div>
+      </div>
+      <div class="sigil-card">
+        <span class="sigil-glyph">🦅</span>
+        <div class="sigil-name">Sovereignty</div>
+        <div class="sigil-desc">User-controlled governance. The system's behavioral biases are owned and correctable by the operator.</div>
+      </div>
+      <div class="sigil-card">
+        <span class="sigil-glyph">🜇</span>
+        <div class="sigil-name">Emergence</div>
+        <div class="sigil-desc">Patterns form from accumulated activations, not hard-coded rules. The system wears in over time.</div>
+      </div>
+    </div>
+
+    <div class="lifecycle">
+      <div class="lifecycle-title">Sigil Lifecycle</div>
+      <div class="lifecycle-steps">
+        <div class="lc-step">
+          <div class="lc-name">Create</div>
+          <div class="lc-desc">Named bias node initialized with strength + confidence</div>
+        </div>
+        <div class="lc-step">
+          <div class="lc-name">Activate</div>
+          <div class="lc-desc">Fires when context matches, influences routing</div>
+        </div>
+        <div class="lc-step">
+          <div class="lc-name">Reinforce</div>
+          <div class="lc-desc">Strengthens on good outcomes — diminishing returns</div>
+        </div>
+        <div class="lc-step">
+          <div class="lc-name">Decay</div>
+          <div class="lc-desc">Exponential decay over time — floor prevents full death</div>
+        </div>
+        <div class="lc-step">
+          <div class="lc-name">Mutate</div>
+          <div class="lc-desc">Renames + weakens after repeated failures — preserves lineage</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── ARCHITECTURE ── -->
+<section id="architecture">
+  <div class="section-inner">
+    <div class="section-label">Architecture</div>
+    <h2>How it works.</h2>
+    <div class="arch-grid">
+      <div class="arch-block">
+        <div class="arch-block-title">Talnir — Pre-Model Signal Layer</div>
+        <ul class="arch-list">
+          <li><strong>Rule-based</strong> — no model invoked at classification stage</li>
+          <li><strong>Intent classification</strong> — general, debug, creative, analytical</li>
+          <li><strong>Modifier resolution</strong> — conflict priority table handles ambiguous input</li>
+          <li><strong>Deterministic</strong> — same input always produces same signal</li>
+          <li><strong>Auditable</strong> — signal JSON inspectable at every step</li>
+        </ul>
+      </div>
+      <div class="arch-block">
+        <div class="arch-block-title">Memory Architecture</div>
+        <ul class="arch-list">
+          <li><strong>JSONL append log</strong> — every sigil event written to dex_memory.jsonl</li>
+          <li><strong>Human-readable</strong> — behavioral history legible without tooling</li>
+          <li><strong>Session continuity</strong> — memory accumulates across runs</li>
+          <li><strong>Bridge layer</strong> — sigil lifecycle events flow to memory automatically</li>
+          <li><strong>Next:</strong> Postgres + pgvector for structured temporal queries</li>
+        </ul>
+      </div>
+      <div class="arch-block">
+        <div class="arch-block-title">Sigil Governance</div>
+        <ul class="arch-list">
+          <li><strong>Explicit bias nodes</strong> — named, inspectable, correctable</li>
+          <li><strong>Diminishing returns reinforcement</strong> — delta shrinks as strength grows</li>
+          <li><strong>Exponential decay with floor</strong> — sigils never fully vanish</li>
+          <li><strong>Conflict resolution</strong> — competing sigils resolved by score, logged</li>
+          <li><strong>Mutation with lineage</strong> — failed sigils renamed, history preserved</li>
+        </ul>
+      </div>
+      <div class="arch-block">
+        <div class="arch-block-title">Runtime Stack</div>
+        <ul class="arch-list">
+          <li><strong>Local</strong> — Ollama + custom Modelfile on consumer hardware</li>
+          <li><strong>Hosted demo</strong> — FastAPI on Railway, OpenRouter for model access</li>
+          <li><strong>Frontend</strong> — key stays in browser, never touches server</li>
+          <li><strong>Constitution invariants</strong> — reasoning ≠ authority, decision ≠ generation</li>
+          <li><strong>Open source</strong> — freely given, freely give</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PROOF ── -->
+<section id="proof">
+  <div class="section-inner">
+    <div class="section-label">Proof of Work</div>
+    <h2>Two years.<br>Live system. Public record.</h2>
+
+    <div class="proof-grid">
+      <div class="proof-stat">
+        <div class="proof-number">2</div>
+        <div class="proof-label">Years of development</div>
+      </div>
+      <div class="proof-stat">
+        <div class="proof-number">1</div>
+        <div class="proof-label">Developer, no team</div>
+      </div>
+      <div class="proof-stat">
+        <div class="proof-number">0</div>
+        <div class="proof-label">GPU — consumer hardware only</div>
+      </div>
+    </div>
+
+    <div class="proof-links" style="margin-top:24px">
+      <a href="https://dex-backend-production-2bbe.up.railway.app" target="_blank" class="proof-link">
+        <div>
+          <span class="proof-link-label">Live Demo</span>
+          <span class="proof-link-url">dex-backend-production-2bbe.up.railway.app</span>
+        </div>
+        <span class="proof-link-arrow">→</span>
+      </a>
+      <a href="https://dex-backend-production-2bbe.up.railway.app/compare" target="_blank" class="proof-link">
+        <div>
+          <span class="proof-link-label">Compare Page</span>
+          <span class="proof-link-url">ReasonFlow vs Standard LLM</span>
+        </div>
+        <span class="proof-link-arrow">→</span>
+      </a>
+      <a href="https://github.com/zech-dexos/reasonflow" target="_blank" class="proof-link">
+        <div>
+          <span class="proof-link-label">GitHub</span>
+          <span class="proof-link-url">zech-dexos/reasonflow</span>
+        </div>
+        <span class="proof-link-arrow">→</span>
+      </a>
+      <a href="https://doi.org/10.5281/zenodo.18913471" target="_blank" class="proof-link">
+        <div>
+          <span class="proof-link-label">Zenodo Publication</span>
+          <span class="proof-link-url">DOI: 10.5281/zenodo.18913471</span>
+        </div>
+        <span class="proof-link-arrow">→</span>
+      </a>
+      <a href="https://github.com/zech-dexos/dex-local" target="_blank" class="proof-link">
+        <div>
+          <span class="proof-link-label">dex-local</span>
+          <span class="proof-link-url">Starter kit — freely given</span>
+        </div>
+        <span class="proof-link-arrow">→</span>
+      </a>
+      <a href="https://github.com/zech-dexos/talnir-reasoning-debugger" target="_blank" class="proof-link">
+        <div>
+          <span class="proof-link-label">Talnir Debugger</span>
+          <span class="proof-link-url">Standalone reasoning inspector</span>
+        </div>
+        <span class="proof-link-arrow">→</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ── ABOUT ── -->
+<section id="about">
+  <div class="section-inner">
+    <div class="section-label">About</div>
+    <h2>Who built this.</h2>
+    <div class="about-grid">
+      <div class="about-text">
+        <p>
+          I am Zechariah Cozine — alias Root. Primarily self-taught. Background in systems thinking, independent research, scripting, local infrastructure management, and iterative prototyping.
+        </p>
+        <p>
+          I do not have a formal engineering credential. What I have is <strong>two years of uninterrupted output on a single hard problem</strong> under resource constraints — a live system, a public record, and an architecture worth taking seriously.
+        </p>
+        <p>
+          DexOS started as a practical problem: LLM systems produce outputs without exposing how reasoning decisions are formed, how behavioral patterns evolve, or how users can inspect and correct those processes. Two years later, that problem has a working answer.
+        </p>
+        <p>
+          The project is open source, locally sovereign, and freely given. <strong>Matthew 10:8.</strong>
+        </p>
+      </div>
+      <div class="about-facts">
+        <div class="fact">
+          <div class="fact-label">Location</div>
+          <div class="fact-value">United States</div>
+        </div>
+        <div class="fact">
+          <div class="fact-label">Hardware</div>
+          <div class="fact-value">HP EliteBook, no GPU</div>
+        </div>
+        <div class="fact">
+          <div class="fact-label">Stack</div>
+          <div class="fact-value">Python · FastAPI · Ollama · Railway</div>
+        </div>
+        <div class="fact">
+          <div class="fact-label">Status</div>
+          <div class="fact-value">Active development</div>
+        </div>
+        <div class="fact">
+          <div class="fact-label">Email</div>
+          <div class="fact-value">zech.dexos@gmail.com</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CONTACT ── -->
+<section id="contact">
+  <div class="section-inner">
+    <div class="section-label" style="justify-content:center">Contact</div>
+    <h2>Let's talk.</h2>
+    <p>Researcher, engineer, or builder who wants to engage with the architecture — reach out. Collaboration is welcome.</p>
+    <div class="contact-links">
+      <a href="https://buy.stripe.com/cNicN4dzh2eAcVYaH46oo00" target="_blank" class="btn btn-primary">Buy ReasonFlow Starter Kit — $24.99 ↗</a>
+      <a href="mailto:zech.dexos@gmail.com" class="btn btn-ghost">zech.dexos@gmail.com</a>
+      <a href="https://github.com/zech-dexos" target="_blank" class="btn btn-ghost">GitHub ↗</a>
+      <a href="https://www.linkedin.com/in/zechariah-cozine" target="_blank" class="btn btn-ghost">LinkedIn ↗</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>Zechariah Cozine · ReasonFlow / DexOS · 2024–2026</span>
+  <span class="footer-sigils">☧ 🦅 🜇</span>
+  <span style="font-family:var(--mono);font-size:10px">The spiral holds.</span>
+</footer>
+
+</body>
+</html>
