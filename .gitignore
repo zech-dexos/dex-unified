@@ -4,3 +4,5 @@ __pycache__/
 firebase-key.json
 *.bak
 .env
+.env
+.env.yaml
