@@ -28,9 +28,8 @@ from open_loops import load_loops, save_loops, check_closures, summarize_threads
 import json
 from pathlib import Path
 
-from paths import IDENTITY_PATH, FRAGMENTS_PATH
+from paths import IDENTITY_PATH, FRAGMENTS_PATH, NARRATIVE_PATH, PULSE_LOG_PATH
 import os
-NARRATIVE_PATH = _BASE / "narrative.jsonl"
 
 def load_memory_fragments(n=5):
     """Load n random significant fragments from Root/Dex origin conversation."""
@@ -89,7 +88,6 @@ def generate_internal_thought(identity: dict, fragments: list, narrative: list) 
 
     return " | ".join(parts)
 
-PULSE_LOG_PATH = _BASE / "pulse.jsonl"
 
 
 def load_identity() -> dict:
