@@ -488,8 +488,8 @@
 
 <script>
 // ── CONFIG ──────────────────────────────────────────────────────
-const CHAT_URL    = 'https://dex-backend-production-2bbe.up.railway.app/chat';
-const SESSION_URL = 'https://dex-backend-production-2bbe.up.railway.app/haven_profile';
+const CHAT_URL    = 'https://dex-unified-81076112232.us-central1.run.app/chat';
+const SESSION_URL = 'https://dex-unified-81076112232.us-central1.run.app/haven_profile';
 
 // Persistent session ID — survives refresh
 const SESSION_ID = localStorage.getItem('dex_session_id') || (() => {
@@ -747,7 +747,7 @@ function addFeedback(msgEl, sigilIds) {
     bad.disabled = true;
     label.textContent = 'sending...';
     try {
-      const res = await fetch('https://dex-backend-production-2bbe.up.railway.app/feedback', {
+      const res = await fetch('https://dex-unified-81076112232.us-central1.run.app/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sigil_ids: sigilIds, outcome })
