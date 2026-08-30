@@ -6,7 +6,7 @@ vertexai at import time and is meant for the live request path only).
 """
 import os
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 
@@ -39,7 +39,7 @@ async def call_gemini(client, messages, max_tokens=1000):
             parts = candidates[0].get("content", {}).get("parts", [])
             text = "".join(p.get("text", "") for p in parts)
             if text:
-                return {"reply": text, "model": "gemini-2.5-flash"}
+                return {"reply": text, "model": "gemini-3.6-flash"}
     except Exception as e:
         print(f"[call_gemini] exception: {e}")
         return None
