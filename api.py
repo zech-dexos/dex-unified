@@ -178,7 +178,7 @@ GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "llama-3.3-70b-versatile"
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-from gemini_client import call_gemini, GEMINI_URL, GEMINI_KEY
+from gemini_client import call_gemini
 
 FALLBACK_MODELS = [
     "google/gemma-4-31b-it:free",
