@@ -40,6 +40,8 @@ async def call_gemini(client, messages, max_tokens=1000):
             text = "".join(p.get("text", "") for p in parts)
             if text:
                 return {"reply": text, "model": "gemini-2.5-flash"}
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[call_gemini] exception: {e}")
+        return None
+    print(f"[call_gemini] no candidates in response: {data}")
     return None

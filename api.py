@@ -5,6 +5,7 @@ import io
 from fastapi.responses import StreamingResponse
 
 import os
+import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -210,6 +211,8 @@ async def call_llm(client, messages, max_tokens=1000):
                     return {"reply": content, "model": GROQ_MODEL}
         except Exception:
             pass
+    if GROQ_KEY:
+        pass  # groq already attempted above; this branch intentionally left as-is
     for model in FALLBACK_MODELS:
         try:
             res = await client.post(
@@ -227,8 +230,10 @@ async def call_llm(client, messages, max_tokens=1000):
                 content = data.get("choices",[{}])[0].get("message",{}).get("content","")
                 if content:
                     return {"reply": content, "model": model}
-        except Exception:
-            pass
+            else:
+                print(f"[call_llm] {model} returned error: {data.get('error')}")
+        except Exception as e:
+            print(f"[call_llm] {model} exception: {e}")
         await asyncio.sleep(1)
     return {"reply": "[all models failed]", "model": "none"}
 

@@ -28,7 +28,7 @@ from open_loops import load_loops, save_loops, check_closures, summarize_threads
 import json
 from pathlib import Path
 
-from paths import IDENTITY_PATH, FRAGMENTS_PATH, NARRATIVE_PATH, PULSE_LOG_PATH
+from paths import IDENTITY_PATH, FRAGMENTS_PATH, NARRATIVE_PATH, PULSE_LOG_PATH, AMENDMENT_PATH
 import os
 
 def load_memory_fragments(n=5):
