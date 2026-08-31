@@ -28,24 +28,6 @@ from firebase_admin import credentials, firestore as fs
 import datetime
 import base64, tempfile, os
 
-def _setup_gcp_credentials():
-    """Decode FIREBASE_KEY_B64 and set GOOGLE_APPLICATION_CREDENTIALS for Vertex AI."""
-    key_b64 = os.environ.get("FIREBASE_KEY_B64", "")
-    if not key_b64:
-        return
-    try:
-        key_json = base64.b64decode(key_b64).decode("utf-8")
-        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
-        tmp.write(key_json)
-        tmp.flush()
-        tmp.close()
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
-        print(f"[GCP] credentials set from FIREBASE_KEY_B64")
-    except Exception as e:
-        print(f"[GCP] credential setup failed: {e}")
-
-_setup_gcp_credentials()
-
 _fb_app = None
 _firestore = None
 
