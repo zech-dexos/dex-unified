@@ -11,8 +11,8 @@ from google import genai
 from google.genai import types
 
 PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "seraphic-disk-506702-d2")
-LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
-MODEL_NAME = "gemini-3.5-flash"
+LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
+MODEL_NAME = "gemini-3.6-flash"
 
 _client = None
 
