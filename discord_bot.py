@@ -4,7 +4,7 @@ import os
 import asyncio
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
-DEX_URL = "https://dex-backend-production-2bbe.up.railway.app/chat"
+DEX_URL = os.environ.get("DEX_URL", "https://dex-unified-81076112232.us-central1.run.app/chat")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -62,4 +62,8 @@ async def on_message(message):
         except Exception as e:
             await message.channel.send(f"something broke: {e}")
 
-client.run(TOKEN)
+async def start_discord():
+    await client.start(TOKEN)
+
+if __name__ == "__main__":
+    client.run(TOKEN)

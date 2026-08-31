@@ -67,6 +67,18 @@ def log_telemetry(event: str, data: dict):
         print(f"[firestore] log failed: {e}")
 
 app = FastAPI(title="ReasonFlow API", version="1.0.0")
+
+# Start Dex Discord bridge inside the Cloud Run container.
+@app.on_event("startup")
+async def start_discord_bridge():
+    if os.environ.get("DISCORD_TOKEN"):
+        try:
+            from discord_bot import start_discord
+            asyncio.create_task(start_discord())
+            print("[Discord] Dex Discord bridge started")
+        except Exception as e:
+            print(f"[Discord] startup failed: {e}")
+
 from stripe_billing import router as stripe_router
 app.include_router(stripe_router)
 
