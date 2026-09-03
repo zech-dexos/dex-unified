@@ -3,7 +3,8 @@ from pathlib import Path
 
 # Explicit Single Source of Truth
 # Railway matches /app/dexos_state. Local dev falls back to the backend folder.
-_STATE_BASE = Path(os.environ.get("DEXOS_STATE_DIR", "/app/dexos_state" if Path("/app").exists() else Path(__file__).parent))
+_dexos_state_dir = os.environ.get("DEXOS_STATE_DIR", "").strip()
+_STATE_BASE = Path(_dexos_state_dir) if _dexos_state_dir else Path("/app/dexos_state" if Path("/app").exists() else Path(__file__).parent)
 _STATE_BASE.mkdir(parents=True, exist_ok=True)
 
 IDENTITY_PATH = _STATE_BASE / "identity.json"

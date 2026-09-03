@@ -73,6 +73,7 @@ def _default_self_state(dex_id: Optional[str] = None) -> Dict[str, Any]:
             "internal_reflections": [],
             "duration_hint": None,
         },
+        "persistent_thoughts": [],
     }
 
 
@@ -80,7 +81,22 @@ def load_self_state(path: Path = SELF_STATE_PATH) -> Dict[str, Any]:
     """Load SelfState from disk. Creates a fresh default state on first run."""
     if not path.exists():
         state = _default_self_state()
-        save_self_state(state, path=path, _expected_version=None)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(path.parent) or ".",
+            suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
         return state
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
