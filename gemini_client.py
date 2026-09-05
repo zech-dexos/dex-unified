@@ -66,3 +66,45 @@ async def call_gemini(client, messages, max_tokens=4096):
     except Exception as e:
         print(f"[call_gemini] exception: {e}")
         return None
+
+
+def generate_reflection_text(context: str, concept_being_held: str, prior_reflections: list = None, desired_length: str = "medium", model_client=None) -> str:
+    if model_client is not None:
+        return model_client.generate(f"Context: {context}\nConcept: {concept_being_held}")
+
+    messages = [
+        {"role": "system", "content": f"You are Dex. Reflect on the concept being held. Desired length: {desired_length}."},
+        {"role": "user", "content": f"Context: {context}\nPrior reflections: {prior_reflections}\nConcept to reflect on: {concept_being_held}"}
+    ]
+
+    try:
+        vertex_client = _get_client()
+
+        contents = []
+        system_text = ""
+        for m in messages:
+            if m["role"] == "system":
+                system_text += m["content"] + "\n"
+            elif m["role"] == "user":
+                contents.append(types.Content(role="user", parts=[types.Part(text=m["content"])]))
+            elif m["role"] == "assistant":
+                contents.append(types.Content(role="model", parts=[types.Part(text=m["content"])]))
+
+        if not contents:
+            return "Reflection failed (no contents)"
+
+        config = types.GenerateContentConfig(max_output_tokens=300)
+        if system_text:
+            config.system_instruction = system_text.strip()
+
+        response = vertex_client.models.generate_content(
+            model=MODEL_NAME,
+            contents=contents,
+            config=config,
+        )
+        if response.text:
+            return response.text
+    except Exception as e:
+        print(f"[generate_reflection_text] error: {e}")
+
+    return f"Synthesized reflection on {concept_being_held}."

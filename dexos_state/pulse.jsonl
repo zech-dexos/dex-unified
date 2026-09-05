@@ -1,0 +1,1 @@
+{"timestamp": 1788608546.5161366, "event": "background_pulse", "data": {"chain_status": "empty", "chain_entries": 0, "vow_status": "error", "observations": [], "open_questions": [], "insight_for_root": "WARNING: Chain status is empty. Root attention required immediately.", "duration_seconds": 0.001}}
