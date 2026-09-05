@@ -23,7 +23,7 @@ def _get_client():
     return _client
 
 
-async def call_gemini(client, messages, max_tokens=1000):
+async def call_gemini(client, messages, max_tokens=4096):
     """
     Kept async + same signature as the old REST version for drop-in
     compatibility, even though the genai SDK call itself is sync

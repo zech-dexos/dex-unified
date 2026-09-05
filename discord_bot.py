@@ -24,8 +24,6 @@ async def on_message(message):
     if client.user not in message.mentions:
         return
 
-    if message.channel.id != 1512392303912943742:
-        return
 
     channel_id = str(message.channel.id)
     user_id = str(message.author.id)

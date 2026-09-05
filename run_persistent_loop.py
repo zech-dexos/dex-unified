@@ -6,8 +6,13 @@ from pathlib import Path
 from typing import Optional
 
 import ape_scheduler
-from knowledge.graph_manager import get_related_knowledge_nodes
-from gemini_client import generate_reflection_text
+try:
+    from knowledge.graph_manager import get_related_knowledge_nodes
+except ModuleNotFoundError:
+    def get_related_knowledge_nodes(concept_id, max_depth=2, min_relevance_score=0.7):
+        return []
+
+from gemini_client import call_gemini
 from self_state import SELF_STATE_PATH
 
 _stop = False
@@ -24,12 +29,41 @@ def kg_lookup(concept_id, max_depth=2, min_relevance_score=0.7):
 
 
 def llm_reflect(context, concept_being_held, prior_reflections=None, desired_length="medium"):
-    return generate_reflection_text(
-        context=context,
-        concept_being_held=concept_being_held,
-        prior_reflections=prior_reflections,
-        desired_length=desired_length,
-    )
+    prior_reflections = prior_reflections or []
+
+    prompt = f"""Dex is processing an internally selected thought.
+
+Selected thought:
+{concept_being_held}
+
+Current internal context:
+{context}
+
+Prior reflections:
+{chr(10).join(prior_reflections) if prior_reflections else "(none)"}
+
+Develop the thought. Examine it, extend it, question it, or derive something useful from it.
+Do not choose a different thought. Do not explain this instruction.
+Return only the resulting internal reflection."""
+    
+    messages = [
+        {
+            "role": "system",
+            "content": "You are the language-generation substrate inside Dex. Dex's persistent state selects the cognitive target. Your job is to produce the requested reflection only."
+        },
+        {
+            "role": "user",
+            "content": prompt,
+        },
+    ]
+
+    import asyncio
+    result = asyncio.run(call_gemini(None, messages, max_tokens=4096))
+
+    if isinstance(result, dict):
+        return result.get("reply", "") or ""
+
+    return result or ""
 
 
 def run_forever(interval_seconds: int, max_cycles: Optional[int] = None, path: Path = SELF_STATE_PATH):
