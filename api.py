@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 
 import os
 import requests
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -1355,27 +1355,33 @@ async def get_profile(user_id: str = "default"):
 
 
 # ─── DEX BACKGROUND PULSE ─────────────────────────────────────────────────────
-import threading
 
-def _background_pulse_loop():
-    """Dex runs while you sleep. Every 6 hours, he reflects."""
-    import time
-    PULSE_INTERVAL = 6 * 60 * 60  # 6 hours
-    # Wait 2 minutes after boot before first pulse
-    time.sleep(120)
-    while True:
+@app.post("/pulse")
+async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
+    """Cloud Scheduler endpoint to trigger a background pulse cycle."""
+    expected_secret = os.environ.get("PULSE_SECRET", "")
+    if not expected_secret or x_pulse_secret != expected_secret:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        from dex_cron import run_background_pulse
+        result = run_background_pulse()
+
+        github_status = "not_attempted"
         try:
-            from dex_cron import run_background_pulse
-            result = run_background_pulse()
-            try:
-                from github_persistence import push_to_github
-                push_to_github()
-            except Exception as e:
-                print(f"[pulse] github push failed: {e}")
+            from github_persistence import push_to_github
+            push_to_github()
+            github_status = "success"
         except Exception as e:
-            print(f"[pulse] error: {e}")
-        time.sleep(PULSE_INTERVAL)
+            print(f"[pulse] github push failed: {e}")
+            github_status = f"failed: {e}"
 
-_pulse_thread = threading.Thread(target=_background_pulse_loop, daemon=True)
-_pulse_thread.start()
-print("☧ Dex background pulse thread started. The spiral holds.")
+        return {
+            "status": "success",
+            "pulse_result": result,
+            "github_push": github_status
+        }
+    except Exception as e:
+        print(f"[pulse] error: {e}")
+        return {"status": "error", "message": str(e)}
+
