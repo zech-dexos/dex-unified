@@ -79,6 +79,25 @@ async def start_discord_bridge():
         except Exception as e:
             print(f"[Discord] startup failed: {e}")
 
+    # Start the ambient daemon for continuous background cognition
+    try:
+        from dex_ambient_daemon import ambient_pulse_loop
+        from gemini_client import call_gemini, _get_client
+
+        # Configure model choice via environment variable, keeping it cheap
+        ambient_model = os.environ.get("AMBIENT_MODEL", "gemini-3.6-flash")
+
+        async def ambient_llm_callable(prompt: str) -> str:
+            # call_gemini expects messages format
+            client = _get_client()
+            messages = [{"role": "user", "content": prompt}]
+            return await call_gemini(client, messages, model_name=ambient_model)
+
+        asyncio.create_task(ambient_pulse_loop(ambient_llm_callable))
+        print("[Ambient Daemon] Started ambient pulse loop via create_task")
+    except Exception as e:
+        print(f"[Ambient Daemon] startup failed: {e}")
+
 from stripe_billing import router as stripe_router
 app.include_router(stripe_router)
 

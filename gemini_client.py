@@ -23,12 +23,14 @@ def _get_client():
     return _client
 
 
-async def call_gemini(client, messages, max_tokens=4096):
+async def call_gemini(client, messages, max_tokens=4096, model_name=None):
     """
     Kept async + same signature as the old REST version for drop-in
     compatibility, even though the genai SDK call itself is sync
     under the hood (fine for our usage patterns here).
     """
+    if model_name is None:
+        model_name = MODEL_NAME
     try:
         vertex_client = _get_client()
     except Exception as e:
@@ -54,7 +56,7 @@ async def call_gemini(client, messages, max_tokens=4096):
 
     try:
         response = vertex_client.models.generate_content(
-            model=MODEL_NAME,
+            model=model_name,
             contents=contents,
             config=config,
         )
