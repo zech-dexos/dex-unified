@@ -13,14 +13,21 @@ import requests
 from pathlib import Path
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-REPO = "zech-dexos/dexos-core"
+REPO = "zech-dexos/dex-unified"
 API = "https://api.github.com"
 
 FILES_TO_PERSIST = [
     "dex_lineage.jsonl",
     "identity.json",
     "self_model.json",
-    "counterfactual_archive.jsonl"
+    "counterfactual_archive.jsonl",
+    "intents.json",
+    "narrative.jsonl",
+    "open_loops.json",
+    "participant_state.json",
+    "pulse.jsonl",
+    "reflections.jsonl",
+    "experiences.jsonl"
 ]
 
 from paths import _STATE_BASE as STATE_DIR
