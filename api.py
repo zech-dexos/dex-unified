@@ -83,14 +83,42 @@ async def start_discord_bridge():
     try:
         from dex_ambient_daemon import ambient_pulse_loop
         from gemini_client import call_gemini, _get_client
+        from self_state import load_self_state
 
         # Configure model choice via environment variable, keeping it cheap
         ambient_model = os.environ.get("AMBIENT_MODEL", "gemini-3.6-flash")
 
+        def _build_ambient_context() -> str:
+            """Lightweight self-state summary for ambient ticks — no full
+            constitution, no participant/recall context. Keeps the tick
+            grounded in real Dex state instead of a bare instruction string."""
+            try:
+                state = load_self_state()
+            except Exception as e:
+                print(f"[Ambient Daemon] self_state load failed: {e}")
+                return ""
+
+            ctx = ["[DEX SELF-STATE — AMBIENT TICK]"]
+            workspace = state.get("active_mental_workspace_state", {})
+            if workspace.get("is_active") or workspace.get("concept_identifier"):
+                ctx.append(f"Active workspace: {workspace.get('concept_identifier')}")
+            goals = state.get("active_goals_state", [])
+            if goals:
+                ctx.append(f"Active goals: {goals}")
+            thoughts = state.get("persistent_thoughts", [])
+            unresolved = [t for t in thoughts if t.get("status") in ("active", "deferred")]
+            if unresolved:
+                ctx.append("Unresolved thoughts:")
+                for t in unresolved[-5:]:
+                    ctx.append(f"- [{t.get('priority', 'medium')}] {t.get('content', '')}")
+            return "\n".join(ctx) if len(ctx) > 1 else ""
+
         async def ambient_llm_callable(prompt: str) -> str:
             # call_gemini expects messages format
             client = _get_client()
-            messages = [{"role": "user", "content": prompt}]
+            context = _build_ambient_context()
+            full_prompt = f"{context}\n\n{prompt}" if context else prompt
+            messages = [{"role": "user", "content": full_prompt}]
             return await call_gemini(client, messages, model_name=ambient_model)
 
         asyncio.create_task(ambient_pulse_loop(ambient_llm_callable))
