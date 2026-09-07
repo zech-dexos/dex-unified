@@ -119,7 +119,10 @@ async def start_discord_bridge():
             context = _build_ambient_context()
             full_prompt = f"{context}\n\n{prompt}" if context else prompt
             messages = [{"role": "user", "content": full_prompt}]
-            return await call_gemini(client, messages, model_name=ambient_model)
+            result = await call_gemini(client, messages, model_name=ambient_model)
+            if result is None:
+                raise ValueError("call_gemini returned None (client init or empty response)")
+            return result.get("reply", "")
 
         asyncio.create_task(ambient_pulse_loop(ambient_llm_callable))
         print("[Ambient Daemon] Started ambient pulse loop via create_task")
