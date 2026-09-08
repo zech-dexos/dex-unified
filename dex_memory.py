@@ -48,6 +48,82 @@ def _now() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Ambient cognition cadence
+# ---------------------------------------------------------------------------
+
+def claim_ambient_tick(min_seconds: float = 45.0, max_seconds: float = 90.0) -> dict:
+    """
+    Atomically claim the next ambient cognition tick.
+
+    Cloud Scheduler may wake the Cloud Run service more often than cognition
+    should actually occur. Firestore holds the durable clock so the cadence
+    survives scale-to-zero and multiple container instances.
+
+    The function fails closed if Firestore is unavailable: an ambient tick
+    must never turn into an uncontrolled LLM cost loop.
+    """
+    try:
+        from firebase_admin import firestore
+        db = _get_db()
+        if not db:
+            return {"due": False, "status": "firestore_unavailable"}
+
+        ref = db.collection("dex_runtime").document("ambient_pulse")
+        transaction = db.transaction()
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+        @firestore.transactional
+        def _claim(txn):
+            snap = ref.get(transaction=txn)
+            data = snap.to_dict() or {}
+
+            next_due = data.get("next_ambient_tick")
+            if next_due is not None:
+                if isinstance(next_due, str):
+                    try:
+                        next_due = datetime.datetime.fromisoformat(next_due.replace("Z", "+00:00"))
+                    except ValueError:
+                        next_due = None
+                if next_due is not None and next_due.tzinfo is None:
+                    next_due = next_due.replace(tzinfo=datetime.timezone.utc)
+
+            if next_due is not None and now < next_due:
+                return {
+                    "due": False,
+                    "status": "not_due",
+                    "next_due": next_due.isoformat(),
+                    "tick_count": int(data.get("tick_count", 0)),
+                }
+
+            import random
+            delay = random.uniform(min_seconds, max_seconds)
+            new_next_due = now + datetime.timedelta(seconds=delay)
+            tick_count = int(data.get("tick_count", 0)) + 1
+
+            txdata = {
+                "last_ambient_tick": now,
+                "next_ambient_tick": new_next_due,
+                "tick_count": tick_count,
+            }
+            txdata["last_ambient_status"] = "claimed"
+            txdata["last_ambient_delay_seconds"] = delay
+            txn.set(ref, txdata, merge=True)
+
+            return {
+                "due": True,
+                "status": "claimed",
+                "next_due": new_next_due.isoformat(),
+                "tick_count": tick_count,
+                "delay_seconds": delay,
+            }
+
+        return _claim(transaction)
+    except Exception as e:
+        print(f"[dex_memory] claim_ambient_tick failed: {e}")
+        return {"due": False, "status": "error", "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
 # User recognition (Dex)
 # ---------------------------------------------------------------------------
 
@@ -117,7 +193,6 @@ def log_interaction(user_id: str, user_input: str, dex_response: str,
             "model":        model,
             "timestamp":    _now(),
         })
-        # Increment interaction count
         db.collection("dex_users").document(user_id).set(
             {"interaction_count": _increment(), "last_seen": _now()},
             merge=True
@@ -162,7 +237,7 @@ def log_failure(module: str, error: str, recovered: bool = False) -> None:
             "timestamp": _now(),
         })
     except Exception:
-        pass  # Health logging must never crash Dex
+        pass
 
 
 def log_recovery(module: str, strategy: str) -> None:
@@ -215,9 +290,6 @@ def build_recall_context(user_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Resonance Pulse — Haven relationship memory (Firestore-backed)
 # ---------------------------------------------------------------------------
-# Names, birthdays, family, hobbies, medications, fears, favorites,
-# emotional history. Synced to Firestore so it survives Railway restarts
-# independent of the local JSON file and GitHub backup.
 
 def get_haven_memory(user_id: str) -> dict:
     """Load Haven relationship memory from Firestore. Empty dict if none."""
