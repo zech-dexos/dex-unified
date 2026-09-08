@@ -1,8 +1,7 @@
 import asyncio
-import random
 import json
 import traceback
-from typing import Callable, Awaitable, Optional, Dict, Any
+from typing import Callable, Awaitable, Dict, Any
 from drift_tape import add_thought
 
 AMBIENT_PROMPT = (
@@ -15,10 +14,8 @@ AMBIENT_PROMPT = (
 
 async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dict[str, Any]:
     """
-    Run ONE ambient cognition tick: call the LLM, parse the result, and
-    (if salience clears threshold and vow_check passes) add it to the
-    drift tape. Designed to be called from a scheduled endpoint — no loop,
-    no sleep. Returns a status dict for the caller to log/return.
+    Run ONE ambient cognition tick. Cadence is owned by durable runtime
+    state / the scheduler, not by a standing process in Cloud Run.
     """
     try:
         response_text = await llm_callable(AMBIENT_PROMPT)
@@ -55,17 +52,12 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
 
 
 async def ambient_pulse_loop(llm_callable: Callable[[str], Awaitable[str]]):
-    """
-    DEPRECATED for Cloud Run: standing asyncio loops don't survive
-    scale-to-zero between requests, so ticks rarely fire. Kept only for
-    local/non-Cloud-Run use. Production should use the /ambient-pulse
-    endpoint on a Cloud Scheduler cadence instead (see run_ambient_tick).
-    """
-    print("[Ambient Daemon] Starting background cognition loop (deprecated path)")
+    """Local-only compatibility loop. Production Cloud Run uses the endpoint."""
+    print("[Ambient Daemon] Starting local background cognition loop")
     while True:
         try:
-            sleep_time = random.uniform(45.0, 90.0)
-            await asyncio.sleep(sleep_time)
+            from random import uniform
+            await asyncio.sleep(uniform(45.0, 90.0))
             await run_ambient_tick(llm_callable)
         except asyncio.CancelledError:
             print("[Ambient Daemon] Loop cancelled, shutting down")
