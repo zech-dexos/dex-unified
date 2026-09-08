@@ -3,6 +3,7 @@ import json
 import traceback
 from typing import Callable, Awaitable, Dict, Any
 from drift_tape import add_thought
+from dex_memory import claim_ambient_tick
 
 AMBIENT_PROMPT = (
     "Brief, associative internal thought — react to current self-state, "
@@ -18,6 +19,18 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
     state / the scheduler, not by a standing process in Cloud Run.
     """
     try:
+        # Durable human-paced cadence gate.
+        # The scheduler may wake us frequently, but cognition only fires
+        # when the persisted 45–90 second interval says it is due.
+        gate = claim_ambient_tick()
+
+        if not gate.get("due"):
+            return {
+                "status": gate.get("status", "not_due"),
+                "next_due": gate.get("next_due"),
+                "tick_count": gate.get("tick_count"),
+            }
+
         response_text = await llm_callable(AMBIENT_PROMPT)
 
         try:
