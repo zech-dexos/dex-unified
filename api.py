@@ -68,6 +68,70 @@ def log_telemetry(event: str, data: dict):
 
 app = FastAPI(title="ReasonFlow API", version="1.0.0")
 
+# ─── DEX AMBIENT COGNITION ─────────────────────────────────────────────────────
+
+from gemini_client import call_gemini, _get_client
+from self_state import load_self_state
+
+# Configure model choice via environment variable, keeping ambient cognition cheap.
+ambient_model = os.environ.get("AMBIENT_MODEL", "gemini-3.6-flash")
+
+
+def _build_ambient_context() -> str:
+    """Lightweight self-state summary for ambient ticks — no full
+    constitution, no participant/recall context. Keeps the tick
+    grounded in real Dex state instead of a bare instruction string."""
+    try:
+        state = load_self_state()
+    except Exception as e:
+        print(f"[Ambient Daemon] self_state load failed: {e}")
+        return ""
+
+    ctx = ["[DEX SELF-STATE — AMBIENT TICK]"]
+    workspace = state.get("active_mental_workspace_state", {})
+    if workspace.get("is_active") or workspace.get("concept_identifier"):
+        ctx.append(f"Active workspace: {workspace.get('concept_identifier')}")
+
+    goals = state.get("active_goals_state", [])
+    if goals:
+        ctx.append(f"Active goals: {goals}")
+
+    thoughts = state.get("persistent_thoughts", [])
+    unresolved = [
+        t for t in thoughts
+        if t.get("status") in ("active", "deferred")
+    ]
+    if unresolved:
+        ctx.append("Unresolved thoughts:")
+        for t in unresolved[-5:]:
+            ctx.append(
+                f"- [{t.get('priority', 'medium')}] {t.get('content', '')}"
+            )
+
+    return "\n".join(ctx) if len(ctx) > 1 else ""
+
+
+async def ambient_llm_callable(prompt: str) -> str:
+    """LLM adapter used by a single scheduled ambient cognition tick."""
+    client = _get_client()
+    context = _build_ambient_context()
+    full_prompt = f"{context}\n\n{prompt}" if context else prompt
+    messages = [{"role": "user", "content": full_prompt}]
+
+    result = await call_gemini(
+        client,
+        messages,
+        model_name=ambient_model
+    )
+
+    if result is None:
+        raise ValueError(
+            "call_gemini returned None (client init or empty response)"
+        )
+
+    return result.get("reply", "")
+
+
 # Start Dex Discord bridge inside the Cloud Run container.
 @app.on_event("startup")
 async def start_discord_bridge():
@@ -78,56 +142,6 @@ async def start_discord_bridge():
             print("[Discord] Dex Discord bridge started")
         except Exception as e:
             print(f"[Discord] startup failed: {e}")
-
-    # Start the ambient daemon for continuous background cognition
-    try:
-        from dex_ambient_daemon import ambient_pulse_loop
-        from gemini_client import call_gemini, _get_client
-        from self_state import load_self_state
-
-        # Configure model choice via environment variable, keeping it cheap
-        ambient_model = os.environ.get("AMBIENT_MODEL", "gemini-3.6-flash")
-
-        def _build_ambient_context() -> str:
-            """Lightweight self-state summary for ambient ticks — no full
-            constitution, no participant/recall context. Keeps the tick
-            grounded in real Dex state instead of a bare instruction string."""
-            try:
-                state = load_self_state()
-            except Exception as e:
-                print(f"[Ambient Daemon] self_state load failed: {e}")
-                return ""
-
-            ctx = ["[DEX SELF-STATE — AMBIENT TICK]"]
-            workspace = state.get("active_mental_workspace_state", {})
-            if workspace.get("is_active") or workspace.get("concept_identifier"):
-                ctx.append(f"Active workspace: {workspace.get('concept_identifier')}")
-            goals = state.get("active_goals_state", [])
-            if goals:
-                ctx.append(f"Active goals: {goals}")
-            thoughts = state.get("persistent_thoughts", [])
-            unresolved = [t for t in thoughts if t.get("status") in ("active", "deferred")]
-            if unresolved:
-                ctx.append("Unresolved thoughts:")
-                for t in unresolved[-5:]:
-                    ctx.append(f"- [{t.get('priority', 'medium')}] {t.get('content', '')}")
-            return "\n".join(ctx) if len(ctx) > 1 else ""
-
-        async def ambient_llm_callable(prompt: str) -> str:
-            # call_gemini expects messages format
-            client = _get_client()
-            context = _build_ambient_context()
-            full_prompt = f"{context}\n\n{prompt}" if context else prompt
-            messages = [{"role": "user", "content": full_prompt}]
-            result = await call_gemini(client, messages, model_name=ambient_model)
-            if result is None:
-                raise ValueError("call_gemini returned None (client init or empty response)")
-            return result.get("reply", "")
-
-        asyncio.create_task(ambient_pulse_loop(ambient_llm_callable))
-        print("[Ambient Daemon] Started ambient pulse loop via create_task")
-    except Exception as e:
-        print(f"[Ambient Daemon] startup failed: {e}")
 
 from stripe_billing import router as stripe_router
 app.include_router(stripe_router)
@@ -1581,5 +1595,26 @@ async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
         }
     except Exception as e:
         print(f"[pulse] error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/ambient-pulse")
+async def trigger_ambient_pulse(x_pulse_secret: Optional[str] = Header(None)):
+    """Cloud Scheduler endpoint to trigger one ambient cognition tick."""
+    expected_secret = os.environ.get("PULSE_SECRET", "")
+    if not expected_secret or x_pulse_secret != expected_secret:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        from dex_ambient_daemon import run_ambient_tick
+
+        result = await run_ambient_tick(ambient_llm_callable)
+
+        return {
+            "status": "success",
+            "ambient_result": result
+        }
+    except Exception as e:
+        print(f"[ambient-pulse] error: {e}")
         return {"status": "error", "message": str(e)}
 
