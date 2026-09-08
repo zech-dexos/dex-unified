@@ -28,7 +28,7 @@
     "concept_identifier": "Reconsider and develop: Hold and develop a continuous line of thought",
     "description_snapshot": "Reconsider and develop: Hold and develop a continuous line of thought",
     "activation_timestamp": "2026-08-31T21:10:07Z",
-    "last_refresh_timestamp": "2026-09-08T08:32:55Z",
+    "last_refresh_timestamp": "2026-09-08T08:33:15Z",
     "focus_strength": 1.0,
     "related_knowledge_nodes": [],
     "internal_reflections": [
@@ -551,6 +551,10 @@
       {
         "timestamp": "2026-09-08T08:32:55Z",
         "reflection": "Re-examined 'Reconsider and develop: Hold and develop a continuous line of thought' at 2026-09-08T08:32:55Z."
+      },
+      {
+        "timestamp": "2026-09-08T08:33:15Z",
+        "reflection": "Re-examined 'Reconsider and develop: Hold and develop a continuous line of thought' at 2026-09-08T08:33:15Z."
       }
     ],
     "duration_hint": null
@@ -599,8 +603,8 @@
       "success_criteria": "Dex holds and refers to this thread of continuity across turns without being re-prompted."
     }
   ],
-  "version": 274,
-  "last_updated_timestamp": "2026-09-08T08:32:55Z",
+  "version": 276,
+  "last_updated_timestamp": "2026-09-08T08:33:15Z",
   "narrative_thread": [
     {
       "timestamp": "2026-08-15T11:24:27Z",
@@ -1269,6 +1273,11 @@
     },
     {
       "timestamp": "2026-09-08T08:32:55Z",
+      "event_type": "internal_reflection",
+      "summary": "Cycle ran. Dex selected thought 'Reconsider and develop: Hold and develop a continuous line of thought' (source=persistent_thought) — AMW refreshed."
+    },
+    {
+      "timestamp": "2026-09-08T08:33:15Z",
       "event_type": "internal_reflection",
       "summary": "Cycle ran. Dex selected thought 'Reconsider and develop: Hold and develop a continuous line of thought' (source=persistent_thought) — AMW refreshed."
     }
