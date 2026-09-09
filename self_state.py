@@ -74,6 +74,9 @@ def _default_self_state(dex_id: Optional[str] = None) -> Dict[str, Any]:
             "duration_hint": None,
         },
         "persistent_thoughts": [],
+        "continuity_events": [],
+        "last_continuity_event": None,
+        "last_autobiographical_event": None,
     }
 
 
@@ -142,18 +145,35 @@ def save_self_state(
 
 
 def update_self_state(
-    delta: Dict[str, Any], path: Path = SELF_STATE_PATH
+    delta: Dict[str, Any], path: Path = SELF_STATE_PATH, _max_retries: int = 5
 ) -> Dict[str, Any]:
     """
     Read-modify-write with a deep merge of `delta` into the current state,
     version-bumped and concurrency-checked. This is the function everything
-    else (AMW, GOSDW, APE) should call — never write the file directly.
+    else (AMW, GOSDW, APE, Continuity, Autobiography) should call — never
+    write the file directly.
+
+    Retries on version conflict, since concurrent event-bus subscribers
+    (e.g. Continuity and Autobiography both reacting to the same event)
+    can legitimately race to update self_state at the same time. Without
+    a retry, the loser's write is silently dropped by the caller's generic
+    exception handler.
     """
-    current = load_self_state(path)
-    expected_version = current.get("version", 0)
-    merged = _deep_merge(deepcopy(current), delta)
-    merged["version"] = expected_version + 1
-    return save_self_state(merged, path=path, _expected_version=expected_version)
+    last_error = None
+    for attempt in range(_max_retries):
+        current = load_self_state(path)
+        expected_version = current.get("version", 0)
+        merged = _deep_merge(deepcopy(current), delta)
+        merged["version"] = expected_version + 1
+        try:
+            return save_self_state(merged, path=path, _expected_version=expected_version)
+        except RuntimeError as e:
+            last_error = e
+            continue
+    raise RuntimeError(
+        f"update_self_state: failed after {_max_retries} attempts due to "
+        f"repeated version conflicts. Last error: {last_error}"
+    )
 
 
 def _deep_merge(base: Dict[str, Any], delta: Dict[str, Any]) -> Dict[str, Any]:
