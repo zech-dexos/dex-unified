@@ -4,6 +4,7 @@ import traceback
 from typing import Callable, Awaitable, Dict, Any
 from drift_tape import add_thought
 from dex_memory import claim_ambient_tick
+from dex_events import bus
 
 AMBIENT_PROMPT = (
     "Brief, associative internal thought — react to current self-state, "
@@ -49,6 +50,12 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
 
             if thought_text:
                 add_thought(thought_text, salience)
+                # Publish event to the continuous substrate fabric
+                await bus.publish("THOUGHT_GENERATED", {
+                    "event_type": "THOUGHT_GENERATED",
+                    "thought": thought_text,
+                    "salience": salience
+                })
                 return {"status": "ok", "thought": thought_text, "salience": salience}
 
             return {"status": "ok", "thought": None, "salience": salience}

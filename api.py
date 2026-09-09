@@ -143,6 +143,29 @@ async def start_discord_bridge():
         except Exception as e:
             print(f"[Discord] startup failed: {e}")
 
+@app.on_event("startup")
+async def start_continuous_substrate():
+    try:
+        from dex_substrate import run_substrate_loop
+        from dex_ambient_daemon import ambient_pulse_loop
+        from dex_continuity import setup_continuity
+        from dex_autobiography import setup_autobiography
+        from dex_attention import setup_attention
+        from dex_workspace import setup_workspace
+
+        # Initialize event subscriptions
+        setup_continuity()
+        setup_autobiography()
+        setup_attention()
+        setup_workspace()
+
+        # Start continuous substrate loop and ambient cognition loop
+        asyncio.create_task(run_substrate_loop())
+        asyncio.create_task(ambient_pulse_loop(ambient_llm_callable))
+        print("[Substrate] Continuous substrate and ambient daemon started")
+    except Exception as e:
+        print(f"[Substrate] startup failed: {e}")
+
 from stripe_billing import router as stripe_router
 app.include_router(stripe_router)
 
