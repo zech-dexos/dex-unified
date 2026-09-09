@@ -39,7 +39,7 @@ def _describe_event(payload: Dict[str, Any]) -> str:
         return "A participant interaction entered Dex's active system."
 
     if event_type == "RESPONSE_COMPLETED":
-        response = _first(payload, "dex_response", "response", "assistant_response")
+        response = _first(payload, "reply", "dex_response", "response", "assistant_response")
         if response:
             return "Dex completed a response to the participant."
         return "Dex completed a participant response."
@@ -157,7 +157,7 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
     }
 
     user_input = _first(payload, "user_input", "input", "message")
-    response = _first(payload, "dex_response", "response", "assistant_response")
+    response = _first(payload, "reply", "dex_response", "response", "assistant_response")
 
     if user_input:
         entry["participant_input"] = user_input
