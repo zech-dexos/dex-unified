@@ -1,6 +1,7 @@
 from typing import Dict, Any
 from dex_events import bus
 from dex_memory import _get_db, _now
+from dex_state import shared_state
 
 async def process_continuity_event(payload: Dict[str, Any]):
     """
@@ -13,11 +14,9 @@ async def process_continuity_event(payload: Dict[str, Any]):
     # Phase 1 scaffolding:
     # Later this will handle complex concurrent memory and state updates.
     if event_type == "RESPONSE_COMPLETED":
-        # Simulate integrating response into memory layer
-        pass
+        shared_state.update_state("last_response_event", payload)
     elif event_type == "THOUGHT_GENERATED":
-        # Wrap existing drift_tape behavior logic here if needed
-        pass
+        shared_state.update_state("last_thought_event", payload)
 
 def setup_continuity():
     """Subscribe continuity processes to the shared event fabric."""

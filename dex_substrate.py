@@ -13,15 +13,13 @@ class DexSubstrate:
         """
         print("[Substrate] Starting continuous substrate loop...")
         self._running = True
+        tick = 0
 
         while self._running:
             try:
-                # Maintain the heartbeat of the system.
-                # Lightweight substrate operations can inspect state here.
-                # E.g., tick processes, detect changes, or trigger internal events.
-
-                # Simply sleeping for a minimal tick interval (e.g., 1 second)
-                # allows the background loop to maintain continuous flow without blocking.
+                tick += 1
+                if tick % 30 == 0:
+                    shared_state.refresh()
                 await asyncio.sleep(1.0)
             except asyncio.CancelledError:
                 print("[Substrate] Loop cancelled, shutting down")

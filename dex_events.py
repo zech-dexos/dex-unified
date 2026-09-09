@@ -13,7 +13,13 @@ class EventBus:
     async def publish(self, event_type: str, payload: Dict[str, Any]):
         if event_type in self._subscribers:
             for callback in self._subscribers[event_type]:
-                asyncio.create_task(callback(payload))
+                asyncio.create_task(self._safe_call(callback, event_type, payload))
+
+    async def _safe_call(self, callback, event_type: str, payload: Dict[str, Any]):
+        try:
+            await callback(payload)
+        except Exception as e:
+            print(f"[dex_events] subscriber error on {event_type}: {e}")
 
 # Global event bus singleton
 bus = EventBus()

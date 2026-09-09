@@ -328,6 +328,15 @@ class ChatRequest(BaseModel):
 @app.post("/chat")
 async def chat(req: ChatRequest):
     msg_stripped = req.message.strip().lower()
+    try:
+        from dex_events import bus
+        await bus.publish("PARTICIPANT_EVENT", {
+            "event_type": "PARTICIPANT_EVENT",
+            "message": req.message,
+            "user_id": getattr(req, "user_id", "default"),
+        })
+    except Exception as e:
+        print(f"[dex_events] PARTICIPANT_EVENT publish failed: {e}")
 
     if msg_stripped in ("!reflect", "!reflection"):
         from reflection import run_reflection
@@ -710,6 +719,20 @@ Enjoy your experience.
             )
     except Exception as e:
         print(f"[check_response] error: {e}")
+
+    try:
+        from dex_events import bus
+        await bus.publish("RESPONSE_COMPLETED", {
+            "event_type": "RESPONSE_COMPLETED",
+            "message": req.message,
+            "reply": reply,
+            "user_id": getattr(req, "user_id", "default"),
+            "intent": result.get("intent"),
+            "domain": result.get("domain"),
+            "response_flag": governance_flag,
+        })
+    except Exception as e:
+        print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")
 
     return {
         "reply":        reply,
