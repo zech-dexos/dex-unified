@@ -10,3 +10,4 @@ stripe
 grpcio>=1.75.0
 setuptools
 google-genai
+llama-cpp-python

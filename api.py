@@ -112,24 +112,22 @@ def _build_ambient_context() -> str:
 
 
 async def ambient_llm_callable(prompt: str) -> str:
-    """LLM adapter used by a single scheduled ambient cognition tick."""
-    client = _get_client()
+    """LLM adapter used by a single scheduled ambient cognition tick.
+    Runs a small local CPU model instead of a paid API -- ambient ticks
+    happen every 45-90s and don't warrant per-call cost."""
+    import asyncio
+    from local_llm import local_slm_generate
+
     context = _build_ambient_context()
     full_prompt = f"{context}\n\n{prompt}" if context else prompt
-    messages = [{"role": "user", "content": full_prompt}]
 
-    result = await call_gemini(
-        client,
-        messages,
-        model_name=ambient_model
-    )
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, local_slm_generate, full_prompt)
 
-    if result is None:
-        raise ValueError(
-            "call_gemini returned None (client init or empty response)"
-        )
+    if not result:
+        raise ValueError("local_slm_generate returned empty response")
 
-    return result.get("reply", "")
+    return result
 
 
 # Start Dex Discord bridge inside the Cloud Run container.
