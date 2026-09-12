@@ -290,8 +290,12 @@ async def call_llm(client, messages, max_tokens=1000):
                 content = data.get("choices",[{}])[0].get("message",{}).get("content","")
                 if content:
                     return {"reply": content, "model": GROQ_MODEL}
-        except Exception:
-            pass
+                else:
+                    print(f"[call_llm] Groq returned no content: {data}")
+            else:
+                print(f"[call_llm] Groq returned error: {data.get('error')}")
+        except Exception as e:
+            print(f"[call_llm] Groq exception: {e}")
     if GROQ_KEY:
         pass  # groq already attempted above; this branch intentionally left as-is
     for model in FALLBACK_MODELS:
