@@ -4,7 +4,10 @@ from typing import Any, Callable, Dict, Optional
 
 import amw
 import gosdw
+import thought
 from self_state import SELF_STATE_PATH, load_self_state, update_self_state
+
+ATTENTION_THRESHOLD = 3  # cycles of no content change before a thought auto-defers
 
 
 def _now_iso() -> str:
@@ -37,7 +40,7 @@ def _derive_autonomous_thought(current, ranked):
 
     active = [
         t for t in thoughts
-        if t.get("status") in ("active", "deferred")
+        if t.get("status") == "active"
         and t.get("content")
     ]
 
@@ -103,9 +106,16 @@ def _persist_autonomous_thought(thought, path):
         "thought_id": thought.get("thought_id") or str(uuid.uuid4()),
         "content": thought["content"],
         "status": "active",
+        "priority": "medium",
+        "confidence": 0.5,
         "source": thought.get("source", "autonomous"),
         "created_at": now,
         "last_updated_at": now,
+        "last_attended_at": now,
+        "next_attention_at": None,
+        "attention_count": 1,
+        "revisions": [],
+        "related_goal_ids": [],
     }
 
     if thought.get("goal_id"):
@@ -159,6 +169,14 @@ def run_cycle(
         # Already exists in persistent_thoughts -- don't duplicate it.
         concept = thought_record.get("content", "")
         thought_id = thought_record.get("thought_id")
+        revisited = thought.revisit_thought(thought_id, path=path)
+        if revisited and revisited.get("attention_count", 0) >= ATTENTION_THRESHOLD:
+            thought.update_thought(
+                thought_id,
+                decision="defer",
+                note=f"No development after {revisited['attention_count']} attentions; deferring to rotate focus.",
+                path=path,
+            )
     else:
         persisted = _persist_autonomous_thought(thought_record, path)
         concept = persisted["content"]
