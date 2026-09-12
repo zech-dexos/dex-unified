@@ -254,7 +254,7 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL   = "google/gemma-4-31b-it:free"
 GROQ_KEY = os.environ.get("GROQ_KEY", "")
 GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "openai/gpt-oss-20b"
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 from gemini_client import call_gemini
