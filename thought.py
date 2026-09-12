@@ -132,8 +132,8 @@ def update_thought(
             revision = {
                 "timestamp": _now_iso(),
                 "note": note,
-                "previous_content": t["content"],
-                "previous_confidence": t["confidence"],
+                "previous_content": t.get("content", ""),
+                "previous_confidence": t.get("confidence", 0.5),
                 "decision": decision,
             }
             t["revisions"] = list(t.get("revisions", [])) + [revision]
