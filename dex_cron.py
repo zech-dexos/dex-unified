@@ -191,7 +191,7 @@ def generate_insight(identity: dict, recent_reflections: list, chain: dict) -> s
     return " | ".join(insights) if insights else "All systems nominal. Posture held."
 
 
-def run_background_pulse():
+async def run_background_pulse():
     """
     One background pulse cycle.
     Called by cron or manually.
@@ -293,7 +293,7 @@ def run_background_pulse():
             return await generate_intents(client, experience, current_intents)
 
     try:
-        updated_intents = asyncio.run(_run_intent_cycle())
+        updated_intents = await _run_intent_cycle()
     except Exception as e:
         print(f"Intent generation skipped: {e}")
         updated_intents = current_intents
@@ -349,5 +349,5 @@ def run_background_pulse():
 
 
 if __name__ == "__main__":
-    result = run_background_pulse()
+    result = asyncio.run(run_background_pulse())
     sys.exit(0 if result["status"] == "complete" else 1)

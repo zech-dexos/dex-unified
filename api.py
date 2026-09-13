@@ -1624,7 +1624,7 @@ async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
 
     try:
         from dex_cron import run_background_pulse
-        result = run_background_pulse()
+        result = await run_background_pulse()
 
         github_status = "not_attempted"
         try:
