@@ -110,7 +110,7 @@ async def generate_intents(client, packet, current_intents: list) -> list:
     messages = [{"role": "user", "content": prompt}]
 
     try:
-        result = await call_llm(client, messages, max_tokens=1000)
+        result = await call_llm(client, messages, max_tokens=2000)
         if not result or not result.get("reply"):
             return intents
         raw = result["reply"].strip()
