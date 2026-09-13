@@ -24,6 +24,7 @@ class Intent:
     confidence: float = 0.5     # 0-1
     evidence: list = field(default_factory=list)   # references to packet observations/lessons
     status: str = "active"      # active | fulfilled | abandoned
+    goal_id: str = ""            # linked gosdw.py goal, if one was created for this intent
     last_updated: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
 
 
@@ -90,7 +91,9 @@ async def generate_intents(client, packet, current_intents: list) -> list:
     to evaluate fulfillment/abandonment and propose new intents.
     Falls back to rule-only behavior if the model call fails — never blocks the pulse.
     """
-    from gemini_client import call_gemini
+    # Lazy import: api.py's call_llm already has the working Gemini->Groq->
+    # OpenRouter fallback chain, avoids duplicating/duplicating-drift on model strings.
+    from api import call_llm
 
     intents = decay_priority(list(current_intents))
     intents = prune_intents(intents)
@@ -107,8 +110,8 @@ async def generate_intents(client, packet, current_intents: list) -> list:
     messages = [{"role": "user", "content": prompt}]
 
     try:
-        result = await call_gemini(client, messages, max_tokens=1000)
-        if not result:
+        result = await call_llm(client, messages, max_tokens=1000)
+        if not result or not result.get("reply"):
             return intents
         raw = result["reply"].strip()
         if raw.startswith("\u0060\u0060\u0060"):

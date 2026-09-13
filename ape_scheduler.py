@@ -75,8 +75,12 @@ def _derive_autonomous_thought(current, ranked):
         if workspace.get("is_active"):
             concept = workspace.get("concept_identifier")
             if concept:
+                PREFIX = "Reconsider and develop: "
+                base = concept
+                while base.startswith(PREFIX):
+                    base = base[len(PREFIX):]
                 return {
-                    "content": f"Reconsider and develop: {concept}",
+                    "content": f"{PREFIX}{base}",
                     "source": "workspace_reconsideration",
                     "goal_id": goal.get("goal_id"),
                 }

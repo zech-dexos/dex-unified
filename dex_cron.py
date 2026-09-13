@@ -298,6 +298,37 @@ def run_background_pulse():
         print(f"Intent generation skipped: {e}")
         updated_intents = current_intents
 
+    # Bridge: intents are the only place new goals get created from -- no
+    # free-form LLM goal invention, this only wires the existing bounded
+    # (max 2/cycle) reflection-model intent output into gosdw's goal store.
+    try:
+        import gosdw
+        old_ids = {i.intent_id for i in current_intents}
+        old_by_id = {i.intent_id: i for i in current_intents}
+
+        for i in updated_intents:
+            if i.intent_id not in old_ids and not i.goal_id:
+                priority = "high" if i.priority >= 0.7 else "medium" if i.priority >= 0.4 else "low"
+                goal = gosdw.create_internal_goal(
+                    description=i.motivation,
+                    priority=priority,
+                    success_criteria=i.motivation,
+                )
+                i.goal_id = goal["goal_id"]
+                print(f"[intent-goal-bridge] created goal {goal['goal_id']} from intent {i.intent_id}")
+                continue
+
+            prior = old_by_id.get(i.intent_id)
+            if prior and prior.status != i.status and i.goal_id:
+                if i.status == "fulfilled":
+                    gosdw.update_goal_status(i.goal_id, "completed", progress_report=f"Intent fulfilled: {i.motivation}")
+                    print(f"[intent-goal-bridge] completed goal {i.goal_id} (intent fulfilled)")
+                elif i.status == "abandoned":
+                    gosdw.update_goal_status(i.goal_id, "failed", progress_report=f"Intent abandoned: {i.motivation}")
+                    print(f"[intent-goal-bridge] failed goal {i.goal_id} (intent abandoned)")
+    except Exception as e:
+        print(f"Intent-goal bridge skipped: {e}")
+
     save_intents(updated_intents)
 
     updated_loops = check_closures(current_loops, experience)
