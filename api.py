@@ -254,7 +254,7 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL   = "google/gemma-4-31b-it:free"
 GROQ_KEY = os.environ.get("GROQ_KEY", "")
 GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "groq/compound-mini"
+GROQ_MODEL = "openai/gpt-oss-20b"
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 from gemini_client import call_gemini
@@ -284,7 +284,8 @@ async def call_llm(client, messages, max_tokens=1000):
             )
             data = res.json()
             if "error" not in data:
-                content = data.get("choices",[{}])[0].get("message",{}).get("content","")
+                msg = data.get("choices",[{}])[0].get("message",{})
+                content = msg.get("content","") or msg.get("reasoning","")
                 if content:
                     return {"reply": content, "model": GROQ_MODEL}
                 else:
@@ -309,7 +310,8 @@ async def call_llm(client, messages, max_tokens=1000):
             )
             data = res.json()
             if "error" not in data:
-                content = data.get("choices",[{}])[0].get("message",{}).get("content","")
+                msg = data.get("choices",[{}])[0].get("message",{})
+                content = msg.get("content","") or msg.get("reasoning","")
                 if content:
                     return {"reply": content, "model": model}
             else:
@@ -961,7 +963,7 @@ Output:"""
         res = await client.post(
             GROQ_URL,
             headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 100}
+            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 400}
         )
         data = res.json()
         text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
@@ -1118,7 +1120,7 @@ JSON:"""
         res = await client.post(
             GROQ_URL,
             headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 60}
+            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 400}
         )
         data = res.json()
         text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
