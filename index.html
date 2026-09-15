@@ -664,17 +664,30 @@ async function submit() {
   let signal = null;
 
   try {
-    const res = await fetch(CHAT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: text,
-        history: history.slice(-10),
-        model: "meta-llama/llama-3.3-70b-instruct:free",
-      })
-    });
+    const payload = {
+      message: text,
+      history: history.slice(-10),
+      model: "meta-llama/llama-3.3-70b-instruct:free",
+    };
 
-    if (!res.ok) throw new Error(`proxy ${res.status}`);
+    let res;
+    try {
+      res = await fetch(CHAT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(`proxy ${res.status}`);
+    } catch (firstErr) {
+      // one retry after a short delay -- covers cold starts / transient 503s
+      await new Promise(r => setTimeout(r, 2000));
+      res = await fetch(CHAT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(`proxy ${res.status}`);
+    }
     const data = await res.json();
 
     fullText = (data.reply && !data.reply.startsWith('[')) 
@@ -704,7 +717,9 @@ async function submit() {
     }
 
   } catch (err) {
-    bodyEl.textContent = `Error: ${err.message}`;
+    const header = dexEl.querySelector('.msg-header');
+    if (header) header.textContent = 'Connection error';
+    bodyEl.textContent = `Couldn't reach the server after retrying: ${err.message}`;
     dexEl.classList.add('error');
   }
 
