@@ -26,7 +26,7 @@ except Exception as e:
 def dex_runtime(user_input: str, user_id: str = "default") -> dict:
     # User recognition + recall
     try:
-        from dex_memory import recognize_user, build_recall_context, log_failure, log_recovery
+        from dex_memory import recognize_user, build_recall_context, log_failure
         user_profile = recognize_user(user_id)
         recall_ctx   = build_recall_context(user_id)
         DEX_MEMORY_ACTIVE = True
