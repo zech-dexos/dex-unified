@@ -653,17 +653,15 @@ A normal participant turn should resolve into one complete answer.
 The participant should never need to say "continue" merely because you chose to
 reproduce too much context.
 """
-system_prompt = system_prompt + "
-
-" + response_discipline
+system_prompt = system_prompt + "\n\n" + response_discipline
 
 # Inject live recall context from Firestore
-    recall_ctx = result.get("recall_ctx", "")
-    if recall_ctx:
-        system_prompt = recall_ctx + "\n\n" + system_prompt
+recall_ctx = result.get("recall_ctx", "")
+if recall_ctx:
+    system_prompt = recall_ctx + "\n\n" + system_prompt
 
-    # Live persistent cognitive state
-    try:
+# Live persistent cognitive state
+try:
         from self_state import load_self_state
 
         state = load_self_state()
