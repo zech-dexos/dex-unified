@@ -137,7 +137,7 @@ async def ambient_llm_callable(prompt: str) -> str:
                 "max_completion_tokens": 512,
                 "temperature": 0.4,
                 "reasoning_effort": "low",
-                "include_reasoning": false,
+                "include_reasoning": False,
                 "response_format": {"type": "json_object"},
             },
         )
