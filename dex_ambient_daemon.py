@@ -1,8 +1,7 @@
 import asyncio
 import json
 import traceback
-import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Callable, Awaitable, Dict, Any
 
 from drift_tape import add_thought
@@ -168,23 +167,6 @@ def _persist_pulse_state(target, thought_text, salience, status, next_attention_
     return update_self_state(delta)
 
 
-async def _maintenance_pulse():
-    """Record a cheap substrate heartbeat without invoking an LLM."""
-    current = load_self_state()
-    target = _select_target(current)
-    if target is not None:
-        return None
-    pulse = {
-        "timestamp": _now_iso(),
-        "status": "maintenance",
-        "target": None,
-        "thought": None,
-        "salience": 0.0,
-    }
-    update_self_state({"last_ambient_pulse": pulse})
-    return pulse
-
-
 async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dict[str, Any]:
     """
     Run ONE ambient cognition tick. Cadence is owned by durable runtime
@@ -249,9 +231,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
 
                 next_attention = (
                     datetime.now(timezone.utc)
-                    + __import__("datetime").timedelta(
-                        seconds=AMBIENT_REVISIT_SECONDS
-                    )
+                    + timedelta(seconds=AMBIENT_REVISIT_SECONDS)
                 ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
                 _persist_pulse_state(
