@@ -73,8 +73,13 @@ app = FastAPI(title="ReasonFlow API", version="1.0.0")
 from gemini_client import call_gemini, _get_client
 from self_state import load_self_state
 
-# Configure model choice via environment variable, keeping ambient cognition cheap.
-ambient_model = os.environ.get("AMBIENT_MODEL", "gemini-3.6-flash")
+# Ambient cognition is deliberately isolated from Vertex/Gemini.
+# The ambient pulse uses a small Groq model; top-tier Gemini is never
+# invoked merely because the ambient scheduler fired.
+ambient_model = os.environ.get("AMBIENT_MODEL", "llama-3.1-8b-instant")
+if ambient_model.startswith(("gemini", "vertex")):
+    print(f"[Ambient Daemon] Refusing expensive ambient model: {ambient_model}")
+    ambient_model = "llama-3.1-8b-instant"
 
 
 def _build_ambient_context() -> str:
@@ -112,22 +117,39 @@ def _build_ambient_context() -> str:
 
 
 async def ambient_llm_callable(prompt: str) -> str:
-    """LLM adapter used by a single scheduled ambient cognition tick.
-    Runs a small local CPU model instead of a paid API -- ambient ticks
-    happen every 45-90s and don't warrant per-call cost."""
-    import asyncio
-    from local_llm import local_slm_generate
-
+    """Cheap ambient cognition adapter. Never routes ambient work through Vertex/Gemini."""
     context = _build_ambient_context()
     full_prompt = f"{context}\n\n{prompt}" if context else prompt
 
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, local_slm_generate, full_prompt)
+    if not GROQ_KEY:
+        raise ValueError("GROQ_KEY is not configured for ambient cognition")
 
-    if not result:
-        raise ValueError("local_slm_generate returned empty response")
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            GROQ_URL,
+            headers={
+                "Authorization": f"Bearer {GROQ_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": ambient_model,
+                "messages": [{"role": "user", "content": full_prompt}],
+                "max_tokens": 180,
+                "temperature": 0.4,
+            },
+        )
+        data = response.json()
+        if response.status_code >= 400 or data.get("error"):
+            raise RuntimeError(f"ambient Groq request failed: {data.get('error', data)}")
 
-    return result
+        content = (
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        )
+        if not content:
+            raise ValueError("ambient Groq returned an empty response")
+        return content
 
 
 # Start Dex Discord bridge inside the Cloud Run container.
@@ -145,7 +167,6 @@ async def start_discord_bridge():
 async def start_continuous_substrate():
     try:
         from dex_substrate import run_substrate_loop
-        from dex_ambient_daemon import ambient_pulse_loop
         from dex_continuity import setup_continuity
         from dex_autobiography import setup_autobiography
         from dex_attention import setup_attention
@@ -157,10 +178,10 @@ async def start_continuous_substrate():
         setup_attention()
         setup_workspace()
 
-        # Start continuous substrate loop and ambient cognition loop
+        # Cloud Run is woken by /ambient-pulse; do not keep an infinite
+        # ambient loop alive inside the request-serving container.
         asyncio.create_task(run_substrate_loop())
-        asyncio.create_task(ambient_pulse_loop(ambient_llm_callable))
-        print("[Substrate] Continuous substrate and ambient daemon started")
+        print("[Substrate] Continuous substrate event fabric started; ambient cognition is scheduler-driven")
     except Exception as e:
         print(f"[Substrate] startup failed: {e}")
 
@@ -254,7 +275,7 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL   = "google/gemma-4-31b-it:free"
 GROQ_KEY = os.environ.get("GROQ_KEY", "")
 GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "openai/gpt-oss-20b"
+GROQ_MODEL = "llama-3.3-70b-versatile"
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 from gemini_client import call_gemini
@@ -262,9 +283,10 @@ from gemini_client import call_gemini
 FALLBACK_MODELS = [
     "google/gemma-4-31b-it:free",
     "google/gemma-4-26b-a4b-it:free",
-    "nvidia/nemotron-3.5-lightning:free",
-    "liquid/lfm-2.5-2.6b:free",
-    "nex-agi/nex-n2.5-mini:free",
+    "deepseek/deepseek-v4-flash:free",
+    "nvidia/nemotron-3-nano-30b-a3b:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "liquid/lfm-2.5-1.2b-instruct:free",
 ]
 
 async def call_llm(client, messages, max_tokens=1000):
@@ -284,16 +306,11 @@ async def call_llm(client, messages, max_tokens=1000):
             )
             data = res.json()
             if "error" not in data:
-                msg = data.get("choices",[{}])[0].get("message",{})
-                content = msg.get("content","") or msg.get("reasoning","")
+                content = data.get("choices",[{}])[0].get("message",{}).get("content","")
                 if content:
                     return {"reply": content, "model": GROQ_MODEL}
-                else:
-                    print(f"[call_llm] Groq returned no content: {data}")
-            else:
-                print(f"[call_llm] Groq returned error: {data.get('error')}")
-        except Exception as e:
-            print(f"[call_llm] Groq exception: {e}")
+        except Exception:
+            pass
     if GROQ_KEY:
         pass  # groq already attempted above; this branch intentionally left as-is
     for model in FALLBACK_MODELS:
@@ -310,8 +327,7 @@ async def call_llm(client, messages, max_tokens=1000):
             )
             data = res.json()
             if "error" not in data:
-                msg = data.get("choices",[{}])[0].get("message",{})
-                content = msg.get("content","") or msg.get("reasoning","")
+                content = data.get("choices",[{}])[0].get("message",{}).get("content","")
                 if content:
                     return {"reply": content, "model": model}
             else:
@@ -963,7 +979,7 @@ Output:"""
         res = await client.post(
             GROQ_URL,
             headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 400}
+            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 100}
         )
         data = res.json()
         text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
@@ -1120,7 +1136,7 @@ JSON:"""
         res = await client.post(
             GROQ_URL,
             headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 400}
+            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 60}
         )
         data = res.json()
         text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
@@ -1626,7 +1642,7 @@ async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
 
     try:
         from dex_cron import run_background_pulse
-        result = await run_background_pulse()
+        result = run_background_pulse()
 
         github_status = "not_attempted"
         try:
