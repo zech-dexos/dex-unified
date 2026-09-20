@@ -73,8 +73,13 @@ app = FastAPI(title="ReasonFlow API", version="1.0.0")
 from gemini_client import call_gemini, _get_client
 from self_state import load_self_state
 
-# Configure model choice via environment variable, keeping ambient cognition cheap.
-ambient_model = os.environ.get("AMBIENT_MODEL", "gemini-3.6-flash")
+# Ambient cognition is deliberately isolated from Vertex/Gemini.
+# The ambient pulse uses a small Groq model; top-tier Gemini is never
+# invoked merely because the ambient scheduler fired.
+ambient_model = os.environ.get("AMBIENT_MODEL", "llama-3.1-8b-instant")
+if ambient_model.startswith(("gemini", "vertex")):
+    print(f"[Ambient Daemon] Refusing expensive ambient model: {ambient_model}")
+    ambient_model = "llama-3.1-8b-instant"
 
 
 def _build_ambient_context() -> str:
@@ -112,24 +117,39 @@ def _build_ambient_context() -> str:
 
 
 async def ambient_llm_callable(prompt: str) -> str:
-    """LLM adapter used by a single scheduled ambient cognition tick."""
-    client = _get_client()
+    """Cheap ambient cognition adapter. Never routes ambient work through Vertex/Gemini."""
     context = _build_ambient_context()
     full_prompt = f"{context}\n\n{prompt}" if context else prompt
-    messages = [{"role": "user", "content": full_prompt}]
 
-    result = await call_gemini(
-        client,
-        messages,
-        model_name=ambient_model
-    )
+    if not GROQ_KEY:
+        raise ValueError("GROQ_KEY is not configured for ambient cognition")
 
-    if result is None:
-        raise ValueError(
-            "call_gemini returned None (client init or empty response)"
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            GROQ_URL,
+            headers={
+                "Authorization": f"Bearer {GROQ_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": ambient_model,
+                "messages": [{"role": "user", "content": full_prompt}],
+                "max_tokens": 180,
+                "temperature": 0.4,
+            },
         )
+        data = response.json()
+        if response.status_code >= 400 or data.get("error"):
+            raise RuntimeError(f"ambient Groq request failed: {data.get('error', data)}")
 
-    return result.get("reply", "")
+        content = (
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        )
+        if not content:
+            raise ValueError("ambient Groq returned an empty response")
+        return content
 
 
 # Start Dex Discord bridge inside the Cloud Run container.
@@ -147,7 +167,6 @@ async def start_discord_bridge():
 async def start_continuous_substrate():
     try:
         from dex_substrate import run_substrate_loop
-        from dex_ambient_daemon import ambient_pulse_loop
         from dex_continuity import setup_continuity
         from dex_autobiography import setup_autobiography
         from dex_attention import setup_attention
@@ -159,10 +178,10 @@ async def start_continuous_substrate():
         setup_attention()
         setup_workspace()
 
-        # Start continuous substrate loop and ambient cognition loop
+        # Cloud Run is woken by /ambient-pulse; do not keep an infinite
+        # ambient loop alive inside the request-serving container.
         asyncio.create_task(run_substrate_loop())
-        asyncio.create_task(ambient_pulse_loop(ambient_llm_callable))
-        print("[Substrate] Continuous substrate and ambient daemon started")
+        print("[Substrate] Continuous substrate event fabric started; ambient cognition is scheduler-driven")
     except Exception as e:
         print(f"[Substrate] startup failed: {e}")
 
