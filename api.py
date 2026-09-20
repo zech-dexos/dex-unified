@@ -134,8 +134,11 @@ async def ambient_llm_callable(prompt: str) -> str:
             json={
                 "model": ambient_model,
                 "messages": [{"role": "user", "content": full_prompt}],
-                "max_tokens": 180,
+                "max_completion_tokens": 512,
                 "temperature": 0.4,
+                "reasoning_effort": "low",
+                "include_reasoning": false,
+                "response_format": {"type": "json_object"},
             },
         )
         data = response.json()
