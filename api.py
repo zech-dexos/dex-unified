@@ -76,10 +76,10 @@ from self_state import load_self_state
 # Ambient cognition is deliberately isolated from Vertex/Gemini.
 # The ambient pulse uses a small Groq model; top-tier Gemini is never
 # invoked merely because the ambient scheduler fired.
-ambient_model = os.environ.get("AMBIENT_MODEL", "llama-3.1-8b-instant")
+ambient_model = os.environ.get("AMBIENT_MODEL", "openai/gpt-oss-20b")
 if ambient_model.startswith(("gemini", "vertex")):
     print(f"[Ambient Daemon] Refusing expensive ambient model: {ambient_model}")
-    ambient_model = "llama-3.1-8b-instant"
+    ambient_model = "openai/gpt-oss-20b"
 
 
 def _build_ambient_context() -> str:
