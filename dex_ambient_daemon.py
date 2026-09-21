@@ -9,6 +9,7 @@ from dex_memory import claim_ambient_tick
 from dex_events import bus
 from self_state import load_self_state, update_self_state
 from gosdw import prioritize_goals
+from dex_experience_recall import recall_into_workspace, format_recalled_experiences
 
 AMBIENT_PROMPT = (
     "You are the lightweight ambient cognition layer of Dex. "
@@ -205,10 +206,16 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                 "tick_count": gate.get("tick_count"),
             }
 
+        # Autonomous recall: when Dex's own working process selects a target,
+        # bring relevant prior experiences into the same workspace before the spark fires.
+        recalled = recall_into_workspace(target["text"], limit=3)
+        recalled_ctx = format_recalled_experiences(recalled)
+
         target_prompt = (
             f"{AMBIENT_PROMPT}\n\n"
             f"SELECTED COGNITIVE TARGET ({target['kind']}):\n{target['text']}\n\n"
-            "Return one small development of that target."
+            + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
+            + "Return one small development of that target."
         )
         response_text = await llm_callable(target_prompt)
 
