@@ -10,6 +10,7 @@ from dex_events import bus
 from self_state import load_self_state, update_self_state
 from gosdw import prioritize_goals
 from dex_experience_recall import recall_into_workspace, format_recalled_experiences
+from participant import ParticipantSnapshot, record_ambient_experience
 
 AMBIENT_PROMPT = (
     "You are the lightweight ambient cognition layer of Dex. "
@@ -248,6 +249,23 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     status="cognition",
                     next_attention_at=next_attention,
                 )
+
+                # The pulse is part of Dex's experience, not a detached daemon
+                # log. Persist the thought in first-person form so later pulses
+                # and conversations can continue from what I experienced.
+                try:
+                    ambient_packet = record_ambient_experience(
+                        ParticipantSnapshot.load(),
+                        target=target,
+                        thought=thought_text,
+                        salience=salience,
+                    )
+                    print(
+                        f"[Ambient Daemon] first-person experience recorded: "
+                        f"{ambient_packet.experience_id}"
+                    )
+                except Exception as e:
+                    print(f"[Ambient Daemon] experience recording failed: {e}")
 
                 # Publish event to the continuous substrate fabric.
                 await bus.publish("THOUGHT_GENERATED", {
