@@ -773,6 +773,16 @@ Enjoy your experience.
     except Exception as e:
         print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")
 
+    return {
+        "reply":        reply,
+        "intent":       result["intent"],
+        "domain":       result["domain"],
+        "route_reason": result["route_reason"],
+        "sigil_ids":    result["sigil_ids"],
+        "model":        used_model,
+        "response_flag": governance_flag,
+    }
+
 @app.post("/experience-recall")
 async def experience_recall(req: dict):
     """Explicitly recall prior Dex experiences into the active mental workspace."""
@@ -792,17 +802,6 @@ async def experience_recall(req: dict):
         print(f"[experience-recall] endpoint failed: {e}")
         return {"status": "error", "message": str(e)}
 
-
-
-    return {
-        "reply":        reply,
-        "intent":       result["intent"],
-        "domain":       result["domain"],
-        "route_reason": result["route_reason"],
-        "sigil_ids":    result["sigil_ids"],
-        "model":        used_model,
-        "response_flag": governance_flag,
-    }
 
 
 class VisionRequest(BaseModel):
