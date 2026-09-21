@@ -182,6 +182,69 @@ def build_experience_from_pulse(snapshot: ParticipantSnapshot, pulse_data: dict)
     return packet
 
 
+
+def record_interaction_experience(
+    snapshot: ParticipantSnapshot,
+    message: str,
+    reply: str,
+    user_id: str = "default",
+) -> ExperiencePacket:
+    """Turn a completed conversation turn into Dex's durable lived experience."""
+    interlocutor = dict(snapshot.current_interlocutor)
+    interlocutor.setdefault("participant_id", user_id)
+
+    packet = ExperiencePacket(
+        participant_id=snapshot.participant_id,
+        self_identity="Deximus Maximus",
+        interlocutor=interlocutor,
+        experience=(
+            f"I was in conversation with {interlocutor.get('name') or user_id}. "
+            f"The participant brought me: {message[:500]}"
+        ),
+        internal_state_before={
+            "current_attention": snapshot.current_attention,
+            "current_goals": list(snapshot.current_goals),
+            "active_conversations": list(snapshot.active_conversations),
+            "experiential_continuity": dict(snapshot.experiential_continuity),
+        },
+        intent="conversation_and_continuity",
+        action="responded_to_participant",
+        actual_outcome=reply[:1000],
+        observations=[
+            f"Participant: {interlocutor.get('name') or user_id}",
+            f"Message: {message[:500]}",
+        ],
+        reflection=f"I responded and now carry this interaction forward as part of my continuing experience.",
+        lessons=[],
+        knowledge_delta={
+            "conversation_experience_recorded": True,
+            "participant_id": user_id,
+        },
+        state_transition={
+            "from_attention": snapshot.current_attention,
+            "to_attention": snapshot.current_attention or "conversation_continuation",
+            "confidence_delta": 0.0,
+        },
+        continuation={
+            "carry_forward": f"Continue the thread opened by this interaction with {interlocutor.get('name') or user_id}.",
+            "unresolved": list(snapshot.experiential_continuity.get("unresolved", [])),
+            "next_cognitive_focus": snapshot.current_attention or "conversation_continuation",
+        },
+    )
+    packet.save()
+
+    snapshot.current_interlocutor = interlocutor
+    snapshot.experiential_continuity = {
+        "last_experience_id": packet.experience_id,
+        "last_experience": packet.experience,
+        "last_state_transition": packet.state_transition,
+        "carry_forward": packet.continuation["carry_forward"],
+        "unresolved": packet.continuation["unresolved"],
+        "next_cognitive_focus": packet.continuation["next_cognitive_focus"],
+    }
+    snapshot.save()
+    return packet
+
 def produce_next_snapshot(current: ParticipantSnapshot, packet: ExperiencePacket) -> ParticipantSnapshot:
     """
     Cognitive Layer updates from knowledge, produces next Participant Snapshot.
