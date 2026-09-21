@@ -655,6 +655,12 @@ Enjoy your experience.
                 f"Workspace focus: {workspace.get('focus_strength', 0.0)}"
             )
 
+            recalled_workspace = workspace.get("recalled_experiences", [])
+            if recalled_workspace:
+                recalled_ctx = format_recalled_experiences(recalled_workspace)
+                if recalled_ctx:
+                    self_state_ctx.append(recalled_ctx)
+
         goals = state.get("active_goals_state", [])
         if goals:
             self_state_ctx.append(f"Active goals: {goals}")
