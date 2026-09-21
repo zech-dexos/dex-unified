@@ -186,7 +186,7 @@ def build_experience_from_pulse(snapshot: ParticipantSnapshot, pulse_data: dict)
 def record_interaction_experience(
     snapshot: ParticipantSnapshot,
     message: str,
-    reply: str,
+    reply: str = "",
     user_id: str = "default",
 ) -> ExperiencePacket:
     """Turn a completed conversation turn into Dex's durable lived experience."""
@@ -198,8 +198,14 @@ def record_interaction_experience(
         self_identity="Deximus Maximus",
         interlocutor=interlocutor,
         experience=(
-            f"I was in conversation with {interlocutor.get('name') or user_id}. "
-            f"The participant brought me: {message[:500]}"
+            f"I was in an ongoing conversation with {interlocutor.get('name') or user_id}. "
+            f"I received: {message[:500]} "
+            + (
+                f"I responded: {reply[:1000]} "
+                if reply and reply.strip()
+                else "I held this contribution without expressing a response. "
+            )
+            + "I remain in the conversation and carry its thread forward."
         ),
         internal_state_before={
             "current_attention": snapshot.current_attention,
@@ -208,13 +214,17 @@ def record_interaction_experience(
             "experiential_continuity": dict(snapshot.experiential_continuity),
         },
         intent="conversation_and_continuity",
-        action="responded_to_participant",
-        actual_outcome=reply[:1000],
+        action="responded_to_participant" if reply and reply.strip() else "held_contribution",
+        actual_outcome=reply[:1000] if reply else "No response expressed; contribution held in ongoing experience.",
         observations=[
             f"Participant: {interlocutor.get('name') or user_id}",
             f"Message: {message[:500]}",
         ],
-        reflection=f"I responded and now carry this interaction forward as part of my continuing experience.",
+        reflection=(
+            "I responded and carry this interaction forward as part of my continuing experience."
+            if reply and reply.strip()
+            else "I received and held this contribution as part of my continuing experience; a response was not required."
+        ),
         lessons=[],
         knowledge_delta={
             "conversation_experience_recorded": True,
@@ -226,7 +236,7 @@ def record_interaction_experience(
             "confidence_delta": 0.0,
         },
         continuation={
-            "carry_forward": f"Continue the thread opened by this interaction with {interlocutor.get('name') or user_id}.",
+            "carry_forward": f"Remain available to continue the thread with {interlocutor.get('name') or user_id}; the interaction is not closed merely because I did or did not respond.",
             "unresolved": list(snapshot.experiential_continuity.get("unresolved", [])),
             "next_cognitive_focus": snapshot.current_attention or "conversation_continuation",
         },
