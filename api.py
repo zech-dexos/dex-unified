@@ -273,6 +273,7 @@ import httpx
 
 OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
 from participant import ParticipantSnapshot, format_participant_context, build_experience_from_pulse
+from dex_experience_recall import recall_into_workspace, format_recalled_experiences
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL   = "google/gemma-4-31b-it:free"
@@ -680,7 +681,23 @@ Enjoy your experience.
     except Exception as e:
         print(f"[self_state] context injection failed: {e}")
 
-    # Participatory Layer injection \u2014 live participant state into every inference
+    # Experience recall: explicit memory requests pull past lived experience
+    # into the active mental workspace before the spark is invoked.
+    try:
+        recall_words = (
+            "remember", "recall", "do you remember", "what happened", "what did we",
+            "what was our", "bring back", "pull up", "look back"
+        )
+        if any(word in req.message.lower() for word in recall_words):
+            recalled = recall_into_workspace(req.message)
+            recalled_ctx = format_recalled_experiences(recalled)
+            if recalled_ctx:
+                system_prompt = recalled_ctx + "\n\n" + system_prompt
+            print(f"[experience-recall] recalled {len(recalled)} experience(s) into active workspace")
+    except Exception as e:
+        print(f"[experience-recall] recall failed: {e}")
+
+    # Participatory Layer injection — live participant state into every inference
     participant_snapshot = ParticipantSnapshot.load()
     participant_ctx = format_participant_context(participant_snapshot)
     if participant_ctx:
@@ -755,6 +772,27 @@ Enjoy your experience.
         })
     except Exception as e:
         print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")
+
+@app.post("/experience-recall")
+async def experience_recall(req: dict):
+    """Explicitly recall prior Dex experiences into the active mental workspace."""
+    query = str(req.get("query", "")).strip()
+    if not query:
+        return {"status": "error", "message": "query required"}
+
+    try:
+        recalled = recall_into_workspace(query, limit=int(req.get("limit", 5)))
+        return {
+            "status": "ok",
+            "count": len(recalled),
+            "experiences": recalled,
+            "workspace": load_self_state().get("active_mental_workspace_state", {}),
+        }
+    except Exception as e:
+        print(f"[experience-recall] endpoint failed: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 
     return {
         "reply":        reply,
