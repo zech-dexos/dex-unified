@@ -272,7 +272,7 @@ import asyncio
 import httpx
 
 OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
-from participant import ParticipantSnapshot, format_participant_context, build_experience_from_pulse
+from participant import ParticipantSnapshot, format_participant_context, build_experience_from_pulse, record_interaction_experience
 from dex_experience_recall import recall_into_workspace, format_recalled_experiences
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -747,6 +747,19 @@ Enjoy your experience.
         result_llm = await call_llm(client, messages, max_tokens=1200)
     reply = result_llm["reply"]
     used_model = result_llm["model"]
+
+    # A completed conversation is itself an experience. Persist it before
+    # returning so future recall can recover the actual interaction, not just
+    # a background pulse about it.
+    try:
+        record_interaction_experience(
+            ParticipantSnapshot.load(),
+            req.message,
+            reply,
+            user_id=getattr(req, "user_id", "default"),
+        )
+    except Exception as e:
+        print(f"[experience] conversation experience record failed: {e}")
 
     # Response-side governance check — catches parroting/sycophancy in
     # the ACTUAL reply going out, not just incoming prompt drift.
