@@ -71,6 +71,7 @@ def _default_self_state(dex_id: Optional[str] = None) -> Dict[str, Any]:
             "focus_strength": 0.0,
             "related_knowledge_nodes": [],
             "internal_reflections": [],
+            "recalled_experiences": [],
             "duration_hint": None,
         },
         "persistent_thoughts": [],
