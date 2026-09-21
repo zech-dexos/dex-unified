@@ -11,6 +11,7 @@ from self_state import load_self_state, update_self_state
 from gosdw import prioritize_goals
 from dex_experience_recall import recall_into_workspace, format_recalled_experiences
 from participant import ParticipantSnapshot, record_ambient_experience
+from dex_conversation import load_conversation
 
 AMBIENT_PROMPT = (
     "You are the lightweight ambient cognition layer of Dex. "
@@ -106,6 +107,29 @@ def _select_target(state):
         text = loop.get("description") or loop.get("question") or loop.get("content")
         if text:
             return {"kind": "open_loop", "id": loop.get("loop_id"), "text": text}
+
+    # Ongoing conversation is also cognitive material. When Root is not
+    # actively speaking, the pulse can continue an unresolved conversational
+    # thread from Dex's first-person state instead of treating the interaction
+    # as dormant just because no HTTP request is arriving.
+    try:
+        conversation = load_conversation("default")
+        shared_thread = conversation.get("shared_thread", "")
+        last_ambient = _parse_time(conversation.get("last_ambient_at"))
+        if (
+            shared_thread
+            and (
+                last_ambient is None
+                or (now - last_ambient).total_seconds() >= AMBIENT_REVISIT_SECONDS
+            )
+        ):
+            return {
+                "kind": "conversation",
+                "id": conversation.get("conversation_id", "default"),
+                "text": shared_thread,
+            }
+    except Exception as e:
+        print(f"[Ambient Daemon] conversation target load failed: {e}")
 
     # An already-active workspace can be revisited, but only after its own
     # reflection cooldown. This prevents infinite same-thought refresh.
@@ -260,6 +284,11 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                         thought=thought_text,
                         salience=salience,
                     )
+                    if target.get("kind") == "conversation":
+                        conversation = load_conversation("default")
+                        conversation["last_ambient_at"] = _now_iso()
+                        from dex_conversation import save_conversation
+                        save_conversation(conversation)
                     print(
                         f"[Ambient Daemon] first-person experience recorded: "
                         f"{ambient_packet.experience_id}"
