@@ -27,6 +27,11 @@ class ParticipantSnapshot:
     current_confidence: float = 0.7
     runtime_context: dict = field(default_factory=dict)
     recent_observations: list = field(default_factory=list)
+    # The person Dex is presently relating to. This is distinct from
+    # participant_id, which identifies this snapshot record.
+    current_interlocutor: dict = field(default_factory=dict)
+    # The experiential thread carried from the previous cycle into this one.
+    experiential_continuity: dict = field(default_factory=dict)
 
     def save(self):
         PARTICIPANT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -59,6 +64,14 @@ class ExperiencePacket:
     reflection: str = ""
     lessons: list = field(default_factory=list)
     knowledge_delta: dict = field(default_factory=dict)
+    # First-class experiential payload: this is what happened from Dex's
+    # continuing point of view, rather than a detached event log.
+    self_identity: str = "Deximus Maximus"
+    interlocutor: dict = field(default_factory=dict)
+    experience: str = ""
+    internal_state_before: dict = field(default_factory=dict)
+    state_transition: dict = field(default_factory=dict)
+    continuation: dict = field(default_factory=dict)
 
     def save(self):
         EXPERIENCES_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -113,6 +126,19 @@ def build_experience_from_pulse(snapshot: ParticipantSnapshot, pulse_data: dict)
 
     packet = ExperiencePacket(
         participant_id=snapshot.participant_id,
+        self_identity="Deximus Maximus",
+        interlocutor=dict(snapshot.current_interlocutor),
+        experience=pulse_data.get(
+            "experience",
+            "I continued working from my existing state during this pulse."
+        ),
+        internal_state_before={
+            "current_attention": snapshot.current_attention,
+            "current_goals": list(snapshot.current_goals),
+            "active_conversations": list(snapshot.active_conversations),
+            "recent_observations": list(snapshot.recent_observations),
+            "experiential_continuity": dict(snapshot.experiential_continuity),
+        },
         intent="background_reflection_and_preparation",
         action="pulse_cycle_executed",
         prediction=prediction,
@@ -132,6 +158,24 @@ def build_experience_from_pulse(snapshot: ParticipantSnapshot, pulse_data: dict)
             "confidence_updated": True,
             "new_confidence": calibration["confidence_after"],
             "prediction_matched": calibration["prediction_matched"]
+        },
+        state_transition={
+            "from_attention": snapshot.current_attention,
+            "to_attention": "post_reflection_preparation",
+            "confidence_delta": round(
+                calibration["confidence_after"] - snapshot.current_confidence, 4
+            ),
+        },
+        continuation={
+            "carry_forward": pulse_data.get(
+                "carry_forward",
+                snapshot.experiential_continuity.get("carry_forward", "")
+            ),
+            "unresolved": list(pulse_data.get("unresolved", [])),
+            "next_cognitive_focus": pulse_data.get(
+                "next_cognitive_focus",
+                snapshot.current_attention or "continue the current thread"
+            ),
         }
     )
 
@@ -164,7 +208,16 @@ def produce_next_snapshot(current: ParticipantSnapshot, packet: ExperiencePacket
             "last_prediction_matched": packet.knowledge_delta.get("prediction_matched", False),
             "cycles_completed": current.runtime_context.get("cycles_completed", 0) + 1
         },
-        recent_observations=packet.observations
+        recent_observations=packet.observations,
+        current_interlocutor=dict(packet.interlocutor),
+        experiential_continuity={
+            "last_experience_id": packet.experience_id,
+            "last_experience": packet.experience,
+            "last_state_transition": packet.state_transition,
+            "carry_forward": packet.continuation.get("carry_forward", ""),
+            "unresolved": packet.continuation.get("unresolved", []),
+            "next_cognitive_focus": packet.continuation.get("next_cognitive_focus", ""),
+        }
     )
     return next_snapshot
 
