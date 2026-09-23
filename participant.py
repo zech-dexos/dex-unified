@@ -267,9 +267,9 @@ def persist_experience_transition(
     """
     packet.save()
 
-    from self_state import update_self_state, load_self_state
+    import self_state
 
-    update_self_state({
+    self_state.update_self_state({
         "last_experience_state": {
             "experience_id": packet.experience_id,
             "timestamp": packet.timestamp,
@@ -280,7 +280,7 @@ def persist_experience_transition(
             "carry_forward": packet.continuation,
             "reflection": packet.reflection,
         }
-    })
+    }, path=self_state.SELF_STATE_PATH)
 
     if next_snapshot is None:
         next_snapshot = produce_next_snapshot(snapshot, packet)
@@ -289,7 +289,7 @@ def persist_experience_transition(
     # synchronized so inference, ambient cognition, and goal scheduling see
     # the same active goal set after every experience transition.
     try:
-        state = load_self_state()
+        state = self_state.load_self_state()
         active_goal_descriptions = [
             g.get("description", "")
             for g in state.get("active_goals_state", [])
