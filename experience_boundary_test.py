@@ -46,7 +46,7 @@ from pathlib import Path
 import self_state
 import participant
 import gosdw
-self_state.SELF_STATE_PATH = Path(r"{state_path}")
+self_state.SELF_STATE_PATH = Path(r"{STATE_PATH.resolve()}" )
 gosdw.SELF_STATE_PATH = Path(r"{state_path}")
 participant.PARTICIPANT_PATH = Path(r"{participant_path}")
 participant.EXPERIENCES_PATH = Path(r"{experiences_path}")
