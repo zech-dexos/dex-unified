@@ -1,0 +1,42 @@
+name: DexOS Continuity Audit
+
+on:
+  push:
+    branches:
+      - dex-continuity-rebuild
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out DexOS
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile changed cognitive modules
+        run: |
+          python -m py_compile             api.py             self_state.py             participant.py             gosdw.py             ape_scheduler.py             dex_ambient_daemon.py             dex_continuity.py             dex_conversation.py             thought.py             process_boundary_test.py             experience_boundary_test.py
+
+      - name: Check whitespace
+        run: git diff --check c85c7eb...HEAD
+
+      - name: Run state and goal tests
+        run: |
+          python self_state.py
+          python gosdw.py
+          python dex_conversation.py
+          python thought.py
+
+      - name: Run process-boundary continuity test
+        run: python process_boundary_test.py
+
+      - name: Run full experience-goal boundary test
+        run: python experience_boundary_test.py
