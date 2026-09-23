@@ -275,28 +275,28 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                 experience_packet.action = "ambient_cognition"
                 experience_packet.continuation["ambient_target"] = target
                 experience_packet.continuation["ambient_salience"] = salience
-                experience_packet.save()
 
-                # Make the resulting experience a first-class part of the
-                # durable SelfState used by the next inference.
-                update_self_state({
-                    "last_experience_state": {
-                        "experience_id": experience_packet.experience_id,
-                        "timestamp": experience_packet.timestamp,
-                        "source": "ambient_cognition",
-                        "experience": experience_packet.experience,
-                        "state_before": experience_packet.internal_state_before,
-                        "state_transition": experience_packet.state_transition,
-                        "carry_forward": experience_packet.continuation,
-                        "reflection": experience_packet.reflection,
+                # A sufficiently salient unresolved ambient target becomes a
+                # candidate for self-directed work. GOSDW deduplicates it
+                # against existing goals before persisting anything.
+                if salience >= 0.5:
+                    experience_packet.continuation["goal_candidate"] = {
+                        "description": target.get("text", "").strip(),
+                        "salience": salience,
+                        "success_criteria": (
+                            "Develop this line of thought and determine whether "
+                            "it should remain an active goal."
+                        ),
                     }
-                })
 
-                next_participant_snapshot = produce_next_snapshot(
+                from gosdw import ensure_goal_from_experience
+                ensure_goal_from_experience(experience_packet)
+
+                from participant import persist_experience_transition
+                next_participant_snapshot = persist_experience_transition(
                     participant_snapshot,
                     experience_packet,
                 )
-                next_participant_snapshot.save()
 
                 print(
                     "[Ambient Daemon] Experience carried forward: "
