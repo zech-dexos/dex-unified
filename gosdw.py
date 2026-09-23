@@ -166,6 +166,7 @@ def update_goal_status(
         "goal_id": goal_id,
         "description": updated_goal.get("description", ""),
         "status": new_status,
+        "previous_status": previous_status,
         "progress_report": progress_report or "",
         "reason": "goal state changed within Dex's persistent self-direction",
     }
@@ -218,7 +219,10 @@ def update_goal_status(
                 "progress_report": progress_report or "",
             },
             continuation={
-                "active_goals": list(goals),
+                "active_goals": [
+                    g for g in goals
+                    if g.get("status") == "active"
+                ],
                 "carry_forward": (
                     progress_report
                     or f"Continue from goal state: {updated_goal.get('description', '')}"
