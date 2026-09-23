@@ -7,8 +7,6 @@ no API key needed. Extracted from api.py so background/cron code
 full module.
 """
 import os
-from google import genai
-from google.genai import types
 
 PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "seraphic-disk-506702-d2")
 LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
@@ -19,11 +17,13 @@ _client = None
 def _get_client():
     global _client
     if _client is None:
+        from google import genai
         _client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION)
     return _client
 
 
 async def call_gemini(client, messages, max_tokens=4096, model_name=None):
+    from google.genai import types
     """
     Kept async + same signature as the old REST version for drop-in
     compatibility, even though the genai SDK call itself is sync
@@ -80,6 +80,7 @@ def generate_reflection_text(context: str, concept_being_held: str, prior_reflec
     ]
 
     try:
+        from google.genai import types
         vertex_client = _get_client()
 
         contents = []
