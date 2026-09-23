@@ -119,6 +119,27 @@ async def process_continuity_event(payload: Dict[str, Any]):
         except Exception as e:
             print(f"[conversation] persistence failed: {e}")
 
+        # Legacy interaction memory — record the completed turn and
+        # increment the authoritative per-user interaction counter.
+        try:
+            from dex_memory import log_interaction
+
+            log_interaction(
+                user_id=user_id,
+                user_input=message,
+                dex_response=reply,
+                intent=payload.get("intent", ""),
+                model=payload.get("model", ""),
+            )
+
+            print(
+                "[Continuity] Interaction memory persisted for "
+                f"user={user_id}"
+            )
+
+        except Exception as e:
+            print(f"[dex_memory] interaction persistence failed: {e}")
+
     elif event_type == "THOUGHT_GENERATED":
         shared_state.update_state("last_thought_event", dict(payload))
     elif event_type == "PARTICIPANT_EVENT":
