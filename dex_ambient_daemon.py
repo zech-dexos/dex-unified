@@ -277,6 +277,21 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                 experience_packet.continuation["ambient_salience"] = salience
                 experience_packet.save()
 
+                # Make the resulting experience a first-class part of the
+                # durable SelfState used by the next inference.
+                update_self_state({
+                    "last_experience_state": {
+                        "experience_id": experience_packet.experience_id,
+                        "timestamp": experience_packet.timestamp,
+                        "source": "ambient_cognition",
+                        "experience": experience_packet.experience,
+                        "state_before": experience_packet.internal_state_before,
+                        "state_transition": experience_packet.state_transition,
+                        "carry_forward": experience_packet.continuation,
+                        "reflection": experience_packet.reflection,
+                    }
+                })
+
                 next_participant_snapshot = produce_next_snapshot(
                     participant_snapshot,
                     experience_packet,
