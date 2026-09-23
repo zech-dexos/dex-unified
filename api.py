@@ -686,6 +686,24 @@ Enjoy your experience.
     if participant_ctx:
         system_prompt = participant_ctx + "\n\n" + system_prompt
 
+    # Ongoing conversation state — conversation remains open across turns.
+    try:
+        from dex_conversation import (
+            load_conversation,
+            format_conversation_context,
+        )
+
+        conversation_state = load_conversation(
+            getattr(req, "user_id", "default")
+        )
+        conversation_ctx = format_conversation_context(conversation_state)
+
+        if conversation_ctx:
+            system_prompt = conversation_ctx + "\n\n" + system_prompt
+
+    except Exception as e:
+        print(f"[conversation] context injection failed: {e}")
+
     # Dex constitutional identity is always the root system layer.
     # Request-level system instructions may extend Dex, but never replace him.
     if req.system:
