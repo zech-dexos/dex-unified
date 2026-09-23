@@ -92,7 +92,7 @@ from participant import ParticipantSnapshot
 from self_state import load_self_state
 
 snapshot = ParticipantSnapshot.load()
-state = load_self_state(path=Path(r"{state_path}"))
+state = load_self_state(path=Path(r"{STATE_PATH.resolve()}"))
 assert state["last_experience_state"]["experience_id"] == "{experience_id}"
 assert snapshot.experiential_continuity["last_experience_id"] == "{experience_id}"
 assert snapshot.current_goals == ["hold continuity"]
