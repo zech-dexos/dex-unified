@@ -116,6 +116,71 @@ async def process_continuity_event(payload: Dict[str, Any]):
                 f"{conversation.conversation_id}"
             )
 
+            # The conversational turn is also an experience transition.
+            # Conversation state and participant state must advance together.
+            try:
+                from participant import (
+                    ParticipantSnapshot,
+                    ExperiencePacket,
+                    persist_experience_transition,
+                )
+
+                snapshot = ParticipantSnapshot.load()
+                response_text = reply or ""
+                packet = ExperiencePacket(
+                    participant_id=snapshot.participant_id,
+                    interlocutor=snapshot.current_interlocutor.copy(),
+                    experience=(
+                        f"I received Root's contribution: {message}. "
+                        + (
+                            f"I responded: {response_text}. "
+                            if response_text
+                            else "I did not express a response at that moment. "
+                        )
+                        + "I remain oriented toward this conversation."
+                    ),
+                    internal_state_before={
+                        "attention": snapshot.current_attention,
+                        "goals": list(snapshot.current_goals),
+                        "confidence": snapshot.current_confidence,
+                        "active_conversations": list(snapshot.active_conversations),
+                    },
+                    state_transition={
+                        "event": "response_completed",
+                        "conversation_id": conversation.conversation_id,
+                        "responded": bool(response_text),
+                        "model": payload.get("model", ""),
+                    },
+                    continuation={
+                        "active_goals": list(snapshot.current_goals),
+                        "active_conversations": (
+                            list(snapshot.active_conversations)
+                            + ([conversation.shared_thread] if conversation.shared_thread else [])
+                        )[-10:],
+                        "carry_forward": (
+                            conversation.carry_forward
+                            or conversation.shared_thread
+                            or message
+                        ),
+                    },
+                    intent="ongoing_conversation",
+                    action="response_completed",
+                    actual_outcome=response_text,
+                    confidence_before=snapshot.current_confidence,
+                    confidence_after=snapshot.current_confidence,
+                    observations=[f"Conversation state: {conversation.interaction_state}"],
+                    reflection=(
+                        "I carried the conversational event into my persistent state."
+                    ),
+                )
+                persist_experience_transition(snapshot, packet)
+                print(
+                    "[Continuity] Conversational experience persisted: "
+                    f"{packet.experience_id}"
+                )
+            except Exception as e:
+                print(f"[Continuity] conversational experience persistence failed: {e}")
+
         except Exception as e:
             print(f"[conversation] persistence failed: {e}")
 
