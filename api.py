@@ -293,24 +293,40 @@ FALLBACK_MODELS = [
 ]
 
 async def call_llm(client, messages, max_tokens=1000):
+    # Dex primary inference substrate: Groq.
+    # If Groq fails, expose the failure before falling back so provider
+    # problems cannot disappear silently.
     if GROQ_KEY:
         try:
             res = await client.post(
                 GROQ_URL,
-                headers={                    "Authorization": f"Bearer {GROQ_KEY}",
+                headers={
+                    "Authorization": f"Bearer {GROQ_KEY}",
                     "Content-Type": "application/json",
                 },
-                json={"model": GROQ_MODEL, "messages": messages, "max_tokens": max_tokens}
+                json={
+                    "model": GROQ_MODEL,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                },
             )
+
             data = res.json()
+
             if "error" not in data:
-                content = data.get("choices",[{}])[0].get("message",{}).get("content","")
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                 if content:
+                    print(f"[call_llm] Groq succeeded: {GROQ_MODEL}")
                     return {"reply": content, "model": GROQ_MODEL}
-        except Exception:
-            pass
-    if GROQ_KEY:
-        pass  # groq already attempted above; this branch intentionally left as-is
+
+            print(f"[call_llm] Groq returned error: {data.get('error', data)}")
+
+        except Exception as e:
+            print(f"[call_llm] Groq exception: {type(e).__name__}: {e}")
+    else:
+        print("[call_llm] GROQ_KEY is not configured")
+
+    # Secondary substrate path.
     for model in FALLBACK_MODELS:
         try:
             res = await client.post(
@@ -321,18 +337,28 @@ async def call_llm(client, messages, max_tokens=1000):
                     "HTTP-Referer": "https://dex-backend-production-2bbe.up.railway.app",
                     "X-Title": "Dex ReasonFlow",
                 },
-                json={"model": model, "messages": messages, "max_tokens": max_tokens}
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                },
             )
+
             data = res.json()
+
             if "error" not in data:
-                content = data.get("choices",[{}])[0].get("message",{}).get("content","")
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                 if content:
+                    print(f"[call_llm] OpenRouter succeeded: {model}")
                     return {"reply": content, "model": model}
-            else:
-                print(f"[call_llm] {model} returned error: {data.get('error')}")
+
+            print(f"[call_llm] {model} returned error: {data.get('error', data)}")
+
         except Exception as e:
-            print(f"[call_llm] {model} exception: {e}")
+            print(f"[call_llm] {model} exception: {type(e).__name__}: {e}")
+
         await asyncio.sleep(1)
+
     return {"reply": "[all models failed]", "model": "none"}
 
 class ChatRequest(BaseModel):
