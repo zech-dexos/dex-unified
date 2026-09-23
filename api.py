@@ -287,7 +287,7 @@ FALLBACK_MODELS = [
     # Keep a non-Google secondary substrate. These IDs are current free
     # OpenRouter endpoints rather than retired model slugs.
     "nvidia/nemotron-3.5-lightning:free",
-    "nvidia/nemotron-3-ultra:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
 ]
 
 async def call_llm(client, messages, max_tokens=1000):
