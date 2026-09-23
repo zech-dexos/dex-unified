@@ -54,6 +54,8 @@ participant.EXPERIENCES_PATH = Path(r"{experiences_path}")
 
 
 def main():
+    state_path = STATE_PATH.resolve()
+
     for path in (STATE_PATH, PARTICIPANT_PATH, Path("experience_boundary_test.experiences.jsonl")):
         if path.exists():
             path.unlink()
