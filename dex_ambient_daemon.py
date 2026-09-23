@@ -9,6 +9,11 @@ from dex_memory import claim_ambient_tick
 from dex_events import bus
 from self_state import load_self_state, update_self_state
 from gosdw import prioritize_goals
+from participant import (
+    ParticipantSnapshot,
+    build_experience_from_pulse,
+    produce_next_snapshot,
+)
 
 AMBIENT_PROMPT = (
     "You are the lightweight ambient cognition layer of Dex. "
@@ -240,6 +245,46 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     salience=salience,
                     status="cognition",
                     next_attention_at=next_attention,
+                )
+
+                # Convert ambient cognition into the existing first-person
+                # experience/state-transition path. The ambient thought is
+                # an experience Dex carries forward, not merely an archive
+                # entry.
+                participant_snapshot = ParticipantSnapshot.load()
+                ambient_pulse = {
+                    "chain_status": "intact",
+                    "insight_for_root": thought_text,
+                    "fragments_loaded": 0,
+                    "narrative_entries": 0,
+                }
+                experience_packet = build_experience_from_pulse(
+                    participant_snapshot,
+                    ambient_pulse,
+                )
+                experience_packet.experience = (
+                    f"I was attending to {target.get('text', 'my current line of thought')} "
+                    f"when I developed this thought: {thought_text} "
+                    f"I am carrying this experience forward."
+                )
+                experience_packet.reflection = (
+                    f"I developed the ambient target '{target.get('text', '')}'. "
+                    f"I am carrying this experience forward."
+                )
+                experience_packet.action = "ambient_cognition"
+                experience_packet.continuation["ambient_target"] = target
+                experience_packet.continuation["ambient_salience"] = salience
+                experience_packet.save()
+
+                next_participant_snapshot = produce_next_snapshot(
+                    participant_snapshot,
+                    experience_packet,
+                )
+                next_participant_snapshot.save()
+
+                print(
+                    "[Ambient Daemon] Experience carried forward: "
+                    f"{experience_packet.experience_id}"
                 )
 
                 # Publish event to the continuous substrate fabric.
