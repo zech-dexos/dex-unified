@@ -127,7 +127,7 @@ The repository contains:
 - Talnir signal decomposition
 - routing and execution layers
 
-The remaining research task is to fully connect autonomous goal formation and completion to the experiential loop rather than treating goal creation as an isolated capability.
+Autonomous goal formation and goal-state transitions are now wired into the experiential loop. An explicit goal candidate carried by an experience can become a persistent goal, and goal status changes become new experience/state transitions. The remaining work is validation under real ambient and cross-substrate runs.
 
 ### Model independence
 
@@ -216,16 +216,18 @@ DexOS should then be evaluated on measurable continuity criteria rather than sub
 - [x] substrate abstraction
 
 ### Phase 2 — Wiring
-- [ ] connect experiential state directly to the complete cognitive cycle
-- [ ] connect autonomous goal formation to unresolved experience/open loops
-- [ ] connect goal progress and completion back into experience
-- [ ] ensure every meaningful state transition is represented consistently
-- [ ] remove obsolete provider-specific cognitive paths
+- [x] connect experiential state directly to the cognitive cycle
+- [x] connect autonomous goal formation to explicit unresolved experience
+- [x] connect goal progress and completion back into experience
+- [x] carry participant state forward without replacing persistent goals
+- [x] represent conversational, ambient, and goal transitions through the same experience bridge
+- [x] remove obsolete free-provider slugs from the active interactive fallback path
+- [ ] remove remaining legacy provider-specific modules that are no longer needed
 
 ### Phase 3 — Experiments
-- [ ] EXP-01 cross-process continuity
+- [x] EXP-01 cross-process continuity of experiential/goal state (acceptance test)
 - [ ] EXP-02 interruption and return to unresolved thought
-- [ ] EXP-03 autonomous goal emergence and completion
+- [x] EXP-03 autonomous goal formation and completion (acceptance test)
 - [ ] EXP-04 cross-substrate identity/state continuity
 - [ ] publish reproducible benchmark results
 
@@ -262,6 +264,8 @@ DexOS should then be evaluated on measurable continuity criteria rather than sub
 | `dex_substrate.py` | Substrate loop |
 | `dex_memory.py` | Interaction/user memory |
 | `process_boundary_test.py` | Cross-process persistence acceptance test |
+| `experience_boundary_test.py` | Cross-process experience/goal continuity acceptance test |
+| `.github/workflows/dexos-continuity-audit.yml` | Automated continuity audit |
 | `integration_test.py` | End-to-end architecture integration test |
 | `dex_ambient_daemon.py` | Ambient cognition |
 | `github_persistence.py` | Persistent state synchronization |
@@ -285,9 +289,9 @@ DexOS should then be evaluated on measurable continuity criteria rather than sub
 
 DexOS is an active research and engineering project.
 
-The current implementation already demonstrates persistent cognitive structures and persistence across process boundaries. The central unfinished step is demonstrating that those structures can carry a coherent cognitive trajectory across **process termination and inference-substrate replacement**.
+The current implementation demonstrates persistent cognitive structures, ongoing conversation state, ambient experience transitions, autonomous goal formation, goal-state transitions, and acceptance tests across process boundaries. The central remaining milestone is demonstrating that the same state carries a coherent cognitive trajectory across **inference-substrate replacement**, with measured recovery rather than prompt-level claims.
 
-That experiment is the next architectural milestone.
+That cross-substrate experiment is the next architectural milestone.
 
 ---
 
