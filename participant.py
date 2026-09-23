@@ -295,10 +295,7 @@ def persist_experience_transition(
             for g in state.get("active_goals_state", [])
             if g.get("status") == "active" and g.get("description")
         ]
-        if active_goal_descriptions:
-            next_snapshot.current_goals = active_goal_descriptions
-        elif state.get("active_goals_state") == []:
-            next_snapshot.current_goals = []
+        next_snapshot.current_goals = active_goal_descriptions
     except Exception as e:
         print(f"[participant] goal synchronization failed: {e}")
 
