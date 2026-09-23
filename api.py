@@ -293,10 +293,6 @@ FALLBACK_MODELS = [
 ]
 
 async def call_llm(client, messages, max_tokens=1000):
-    gemini_result = await call_gemini(client, messages, max_tokens)
-    if gemini_result:
-        return gemini_result
-
     if GROQ_KEY:
         try:
             res = await client.post(
