@@ -66,7 +66,7 @@ create_internal_goal(
     "hold continuity",
     priority="high",
     success_criteria="Remain present across process boundaries.",
-    path=STATE_PATH,
+    path=Path(r"{state_path}"),
 )
 
 snapshot = ParticipantSnapshot(current_attention="continuity verification", current_goals=["hold continuity"])
@@ -96,6 +96,7 @@ print(packet.experience_id)
 
     recovered = json.loads(run_step(bootstrap_code() + f"""
 import json
+from pathlib import Path
 from participant import ParticipantSnapshot
 from self_state import load_self_state
 
