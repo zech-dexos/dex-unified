@@ -267,7 +267,7 @@ def persist_experience_transition(
     """
     packet.save()
 
-    from self_state import update_self_state
+    from self_state import update_self_state, load_self_state
 
     update_self_state({
         "last_experience_state": {
@@ -284,6 +284,23 @@ def persist_experience_transition(
 
     if next_snapshot is None:
         next_snapshot = produce_next_snapshot(snapshot, packet)
+
+    # Goal state is authoritative in SelfState. Keep the participant snapshot
+    # synchronized so inference, ambient cognition, and goal scheduling see
+    # the same active goal set after every experience transition.
+    try:
+        state = load_self_state()
+        active_goal_descriptions = [
+            g.get("description", "")
+            for g in state.get("active_goals_state", [])
+            if g.get("status") == "active" and g.get("description")
+        ]
+        if active_goal_descriptions:
+            next_snapshot.current_goals = active_goal_descriptions
+        elif state.get("active_goals_state") == []:
+            next_snapshot.current_goals = []
+    except Exception as e:
+        print(f"[participant] goal synchronization failed: {e}")
 
     next_snapshot.save()
     return next_snapshot
