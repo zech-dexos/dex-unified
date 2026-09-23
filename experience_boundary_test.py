@@ -38,15 +38,18 @@ def run_step(code: str) -> str:
 
 
 def bootstrap_code() -> str:
+    state_path = STATE_PATH.resolve()
+    participant_path = PARTICIPANT_PATH.resolve()
+    experiences_path = (HERE / "experience_boundary_test.experiences.jsonl").resolve()
     return f"""
 from pathlib import Path
 import self_state
 import participant
 import gosdw
-self_state.SELF_STATE_PATH = Path("{STATE_PATH.name}")
-gosdw.SELF_STATE_PATH = Path("{STATE_PATH.name}")
-participant.PARTICIPANT_PATH = Path("{PARTICIPANT_PATH.name}")
-participant.EXPERIENCES_PATH = Path("experience_boundary_test.experiences.jsonl")
+self_state.SELF_STATE_PATH = Path(r"{state_path}")
+gosdw.SELF_STATE_PATH = Path(r"{state_path}")
+participant.PARTICIPANT_PATH = Path(r"{participant_path}")
+participant.EXPERIENCES_PATH = Path(r"{experiences_path}")
 """
 
 
