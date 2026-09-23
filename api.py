@@ -275,7 +275,7 @@ OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
 from participant import ParticipantSnapshot, format_participant_context, build_experience_from_pulse
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL   = GROQ_MODEL if "GROQ_MODEL" in globals() else "openai/gpt-oss-20b"
+DEFAULT_MODEL   = "openai/gpt-oss-20b"
 GROQ_KEY = os.environ.get("GROQ_KEY", "")
 GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "openai/gpt-oss-20b"
