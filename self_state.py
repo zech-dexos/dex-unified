@@ -79,6 +79,20 @@ def _default_self_state(dex_id: Optional[str] = None) -> Dict[str, Any]:
         "last_autobiographical_event": None,
         "last_experience_state": None,
         "recent_goal_changes": [],
+        "perspective": {
+            "version": 0,
+            "updated_at": _now_iso(),
+            "transition_reason": "initialization",
+            "self": {"identity": "Deximus Maximus", "dex_id": dex_id},
+            "attention": {},
+            "orientation": {"active_goals": [], "values": {}},
+            "experience": {},
+            "workspace": {},
+            "carry_forward": None,
+            "interlocutor": {},
+            "ambient": {},
+            "continuity": {},
+        },
     }
 
 

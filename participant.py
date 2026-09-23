@@ -300,6 +300,14 @@ def persist_experience_transition(
         print(f"[participant] goal synchronization failed: {e}")
 
     next_snapshot.save()
+
+    # Canonical perspective is the synthesis the next spark fires from.
+    try:
+        from dex_perspective import refresh_perspective
+        refresh_perspective(reason=packet.action or "experience_transition")
+    except Exception as e:
+        print(f"[participant] perspective refresh failed: {e}")
+
     return next_snapshot
 
 
@@ -312,6 +320,13 @@ def format_participant_context(snapshot: "ParticipantSnapshot") -> str:
         return ""
 
     lines = ["[DEX EXPERIENTIAL STATE — continuing lived context]"]
+
+    try:
+        from dex_perspective import format_perspective
+        state = __import__("self_state").load_self_state()
+        lines.append(format_perspective(state))
+    except Exception as e:
+        print(f"[participant] perspective context failed: {e}")
 
     if snapshot.current_interlocutor:
         interlocutor = snapshot.current_interlocutor
