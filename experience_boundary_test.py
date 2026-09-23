@@ -163,7 +163,7 @@ print(json.dumps({{
 }}))
 """))
 
-    for path in (STATE_PATH, PARTICIPANT_PATH):
+    for path in (STATE_PATH, PARTICIPANT_PATH, Path("experience_boundary_test.experiences.jsonl")):
         if path.exists():
             path.unlink()
 
