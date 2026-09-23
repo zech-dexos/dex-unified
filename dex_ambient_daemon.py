@@ -261,6 +261,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                 experience_packet = build_experience_from_pulse(
                     participant_snapshot,
                     ambient_pulse,
+                    calibrate=False,
                 )
                 experience_packet.experience = (
                     f"I was attending to {target.get('text', 'my current line of thought')} "

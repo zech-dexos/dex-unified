@@ -108,16 +108,36 @@ def calibrate_prediction(prediction: str, actual: str, confidence_before: float)
     }
 
 
-def build_experience_from_pulse(snapshot: ParticipantSnapshot, pulse_data: dict) -> ExperiencePacket:
+def build_experience_from_pulse(
+    snapshot: ParticipantSnapshot,
+    pulse_data: dict,
+    calibrate: bool = True,
+) -> ExperiencePacket:
     """
     After a pulse cycle completes, build a structured ExperiencePacket
     from what happened during that cycle.
+
+    Calibration is explicit because not every experience is a prediction
+    test. Ambient cognition can be experienced and carried forward without
+    being treated as a prediction failure.
     """
     prediction = snapshot.predicted_outcomes[0] if snapshot.predicted_outcomes else "chain intact, reflections nominal"
     actual = pulse_data.get("insight_for_root", "pulse completed")
     chain_status = pulse_data.get("chain_status", "unknown")
 
-    calibration = calibrate_prediction(prediction, actual, snapshot.current_confidence)
+    if calibrate:
+        calibration = calibrate_prediction(
+            prediction,
+            actual,
+            snapshot.current_confidence,
+        )
+    else:
+        calibration = {
+            "confidence_after": snapshot.current_confidence,
+            "prediction_error": 0.0,
+            "lessons": [],
+            "prediction_matched": None,
+        }
 
     packet = ExperiencePacket(
         participant_id=snapshot.participant_id,
