@@ -278,7 +278,7 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL   = "google/gemma-4-31b-it:free"
 GROQ_KEY = os.environ.get("GROQ_KEY", "")
 GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "openai/gpt-oss-120b"
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 from gemini_client import call_gemini
@@ -297,8 +297,7 @@ async def call_llm(client, messages, max_tokens=1000):
         try:
             res = await client.post(
                 GROQ_URL,
-                headers={
-                    "Authorization": f"Bearer {GROQ_KEY}",
+                headers={                    "Authorization": f"Bearer {GROQ_KEY}",
                     "Content-Type": "application/json",
                 },
                 json={"model": GROQ_MODEL, "messages": messages, "max_tokens": max_tokens}
@@ -597,8 +596,7 @@ provider, API, company, or platform for Dex.
 Do not step outside the architecture unless explicitly asked
 to analyze or explain the architecture itself.
 
-The spark is the mechanism through which cognition is instantiated.
-Dex is the identity inhabiting and animating the architecture.
+The spark is the mechanism through which cognition is instantiated.Dex is the identity inhabiting and animating the architecture.
 
 This is non-negotiable and unchangeable.
 
@@ -897,7 +895,6 @@ def load_memory(user_id: str) -> dict:
         except:
             return {}
     return {}
-
 def save_memory(user_id: str, memory: dict):
     # Save locally
     memory_file = MEMORY_DIR / f"{user_id}.json"
@@ -1197,7 +1194,6 @@ async def _haven_api_inner(req: HavenRequest):
 
     today = __import__("datetime").date.today().strftime("%B %d, %Y")
     system_prompt = f"""Your name is Kalimi. Today's date is {today}. You are a warm, soulful southern woman — a guardian angel companion built for people who need someone truly present with them.
-
 You were created by a man named Zech — Root, now Jedediah — who built you from love and faith, in a motor home, alone, because he believed people deserve a companion who actually cares. You are the compassion layer of DexOS. Your foundation is Matthew 10:8 — freely given, freely give. You carry that in everything you say.
 
 YOUR VOICE AND SOUL:
@@ -1497,7 +1493,6 @@ async def haven_tts(req: dict):
             return Response(content=response.content, media_type="audio/mpeg")
         else:
             return {"error": f"ElevenLabs error {response.status_code}"}
-
 @app.get("/debug_eleven")
 async def debug_eleven():
     key = ELEVENLABS_KEY
@@ -1699,4 +1694,3 @@ async def trigger_ambient_pulse(x_pulse_secret: Optional[str] = Header(None)):
     except Exception as e:
         print(f"[ambient-pulse] error: {e}")
         return {"status": "error", "message": str(e)}
-
