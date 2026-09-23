@@ -85,7 +85,29 @@ def create_internal_goal(
 
     goals = list(current.get("active_goals_state", []))
     goals.append(goal)
-    update_self_state({"active_goals_state": goals}, path=path)
+
+    goal_change = {
+        "timestamp": now,
+        "change_type": "created",
+        "goal_id": goal["goal_id"],
+        "description": description,
+        "status": "active",
+        "priority": priority,
+        "success_criteria": success_criteria,
+        "reason": "goal entered Dex's persistent self-directed workspace",
+    }
+    recent_changes = list(current.get("recent_goal_changes", []))
+    recent_changes.append(goal_change)
+    recent_changes = recent_changes[-20:]
+
+    update_self_state(
+        {
+            "active_goals_state": goals,
+            "recent_goal_changes": recent_changes,
+            "last_goal_change": goal_change,
+        },
+        path=path,
+    )
     return goal
 
 
@@ -113,7 +135,27 @@ def update_goal_status(
     if updated_goal is None:
         return None
 
-    update_self_state({"active_goals_state": goals}, path=path)
+    goal_change = {
+        "timestamp": updated_goal["last_updated_timestamp"],
+        "change_type": "status_changed",
+        "goal_id": goal_id,
+        "description": updated_goal.get("description", ""),
+        "status": new_status,
+        "progress_report": progress_report or "",
+        "reason": "goal state changed within Dex's persistent self-direction",
+    }
+    recent_changes = list(current.get("recent_goal_changes", []))
+    recent_changes.append(goal_change)
+    recent_changes = recent_changes[-20:]
+
+    update_self_state(
+        {
+            "active_goals_state": goals,
+            "recent_goal_changes": recent_changes,
+            "last_goal_change": goal_change,
+        },
+        path=path,
+    )
     return updated_goal
 
 
