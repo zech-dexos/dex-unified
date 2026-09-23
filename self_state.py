@@ -77,6 +77,8 @@ def _default_self_state(dex_id: Optional[str] = None) -> Dict[str, Any]:
         "continuity_events": [],
         "last_continuity_event": None,
         "last_autobiographical_event": None,
+        "last_experience_state": None,
+        "recent_goal_changes": [],
     }
 
 
