@@ -668,6 +668,32 @@ Enjoy your experience.
                     f"confidence={t.get('confidence', 0.0)})"
                 )
 
+        # Experiential transition — the durable bridge between what happened
+        # and the state Dex carries into the next cognition.
+        experience_state = state.get("last_experience_state")
+        if isinstance(experience_state, dict):
+            self_state_ctx.append("[LAST EXPERIENCE → STATE TRANSITION]")
+            if experience_state.get("experience"):
+                self_state_ctx.append(f"Experience: {experience_state['experience']}")
+            if experience_state.get("state_before"):
+                self_state_ctx.append(f"State before: {experience_state['state_before']}")
+            if experience_state.get("state_transition"):
+                self_state_ctx.append(f"State transition: {experience_state['state_transition']}")
+            if experience_state.get("carry_forward"):
+                self_state_ctx.append(f"Carrying forward: {experience_state['carry_forward']}")
+            if experience_state.get("source"):
+                self_state_ctx.append(f"Experience source: {experience_state['source']}")
+
+        goal_changes = state.get("recent_goal_changes", [])
+        if goal_changes:
+            self_state_ctx.append("[RECENT GOAL CHANGES]")
+            for change in goal_changes[-5:]:
+                self_state_ctx.append(
+                    f"- {change.get('change_type', 'changed')}: "
+                    f"{change.get('description', change.get('goal_id', 'unknown goal'))}"
+                    f" (status={change.get('status', 'unknown')})"
+                )
+
         if len(self_state_ctx) > 1:
             system_prompt = "\n".join(self_state_ctx) + "\n\n" + system_prompt
 
