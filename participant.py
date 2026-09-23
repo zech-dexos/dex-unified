@@ -289,7 +289,7 @@ def persist_experience_transition(
     # synchronized so inference, ambient cognition, and goal scheduling see
     # the same active goal set after every experience transition.
     try:
-        state = self_state.load_self_state()
+        state = self_state.load_self_state(path=self_state.SELF_STATE_PATH)
         active_goal_descriptions = [
             g.get("description", "")
             for g in state.get("active_goals_state", [])
