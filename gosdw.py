@@ -59,8 +59,9 @@ def create_internal_goal(
     required_resources: Optional[Dict[str, float]] = None,
     alignment_scorer: AlignmentScorer = default_alignment_scorer,
     path: Path = SELF_STATE_PATH,
+    source_experience_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Add a new InternalGoal to active_goals_state. Returns the updated identity dict."""
+    """Add a new InternalGoal to persistent self-direction."""
     assert priority in VALID_PRIORITIES, f"priority must be one of {list(VALID_PRIORITIES)}"
 
     current = load_self_state(path)
@@ -82,6 +83,8 @@ def create_internal_goal(
         "required_resources": required_resources or {"cpu_cycles_per_hour": 1.0, "memory_gb": 0.1},
         "success_criteria": success_criteria,
     }
+    if source_experience_id:
+        goal["source_experience_id"] = source_experience_id
 
     goals = list(current.get("active_goals_state", []))
     goals.append(goal)
@@ -108,7 +111,27 @@ def create_internal_goal(
         },
         path=path,
     )
+    _publish_goal_event("GOAL_CREATED", {
+        "event_type": "GOAL_CREATED",
+        "goal_id": goal["goal_id"],
+        "description": description,
+        "status": "active",
+        "priority": priority,
+        "source_experience_id": source_experience_id,
+    })
+
     return goal
+
+
+def _publish_goal_event(event_type: str, payload: Dict[str, Any]) -> None:
+    """Publish goal changes when an asyncio event loop is already active."""
+    try:
+        import asyncio
+        from dex_events import bus
+        loop = asyncio.get_running_loop()
+        loop.create_task(bus.publish(event_type, payload))
+    except (ImportError, RuntimeError):
+        pass
 
 
 def update_goal_status(
@@ -123,8 +146,10 @@ def update_goal_status(
     current = load_self_state(path)
     goals = list(current.get("active_goals_state", []))
     updated_goal = None
+    previous_status = None
     for goal in goals:
         if goal["goal_id"] == goal_id:
+            previous_status = goal.get("status")
             goal["status"] = new_status
             goal["last_updated_timestamp"] = _now_iso()
             if progress_report is not None:
@@ -156,7 +181,105 @@ def update_goal_status(
         },
         path=path,
     )
+
+    _publish_goal_event(
+        "GOAL_COMPLETED" if new_status == "completed" else "GOAL_CHANGED",
+        {
+            "event_type": "GOAL_COMPLETED" if new_status == "completed" else "GOAL_CHANGED",
+            "goal_id": goal_id,
+            "description": updated_goal.get("description", ""),
+            "status": new_status,
+            "progress_report": progress_report or "",
+        },
+    )
+
+    try:
+        from participant import ParticipantSnapshot, ExperiencePacket, persist_experience_transition
+
+        snapshot = ParticipantSnapshot.load()
+        packet = ExperiencePacket(
+            participant_id=snapshot.participant_id,
+            interlocutor=snapshot.current_interlocutor.copy(),
+            experience=(
+                f"I experienced a change in my goal '{updated_goal.get('description', '')}'. "
+                f"The goal is now {new_status}. "
+                f"{progress_report or 'The change is now part of the state I carry forward.'}"
+            ),
+            internal_state_before={
+                "attention": snapshot.current_attention,
+                "goals": list(snapshot.current_goals),
+                "confidence": snapshot.current_confidence,
+            },
+            state_transition={
+                "event": "goal_status_changed",
+                "goal_id": goal_id,
+                "from_status": previous_status,
+                "to_status": new_status,
+                "progress_report": progress_report or "",
+            },
+            continuation={
+                "active_goals": list(goals),
+                "carry_forward": (
+                    progress_report
+                    or f"Continue from goal state: {updated_goal.get('description', '')}"
+                ),
+                "goal_change": goal_change,
+            },
+            intent="goal_state_transition",
+            action="goal_status_changed",
+            actual_outcome=new_status,
+            confidence_before=snapshot.current_confidence,
+            confidence_after=snapshot.current_confidence,
+            reflection=(
+                f"I registered the goal transition to {new_status} and am carrying it forward."
+            ),
+        )
+        persist_experience_transition(snapshot, packet)
+    except Exception as e:
+        print(f"[gosdw] goal experience persistence failed: {e}")
+
     return updated_goal
+
+
+def ensure_goal_from_experience(
+    experience_packet: Any,
+    *,
+    path: Path = SELF_STATE_PATH,
+) -> Optional[Dict[str, Any]]:
+    """Create a persistent goal from an explicit candidate carried by experience."""
+    continuation = getattr(experience_packet, "continuation", {}) or {}
+    candidate = continuation.get("goal_candidate")
+    if not isinstance(candidate, dict):
+        return None
+
+    description = str(candidate.get("description", "")).strip()
+    if not description:
+        return None
+
+    current = load_self_state(path)
+    normalized = " ".join(description.lower().split())
+    for existing in current.get("active_goals_state", []):
+        existing_normalized = " ".join(
+            str(existing.get("description", "")).lower().split()
+        )
+        if existing_normalized == normalized and existing.get("status") in ("active", "paused"):
+            return existing
+
+    salience = float(candidate.get("salience", 0.5) or 0.5)
+    priority = "high" if salience >= 0.8 else "medium" if salience >= 0.5 else "low"
+
+    return create_internal_goal(
+        description,
+        priority=priority,
+        success_criteria=str(
+            candidate.get(
+                "success_criteria",
+                "Develop the identified thread and determine whether it remains worth carrying forward.",
+            )
+        ),
+        source_experience_id=getattr(experience_packet, "experience_id", None),
+        path=path,
+    )
 
 
 def _urgency_score(goal: Dict[str, Any]) -> float:
