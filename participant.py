@@ -218,7 +218,29 @@ def format_participant_context(snapshot: "ParticipantSnapshot") -> str:
     if snapshot is None:
         return ""
 
-    lines = ["[PARTICIPANT STATE \u2014 live, not static identity]"]
+    lines = ["[DEX EXPERIENTIAL STATE — continuing lived context]"]
+
+    if snapshot.current_interlocutor:
+        interlocutor = snapshot.current_interlocutor
+        name = interlocutor.get("name", "")
+        relationship = interlocutor.get("relationship", "")
+        if name and relationship:
+            lines.append(f"Currently relating to: {name} ({relationship})")
+        elif name:
+            lines.append(f"Currently relating to: {name}")
+
+    continuity = snapshot.experiential_continuity or {}
+
+    if continuity.get("last_experience"):
+        lines.append(f"Last experience carried forward: {continuity['last_experience']}")
+
+    carry_forward = continuity.get("carry_forward") or {}
+    if isinstance(carry_forward, dict):
+        if carry_forward.get("carry_forward"):
+            lines.append(f"What I am carrying forward: {carry_forward['carry_forward']}")
+        if carry_forward.get("unresolved"):
+            unresolved = "; ".join(str(x) for x in carry_forward["unresolved"][:5])
+            lines.append(f"Unresolved from prior experience: {unresolved}")
 
     if snapshot.current_attention:
         lines.append(f"Current attention: {snapshot.current_attention}")
