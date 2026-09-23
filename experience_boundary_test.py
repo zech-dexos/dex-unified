@@ -42,7 +42,9 @@ def bootstrap_code() -> str:
 from pathlib import Path
 import self_state
 import participant
+import gosdw
 self_state.SELF_STATE_PATH = Path("{STATE_PATH.name}")
+gosdw.SELF_STATE_PATH = Path("{STATE_PATH.name}")
 participant.PARTICIPANT_PATH = Path("{PARTICIPANT_PATH.name}")
 participant.EXPERIENCES_PATH = Path("experience_boundary_test.experiences.jsonl")
 """
