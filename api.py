@@ -275,7 +275,7 @@ OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
 from participant import ParticipantSnapshot, format_participant_context, build_experience_from_pulse
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL   = "google/gemma-4-31b-it:free"
+DEFAULT_MODEL   = GROQ_MODEL if "GROQ_MODEL" in globals() else "openai/gpt-oss-20b"
 GROQ_KEY = os.environ.get("GROQ_KEY", "")
 GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "openai/gpt-oss-20b"
@@ -284,12 +284,10 @@ GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 from gemini_client import call_gemini
 
 FALLBACK_MODELS = [
-    "google/gemma-4-31b-it:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "deepseek/deepseek-v4-flash:free",
-    "nvidia/nemotron-3-nano-30b-a3b:free",
-    "qwen/qwen3-next-80b-a3b-instruct:free",
-    "liquid/lfm-2.5-1.2b-instruct:free",
+    # Keep a non-Google secondary substrate. These IDs are current free
+    # OpenRouter endpoints rather than retired model slugs.
+    "nvidia/nemotron-3.5-lightning:free",
+    "nvidia/nemotron-3-ultra:free",
 ]
 
 async def call_llm(client, messages, max_tokens=1000):
@@ -816,6 +814,7 @@ Enjoy your experience.
             "intent": result.get("intent"),
             "domain": result.get("domain"),
             "response_flag": governance_flag,
+            "model": used_model,
         })
     except Exception as e:
         print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")
