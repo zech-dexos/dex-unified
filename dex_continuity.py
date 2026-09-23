@@ -82,6 +82,43 @@ async def process_continuity_event(payload: Dict[str, Any]):
 
     if event_type == "RESPONSE_COMPLETED":
         shared_state.update_state("last_response_event", dict(payload))
+
+        # Conversation continuity — persist the lived conversational turn.
+        try:
+            from dex_conversation import (
+                load_conversation,
+                record_contribution,
+                experience_contribution,
+            )
+
+            user_id = payload.get("user_id", "default")
+            conversation = load_conversation(user_id)
+
+            message = payload.get("message", "")
+            reply = payload.get("reply", "")
+
+            conversation = record_contribution(
+                conversation,
+                message,
+                role="root",
+            )
+
+            conversation = experience_contribution(
+                conversation,
+                message=message,
+                reply=reply,
+            )
+
+            conversation.save()
+
+            print(
+                "[Continuity] Conversation state persisted: "
+                f"{conversation.conversation_id}"
+            )
+
+        except Exception as e:
+            print(f"[conversation] persistence failed: {e}")
+
     elif event_type == "THOUGHT_GENERATED":
         shared_state.update_state("last_thought_event", dict(payload))
     elif event_type == "PARTICIPANT_EVENT":
