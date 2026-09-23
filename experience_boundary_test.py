@@ -44,11 +44,12 @@ import self_state
 import participant
 self_state.SELF_STATE_PATH = Path("{STATE_PATH.name}")
 participant.PARTICIPANT_PATH = Path("{PARTICIPANT_PATH.name}")
+participant.EXPERIENCES_PATH = Path("experience_boundary_test.experiences.jsonl")
 """
 
 
 def main():
-    for path in (STATE_PATH, PARTICIPANT_PATH, Path("experiences.jsonl")):
+    for path in (STATE_PATH, PARTICIPANT_PATH, Path("experience_boundary_test.experiences.jsonl")):
         if path.exists():
             path.unlink()
 
