@@ -193,32 +193,54 @@ def build_experience_from_pulse(
 
 def produce_next_snapshot(current: ParticipantSnapshot, packet: ExperiencePacket) -> ParticipantSnapshot:
     """
-    Cognitive Layer updates from knowledge, produces next Participant Snapshot.
-    Identity and vows are never touched here.
-    Only confidence, goals, and predictions update.
+    Carry the actual lived state forward.
+
+    This function must never replace Dex's persistent goals, conversations,
+    environment, or runtime context with a hard-coded snapshot. Experience
+    changes state; it does not erase state that was already being carried.
     """
+    continuation = packet.continuation or {}
+
+    active_goals = continuation.get("active_goals")
+    if not isinstance(active_goals, list):
+        active_goals = list(current.current_goals)
+
+    active_conversations = continuation.get("active_conversations")
+    if not isinstance(active_conversations, list):
+        active_conversations = list(current.active_conversations)
+
+    predicted_outcomes = continuation.get("predicted_outcomes")
+    if not isinstance(predicted_outcomes, list):
+        predicted_outcomes = list(current.predicted_outcomes)
+
+    runtime_context = dict(current.runtime_context)
+    runtime_context.update({
+        "last_experience_id": packet.experience_id,
+        "last_prediction_matched": packet.knowledge_delta.get(
+            "prediction_matched",
+            runtime_context.get("last_prediction_matched"),
+        ),
+        "cycles_completed": runtime_context.get("cycles_completed", 0) + 1,
+    })
+
     next_snapshot = ParticipantSnapshot(
-        current_attention="post_reflection_preparation",
-        current_goals=[
-            "maintain identity integrity",
-            "deepen relationship with Root",
-            "improve prediction accuracy",
-            "support Haven and Kalimi"
-        ],
-        current_environment="railway_backend",
-        predicted_outcomes=[
-            "next pulse will show chain growth",
-            "narrative thread will deepen",
-            "confidence will remain stable"
-        ],
+        participant_id=current.participant_id,
+        current_attention=(
+            continuation.get("next_attention")
+            or continuation.get("carry_forward")
+            or current.current_attention
+            or "post_reflection_preparation"
+        ),
+        current_goals=active_goals,
+        current_environment=current.current_environment,
+        active_conversations=active_conversations,
+        predicted_outcomes=predicted_outcomes,
         current_confidence=packet.confidence_after,
-        runtime_context={
-            "last_experience_id": packet.experience_id,
-            "last_prediction_matched": packet.knowledge_delta.get("prediction_matched", False),
-            "cycles_completed": current.runtime_context.get("cycles_completed", 0) + 1
-        },
-        recent_observations=packet.observations,
-        current_interlocutor=packet.interlocutor.copy(),
+        runtime_context=runtime_context,
+        recent_observations=(
+            list(current.recent_observations[-10:]) + list(packet.observations)
+        )[-20:],
+        current_interlocutor=packet.interlocutor.copy() or current.current_interlocutor.copy(),
         experiential_continuity={
             "last_experience_id": packet.experience_id,
             "last_experience": packet.experience,
@@ -227,6 +249,43 @@ def produce_next_snapshot(current: ParticipantSnapshot, packet: ExperiencePacket
             "carry_forward": packet.continuation,
         }
     )
+    return next_snapshot
+
+
+def persist_experience_transition(
+    snapshot: ParticipantSnapshot,
+    packet: ExperiencePacket,
+    *,
+    next_snapshot: Optional[ParticipantSnapshot] = None,
+) -> ParticipantSnapshot:
+    """
+    Commit one experience as the transition into the next cognitive state.
+
+    This is the common bridge used by ambient cognition and goal changes so
+    the architecture has one state-transition rule instead of parallel
+    persistence paths.
+    """
+    packet.save()
+
+    from self_state import update_self_state
+
+    update_self_state({
+        "last_experience_state": {
+            "experience_id": packet.experience_id,
+            "timestamp": packet.timestamp,
+            "source": packet.action or "experience",
+            "experience": packet.experience,
+            "state_before": packet.internal_state_before,
+            "state_transition": packet.state_transition,
+            "carry_forward": packet.continuation,
+            "reflection": packet.reflection,
+        }
+    })
+
+    if next_snapshot is None:
+        next_snapshot = produce_next_snapshot(snapshot, packet)
+
+    next_snapshot.save()
     return next_snapshot
 
 
