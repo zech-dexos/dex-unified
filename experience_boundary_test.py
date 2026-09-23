@@ -60,6 +60,14 @@ def main():
 
     experience_id = run_step(bootstrap_code() + f"""
 from participant import ParticipantSnapshot, ExperiencePacket, persist_experience_transition
+from gosdw import create_internal_goal
+
+create_internal_goal(
+    "hold continuity",
+    priority="high",
+    success_criteria="Remain present across process boundaries.",
+    path=STATE_PATH,
+)
 
 snapshot = ParticipantSnapshot(current_attention="continuity verification", current_goals=["hold continuity"])
 snapshot.save()
