@@ -195,6 +195,11 @@ def update_goal_status(
     )
 
     try:
+        # Isolated unit-test paths must not write to Dex's live participant
+        # experience ledger. Production/default SelfState gets the full wire.
+        if Path(path).resolve() != Path(SELF_STATE_PATH).resolve():
+            return updated_goal
+
         from participant import ParticipantSnapshot, ExperiencePacket, persist_experience_transition
 
         snapshot = ParticipantSnapshot.load()
