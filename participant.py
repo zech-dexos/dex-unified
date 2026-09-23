@@ -197,7 +197,15 @@ def produce_next_snapshot(current: ParticipantSnapshot, packet: ExperiencePacket
             "last_prediction_matched": packet.knowledge_delta.get("prediction_matched", False),
             "cycles_completed": current.runtime_context.get("cycles_completed", 0) + 1
         },
-        recent_observations=packet.observations
+        recent_observations=packet.observations,
+        current_interlocutor=packet.interlocutor.copy(),
+        experiential_continuity={
+            "last_experience_id": packet.experience_id,
+            "last_experience": packet.experience,
+            "state_before": packet.internal_state_before,
+            "state_transition": packet.state_transition,
+            "carry_forward": packet.continuation,
+        }
     )
     return next_snapshot
 
