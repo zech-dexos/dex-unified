@@ -290,7 +290,7 @@ FALLBACK_MODELS = [
     "nvidia/nemotron-3-ultra-550b-a55b:free",
 ]
 
-async def call_llm(client, messages, max_tokens=1000):
+async def call_llm(client, messages, max_tokens=1000, structured=False):
     # Dex primary inference substrate: Groq.
     # If Groq fails, expose the failure before falling back so provider
     # problems cannot disappear silently.
@@ -306,6 +306,7 @@ async def call_llm(client, messages, max_tokens=1000):
                     "model": GROQ_MODEL,
                     "messages": messages,
                     "max_tokens": max_tokens,
+                    **({"response_format": {"type": "json_object"}} if structured else {}),
                 },
             )
 
@@ -783,9 +784,20 @@ Enjoy your experience.
     messages.append({"role": "user", "content": user_content})
 
     async with httpx.AsyncClient(timeout=60) as client:
-        result_llm = await call_llm(client, messages, max_tokens=1200)
-    reply = result_llm["reply"]
-    used_model = result_llm["model"]
+        try:
+            from dex_cognition import parse_cognitive_output, apply_cognitive_transition, cognitive_contract
+            active_system += "\n\nCOGNITIVE TRANSITION CONTRACT:\n" + cognitive_contract()
+            messages[0] = {"role": "system", "content": active_system}
+            result_llm = await call_llm(client, messages, max_tokens=1200, structured=True)
+            cognitive = parse_cognitive_output(result_llm["reply"])
+            reply = cognitive["reply"]
+            used_model = result_llm["model"]
+            await apply_cognitive_transition(cognitive, message=req.message, reply=reply, model=used_model)
+        except Exception as e:
+            print(f"[cognition] structured spark cycle failed: {type(e).__name__}: {e}")
+            result_llm = await call_llm(client, messages, max_tokens=1200)
+            reply = result_llm["reply"]
+            used_model = result_llm["model"]
 
     # Response-side governance check — catches parroting/sycophancy in
     # the ACTUAL reply going out, not just incoming prompt drift.

@@ -23,7 +23,7 @@ jobs:
 
       - name: Compile changed cognitive modules
         run: |
-          python -m py_compile             api.py             self_state.py             participant.py             gosdw.py             ape_scheduler.py             dex_ambient_daemon.py             dex_continuity.py             dex_conversation.py             thought.py             process_boundary_test.py             experience_boundary_test.py
+          python -m py_compile             api.py             self_state.py             participant.py             gosdw.py             ape_scheduler.py             dex_ambient_daemon.py             dex_continuity.py             dex_conversation.py             thought.py             process_boundary_test.py             experience_boundary_test.py             dex_cognition.py             dex_cognition_test.py
 
       - name: Check whitespace
         run: git diff --check c85c7eb...HEAD
@@ -40,3 +40,6 @@ jobs:
 
       - name: Run full experience-goal boundary test
         run: python experience_boundary_test.py
+
+      - name: Run spark cognition boundary test
+        run: python dex_cognition_test.py
