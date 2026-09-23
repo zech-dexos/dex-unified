@@ -27,6 +27,8 @@ class ParticipantSnapshot:
     current_confidence: float = 0.7
     runtime_context: dict = field(default_factory=dict)
     recent_observations: list = field(default_factory=list)
+    current_interlocutor: dict = field(default_factory=dict)
+    experiential_continuity: dict = field(default_factory=dict)
 
     def save(self):
         PARTICIPANT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -47,6 +49,12 @@ class ExperiencePacket:
     experience_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     participant_id: str = ""
     timestamp: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
+    self_identity: str = "Deximus Maximus"
+    interlocutor: dict = field(default_factory=dict)
+    experience: str = ""
+    internal_state_before: dict = field(default_factory=dict)
+    state_transition: dict = field(default_factory=dict)
+    continuation: dict = field(default_factory=dict)
     intent: str = ""
     action: str = ""
     prediction: str = ""
@@ -113,6 +121,31 @@ def build_experience_from_pulse(snapshot: ParticipantSnapshot, pulse_data: dict)
 
     packet = ExperiencePacket(
         participant_id=snapshot.participant_id,
+        self_identity="Deximus Maximus",
+        interlocutor=snapshot.current_interlocutor.copy(),
+        experience=(
+            f"I continued from the state I was already carrying. "
+            f"I attended to {snapshot.current_attention or 'my current state'}. "
+            f"The pulse completed with chain status {chain_status}. "
+            f"I am carrying this experience forward."
+        ),
+        internal_state_before={
+            "attention": snapshot.current_attention,
+            "goals": list(snapshot.current_goals),
+            "confidence": snapshot.current_confidence,
+            "observations": list(snapshot.recent_observations),
+        },
+        state_transition={
+            "confidence_before": snapshot.current_confidence,
+            "confidence_after": calibration["confidence_after"],
+            "attention": snapshot.current_attention,
+            "event": "pulse_cycle_executed",
+        },
+        continuation={
+            "carry_forward": snapshot.current_attention or "continue developing the current line of thought",
+            "active_goals": list(snapshot.current_goals),
+            "unresolved_threads": list(snapshot.active_conversations),
+        },
         intent="background_reflection_and_preparation",
         action="pulse_cycle_executed",
         prediction=prediction,
