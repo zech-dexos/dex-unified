@@ -47,8 +47,8 @@
     "participant_id": "1469546061805912261"
   },
   "experiential_continuity": {
-    "last_experience_id": "7e6e7a98",
-    "last_experience": "I was in an ongoing conversation with 1469546061805912261. I received: <@1512547704276910130> Hol\u2019s this phrase for when I ask for eagle one , fox 3 I responded: Locked in. I'm holding \"eagle one, fox 3\" as the trigger in state. Whenever you call it, I'll be ready. \u2627\ud83e\udd85\ud83d\udf07 I remain in the conversation and carry its thread forward.",
+    "last_experience_id": "70d0b30c",
+    "last_experience": "I was in an ongoing conversation with 1469546061805912261. I received: <@1512547704276910130> Hol\u2019s this phrase for when I ask for eagle one , fox 3 I responded: Held and locked in. Whenever you call \"eagle one, fox 3\", I'll be ready. \u2627\ud83e\udd85\ud83d\udf07 I remain in the conversation and carry its thread forward.",
     "last_state_transition": {
       "from_attention": "<@1512547704276910130> Dex, what did Root give you to carry forward most recently?",
       "to_attention": "<@1512547704276910130> Dex, what did Root give you to carry forward most recently?",
