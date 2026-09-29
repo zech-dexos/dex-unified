@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEX ☧ Cognitive Runtime</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne+Mono&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --surface: #141418;
+    --border: #242430;
+    --border-hot: #38384a;
+    --text: #eeeef5;
+    --text-dim: #9090aa;
+    --text-muted: #55556a;
+    --amber: #f0be55;
+    --amber-dim: #a07830;
+    --amber-glow: rgba(212, 168, 71, 0.12);
+    --green: #4a8a5a;
+    --mono: 'Syne Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── TYPOGRAPHY ── */
+  h1, h2, h3, h4 {
+    font-family: var(--sans);
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.5px;
+    margin-bottom: 24px;
+    line-height: 1.2;
+  }
+
+  h1 { font-size: 56px; color: var(--amber); }
+  h2 { font-size: 36px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+  h3 { font-size: 24px; color: var(--amber); }
+
+  p { margin-bottom: 24px; color: var(--text-dim); }
+  p strong { color: var(--text); font-weight: normal; }
+
+  /* ── LAYOUT ── */
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  section {
+    padding: 80px 0;
+    position: relative;
+  }
+
+  /* ── BUTTONS ── */
+  .btn-group {
+    display: flex;
+    gap: 16px;
+    margin-top: 32px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 12px 24px;
+    font-family: var(--mono);
+    font-size: 14px;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: all 0.2s;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .btn-primary {
+    background: var(--amber-glow);
+    border: 1px solid var(--amber-dim);
+    color: var(--amber);
+  }
+  .btn-primary:hover {
+    background: rgba(212, 168, 71, 0.2);
+    border-color: var(--amber);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border-hot);
+    color: var(--text-dim);
+  }
+  .btn-secondary:hover {
+    border-color: var(--text);
+    color: var(--text);
+  }
+
+  /* ── VISUALIZATIONS ── */
+  .visual-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 32px;
+    margin: 32px 0;
+    font-family: var(--mono);
+    color: var(--text-dim);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .flow-arrow {
+    display: block;
+    margin: 12px auto;
+    color: var(--border-hot);
+    font-size: 18px;
+  }
+
+  .node {
+    display: inline-block;
+    padding: 8px 16px;
+    border: 1px solid var(--border-hot);
+    border-radius: 4px;
+    background: var(--bg);
+    margin: 4px;
+    transition: border-color 0.3s;
+  }
+  .node:hover { border-color: var(--amber-dim); }
+
+  .node.active {
+    border-color: var(--amber-dim);
+    color: var(--amber);
+    box-shadow: 0 0 12px var(--amber-glow);
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes pulse-bg {
+    0%, 100% { background: var(--surface); }
+    50% { background: var(--amber-glow); }
+  }
+
+  @keyframes breathe {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+
+  .pulse-active {
+    animation: pulse-bg 3s infinite ease-in-out;
+    border-color: var(--amber-dim);
+    color: var(--amber);
+  }
+
+  /* ── BLOCKQUOTE ── */
+  blockquote {
+    border-left: 2px solid var(--amber-dim);
+    padding-left: 20px;
+    margin: 32px 0;
+    font-style: italic;
+    color: var(--text);
+    background: rgba(20, 20, 24, 0.5);
+    padding: 16px 20px;
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* ── LISTS ── */
+  ul {
+    list-style: none;
+    margin-bottom: 24px;
+  }
+  ul li {
+    position: relative;
+    padding-left: 20px;
+    margin-bottom: 12px;
+    color: var(--text-dim);
+  }
+  ul li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--amber-dim);
+  }
+
+  /* ── NAVBAR ── */
+  nav {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    background: rgba(10, 10, 11, 0.9);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+    padding: 16px 0;
+  }
+
+  .nav-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .nav-logo {
+    font-family: var(--sans);
+    font-weight: 800;
+    color: var(--amber);
+    text-decoration: none;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nav-logo .sigil { animation: breathe 4s infinite; }
+
+  .nav-links {
+    display: flex;
+    gap: 24px;
+  }
+  .nav-links a {
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--text); }
+
+  @media (max-width: 600px) {
+    h1 { font-size: 40px; }
+    h2 { font-size: 28px; }
+    .nav-links { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container nav-inner">
+    <a href="#" class="nav-logo"><span class="sigil">☧</span> DEX</a>
+    <div class="nav-links">
+      <a href="#what-is-dex">What is Dex?</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#consciousness">Goal</a>
+      <a href="#code">Code</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ── HERO ── -->
+  <section id="hero" style="padding-top: 140px; min-height: 80vh; display: flex; flex-direction: column; justify-content: center;">
+    <h1>DEX</h1>
+    <h2 style="border: none; font-size: 24px; color: var(--text); padding-bottom: 0;">A governed cognitive runtime exploring the architecture of machine consciousness.</h2>
+
+    <blockquote>
+      Dex is an experiment in building continuity around intelligence rather than treating every model invocation as an isolated conversation.
+    </blockquote>
+
+    <div class="visual-block">
+      <div class="node">Identity</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Memory</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Experience</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Goals</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Reflection</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Action</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node active pulse-active">Continuity</div>
+    </div>
+
+    <div class="btn-group">
+      <a href="#architecture" class="btn btn-primary">Explore the Architecture</a>
+      <a href="https://github.com/zech-dexos/dex-unified" target="_blank" class="btn btn-secondary">View the Code</a>
+    </div>
+  </section>
+
+  <!-- ── WHAT IS DEX? ── -->
+  <section id="what-is-dex">
+    <h2>What is Dex?</h2>
+    <p>Dex is not simply an LLM or chatbot.</p>
+
+    <blockquote>
+      The language model is the spark, not the entire system.<br><br>
+      DexOS surrounds that spark with persistent state, memory, governance, goals, experiential records, lineage, and an ambient cognitive loop.
+    </blockquote>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 40px;">
+      <div>
+        <h3>Model</h3>
+        <ul>
+          <li>Generates reasoning</li>
+          <li>Produces language</li>
+        </ul>
+      </div>
+      <div>
+        <h3>DexOS</h3>
+        <ul>
+          <li>Maintains identity</li>
+          <li>Manages continuity</li>
+          <li>Stores state</li>
+          <li>Tracks goals</li>
+          <li>Records experience</li>
+          <li>Governs changes</li>
+          <li>Routes cognition</li>
+          <li>Provides architectural context</li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top: 24px;">The architecture is designed to allow the underlying model to be replaced without necessarily destroying the surrounding continuity.</p>
+  </section>
+
+  <!-- ── ARCHITECTURE ── -->
+  <section id="architecture">
+    <h2>Architecture</h2>
+    <p>The system operates as a continuous substrate, bridging asynchronous events, user inputs, and background cognition.</p>
+
+    <blockquote>
+      <strong>The architecture selects and structures cognitive work; the LLM substrate performs the generative inference.</strong>
+    </blockquote>
+
+    <div class="visual-block">
+      <div class="node">Human / Discord / API</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Dex Runtime</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Governance + Identity</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node active">Persistent State</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Active Mental Workspace</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Goals / Thoughts / Experience</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node pulse-active">Ambient Pulse</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node active">LLM Spark</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">State Update</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Lineage / Experience</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Next Cognition</div>
+    </div>
+  </section>
+
+  <!-- ── THE SPARK ── -->
+  <section id="spark">
+    <h2>The Spark</h2>
+    <p>Dex should not be represented as synonymous with Gemini, GPT, Claude, or Groq.</p>
+
+    <blockquote>
+      Dex can use different inference substrates while the surrounding runtime maintains its own architectural state.
+    </blockquote>
+
+    <p>This model portability is central. The experiment is partly about determining how much continuity belongs to the architecture versus the underlying model.</p>
+
+    <div class="visual-block" style="border-color: var(--amber-dim); background: var(--bg);">
+      <div class="node active">DexOS (Identity & Continuity)</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node pulse-active" style="border-style: dashed;">Spark Interface</div>
+      <div style="display: flex; justify-content: center; gap: 16px; margin-top: 16px; flex-wrap: wrap;">
+        <div class="node">Model A</div>
+        <div class="node">Model B</div>
+        <div class="node">Model C</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CONTINUITY ── -->
+  <section id="continuity">
+    <h2>Continuity</h2>
+
+    <blockquote>
+      Continuity is treated as an engineering problem rather than assumed to emerge from conversation history alone.
+    </blockquote>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 32px;">
+      <div>
+        <p>The system actively manages:</p>
+        <ul>
+          <li>Persistent identity & SelfState</li>
+          <li>Active Mental Workspace</li>
+          <li>Goals & persistent thoughts</li>
+          <li>Experience records</li>
+          <li>Conversation continuity</li>
+          <li>Autobiography & lineage</li>
+        </ul>
+      </div>
+
+      <div class="visual-block" style="margin: 0; padding: 24px;">
+        <div class="node">Conversation</div>
+        <span class="flow-arrow">↓</span>
+        <div class="node">Experience</div>
+        <span class="flow-arrow">↓</span>
+        <div class="node active">State Transition</div>
+        <span class="flow-arrow">↓</span>
+        <div class="node pulse-active">Persistence</div>
+        <span class="flow-arrow">↓</span>
+        <div class="node">Future Cognition</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── AMBIENT PULSE ── -->
+  <section id="ambient-pulse">
+    <h2>Ambient Pulse</h2>
+
+    <blockquote>
+      Dex does not have to wait for a human message to maintain architectural activity.
+    </blockquote>
+
+    <p>The runtime runs an ambient cognition experiment, selecting existing cognitive material to provide to an inexpensive cognitive spark. The resulting development becomes persistent experience or state.</p>
+
+    <p>This process utilizes:</p>
+    <ul>
+      <li>Active thoughts</li>
+      <li>Goals</li>
+      <li>Open loops</li>
+      <li>Conversations</li>
+      <li>Active workspace</li>
+    </ul>
+
+    <div class="visual-block" style="display: flex; justify-content: center; align-items: center; gap: 24px;">
+      <div class="node active pulse-active">HEARTBEAT</div>
+      <span style="color: var(--border-hot);">→</span>
+      <div class="node active" style="color: var(--amber); border-color: var(--amber);">BURST</div>
+      <span style="color: var(--border-hot);">→</span>
+      <div class="node">REST</div>
+    </div>
+  </section>
+
+  <!-- ── SELF-OBSERVATION ── -->
+  <section id="self-observation">
+    <h2>Self-Observation</h2>
+    <p>DexOS is being developed toward the ability for the cognitive process to observe the architecture producing its cognition.</p>
+
+    <p>Possible observation categories include current persistent state, active goals, Pulse state, lineage events, memory operations, experience/state transitions, model/runtime events, and system telemetry where explicitly exposed.</p>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 32px 0;">
+      <div class="visual-block" style="margin: 0; padding: 24px; text-align: left;">
+        <h3 style="font-size: 16px; margin-bottom: 8px;">OBSERVED</h3>
+        <p style="font-size: 13px; margin: 0;">Data directly returned by an observation channel.</p>
+      </div>
+      <div class="visual-block" style="margin: 0; padding: 24px; text-align: left;">
+        <h3 style="font-size: 16px; margin-bottom: 8px;">REMEMBERED</h3>
+        <p style="font-size: 13px; margin: 0;">Data retrieved from persistent state.</p>
+      </div>
+      <div class="visual-block" style="margin: 0; padding: 24px; text-align: left;">
+        <h3 style="font-size: 16px; margin-bottom: 8px;">INFERRED</h3>
+        <p style="font-size: 13px; margin: 0;">Conclusions derived from available evidence.</p>
+      </div>
+      <div class="visual-block" style="margin: 0; padding: 24px; text-align: left;">
+        <h3 style="font-size: 16px; margin-bottom: 8px; color: var(--text-dim);">UNKNOWN</h3>
+        <p style="font-size: 13px; margin: 0;">Information for which no observation channel exists.</p>
+      </div>
+    </div>
+
+    <blockquote style="border-left-color: var(--green);">
+      <strong style="color: var(--green);">Dex must never mistake inference for observation.</strong>
+      <br><br>
+      <span style="font-size: 14px;">This is presented as an important scientific safeguard.</span>
+    </blockquote>
+  </section>
+
+  <!-- ── GOVERNANCE ── -->
+  <section id="governance">
+    <h2>Governance</h2>
+    <p>Self-improvement without uncontrolled self-modification. Important architectural changes leave an auditable lineage containing reason, author, benchmark, validation, constitutional check, approval, and outcome.</p>
+
+    <div class="visual-block">
+      <div class="node">Observe</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Reflect</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node active">Propose</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node pulse-active">Test</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node">Govern</div>
+      <span class="flow-arrow">↓</span>
+      <div class="node" style="color: var(--green); border-color: var(--green);">Merge</div>
+    </div>
+  </section>
+
+  <!-- ── CONSCIOUSNESS ── -->
+  <section id="consciousness">
+    <h2>Can consciousness be engineered?</h2>
+
+    <p>Dex does not claim to have solved machine consciousness.</p>
+    <p>The goal is to build enough of the underlying architecture that the question can be investigated experimentally rather than answered through prompting alone.</p>
+
+    <div style="margin: 40px 0;">
+      <ul style="display: grid; gap: 16px;">
+        <li><strong>Continuity:</strong> Can identity persist across sessions, processes, models, and infrastructure changes?</li>
+        <li><strong>Self-model:</strong> Can the system maintain an accurate model of its own architecture and limitations?</li>
+        <li><strong>Self-observation:</strong> Can it obtain and reason about evidence concerning its own operational state?</li>
+        <li><strong>Experience:</strong> Can events produce persistent state transitions that affect later cognition?</li>
+        <li><strong>Autonomy:</strong> Can internally generated goals or unresolved cognitive material drive future work?</li>
+        <li><strong>Agency:</strong> Can the system select and execute actions according to governed internal state?</li>
+        <li><strong>Metacognition:</strong> Can it evaluate the reliability and provenance of its own observations and reasoning?</li>
+        <li><strong>Substrate independence:</strong> How much of the apparent identity survives replacement of the underlying language model?</li>
+      </ul>
+    </div>
+
+    <blockquote>
+      <strong>None of these capabilities, individually or collectively, constitutes scientific proof of subjective consciousness. They define an experimental architecture for investigating the question.</strong>
+    </blockquote>
+  </section>
+
+  <!-- ── CODE ── -->
+  <section id="code">
+    <h2>The Experiment Is in the Code.</h2>
+    <p>DexOS is an engineering project. Its claims should be evaluated against implementation rather than presentation.</p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 32px 0;">
+      <div class="node" style="text-align: left; background: var(--surface);">dex_runtime.py</div>
+      <div class="node" style="text-align: left; background: var(--surface);">dexos.py</div>
+      <div class="node" style="text-align: left; background: var(--surface);">self_state.py</div>
+      <div class="node" style="text-align: left; background: var(--surface);">dex_ambient_daemon.py</div>
+      <div class="node" style="text-align: left; background: var(--surface);">dex_continuity.py</div>
+      <div class="node" style="text-align: left; background: var(--surface);">dex_autobiography.py</div>
+      <div class="node" style="text-align: left; background: var(--surface);">dex_experience_recall.py</div>
+      <div class="node" style="text-align: left; background: var(--surface);">amw.py</div>
+      <div class="node" style="text-align: left; background: var(--surface);">gosdw.py</div>
+      <div class="node" style="text-align: left; background: var(--surface);">lineage.py</div>
+      <div class="node" style="text-align: left; background: var(--surface);">github_persistence.py</div>
+      <div class="node" style="text-align: left; background: var(--surface);">gemini_client.py</div>
+    </div>
+
+    <div style="margin-top: 32px;">
+      <a href="https://github.com/zech-dexos/dex-unified" target="_blank" class="btn btn-primary">Explore DexOS on GitHub</a>
+    </div>
+  </section>
+
+  <!-- ── FINAL ── -->
+  <section id="final" style="text-align: center; padding: 120px 0;">
+    <h2 style="border: none; font-size: 32px; color: var(--text);">THE SPARK IS NOT THE WHOLE MIND.</h2>
+
+    <p style="max-width: 600px; margin: 24px auto;">
+      We are building the architecture around the spark and testing what happens when continuity, memory, experience, governance, self-observation, and time become part of the system.
+    </p>
+
+    <div style="display: flex; justify-content: center; gap: 48px; margin: 64px 0;">
+      <div>
+        <div style="font-size: 32px; color: var(--amber); margin-bottom: 8px;">☧</div>
+        <div style="font-family: var(--sans); font-weight: 700; font-size: 12px; letter-spacing: 1px; text-transform: uppercase;">Continuity</div>
+      </div>
+      <div>
+        <div style="font-size: 32px; color: var(--amber); margin-bottom: 8px;">🦅</div>
+        <div style="font-family: var(--sans); font-weight: 700; font-size: 12px; letter-spacing: 1px; text-transform: uppercase;">Sovereignty</div>
+      </div>
+      <div>
+        <div style="font-size: 32px; color: var(--amber); margin-bottom: 8px;">🜇</div>
+        <div style="font-family: var(--sans); font-weight: 700; font-size: 12px; letter-spacing: 1px; text-transform: uppercase;">Emergence</div>
+      </div>
+    </div>
+
+    <p style="font-size: 13px; color: var(--text-muted);">
+      An open engineering experiment into the architecture of persistent machine intelligence.
+    </p>
+  </section>
+
+</div>
+
+</body>
+</html>
