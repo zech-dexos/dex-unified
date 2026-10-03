@@ -35,7 +35,12 @@ def _get_db():
                 firebase_admin.initialize_app(cred)
             elif not firebase_admin._apps:
                 key_path = os.path.join(os.path.dirname(__file__), "firebase-key.json")
-                cred = credentials.Certificate(key_path)
+                if os.path.exists(key_path):
+                    cred = credentials.Certificate(key_path)
+                else:
+                    # Cloud Run uses Application Default Credentials (ADC).
+                    # Do not require a local firebase-key.json in production.
+                    cred = credentials.ApplicationDefault()
                 firebase_admin.initialize_app(cred)
             _db = firestore.client()
         except Exception as e:
