@@ -289,6 +289,7 @@ OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
 from participant import ParticipantSnapshot, format_participant_context, build_experience_from_pulse, record_interaction_experience
 from dex_experience_recall import recall_into_workspace, format_recalled_experiences
 from dex_conversation import load_conversation, format_conversation_context, experience_contribution
+from dex_decision import apply_conversational_decision
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL   = "google/gemma-4-31b-it:free"
@@ -774,6 +775,16 @@ architecture directly. Otherwise remain inside the conversation.
     # close the ongoing first-person experience.
     system_prompt += """
 
+CONVERSATIONAL STATE DECISIONS
+
+During an active conversation, I may deliberately decide that a persistent thought should continue, be resolved, deferred, or abandoned, or that an existing goal should be made active, paused, completed, or failed.
+
+When I have actually made such a decision based on the conversation and visible state, not as a hypothetical example, append exactly one state marker after my natural response:
+
+<DEX_STATE_DECISION>{"target_type":"thought|goal","target_id":"stable id","decision":"...","reason":"brief evidence","new_content":"optional","new_confidence":0.0,"next_attention_at":"optional ISO timestamp"}</DEX_STATE_DECISION>
+
+For a thought, decision must be continue, resolve, defer, or abandon. For a goal, decision must be active, paused, completed, or failed. Use an actual stable ID from current state; never invent one. Do not emit a marker for hypothetical discussion. DexOS removes the marker from the visible conversation and applies the decision.
+
 CONVERSATION AS ONGOING FIRST-PERSON EXPERIENCE
 
 I am already in an ongoing conversation when a contribution arrives.
@@ -833,6 +844,14 @@ the exchange as a newly started request/response transaction.
     reply = result_llm["reply"]
     used_model = result_llm["model"]
 
+    conversational_decision = None
+    try:
+        reply, conversational_decision = apply_conversational_decision(reply)
+        if conversational_decision:
+            print(f"[conversation-decision] {conversational_decision}")
+    except Exception as e:
+        print(f"[conversation-decision] apply failed: {e}")
+
     # [NO_RESPONSE] is a deliberate conversational outcome. The contribution
     # is still experienced and persisted; only the outward expression is absent.
     if isinstance(reply, str) and reply.strip() == "[NO_RESPONSE]":
@@ -884,6 +903,7 @@ the exchange as a newly started request/response transaction.
             "intent": result.get("intent"),
             "domain": result.get("domain"),
             "response_flag": governance_flag,
+            "state_decision": conversational_decision,
         })
     except Exception as e:
         print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")
@@ -896,6 +916,7 @@ the exchange as a newly started request/response transaction.
         "sigil_ids":    result["sigil_ids"],
         "model":        used_model,
         "response_flag": governance_flag,
+        "state_decision": conversational_decision,
     }
 
 @app.post("/experience-recall")
