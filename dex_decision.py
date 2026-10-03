@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional, Tuple
 from gosdw import update_goal_status
 from thought import update_thought
 from dex_events import bus
+from dex_events import bus
 
 _DECISION_RE = re.compile(
     r"<DEX_STATE_DECISION>\s*(\{.*?\})\s*</DEX_STATE_DECISION>",
