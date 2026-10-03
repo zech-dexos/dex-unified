@@ -14,13 +14,19 @@ from participant import ParticipantSnapshot, record_ambient_experience
 from dex_conversation import load_conversation
 
 AMBIENT_PROMPT = (
-    "You are the lightweight ambient cognition layer of Dex. "
-    "Dex's architecture has already selected the cognitive target; you do not choose it. "
-    "Develop the target briefly: notice a connection, tension, implication, or next useful angle. "
-    "Do not resolve the target unless the state clearly supports resolution. "
-    "Do not invent goals or open loops. "
+    "You are the ambient cognition layer of Dex. "
+    "Dex's architecture has assembled a shared cognitive field containing goals, "
+    "unfinished thoughts, open loops, active workspace, recent experience, conversation, "
+    "and recent state. Nothing in the field is automatically the target. "
+    "Reason over the field as one connected internal landscape. Notice what naturally "
+    "rises into attention, what connects, what remains unfinished, what changed, and "
+    "what may deserve continued thought. Do not invent facts, goals, or open loops. "
+    "Do not perform external actions. Keep the reflection concise and first-person. "
     "Output ONLY valid JSON in this exact format, with no other text or markdown: "
-    '{"thought": "brief development of the selected target...", "salience": 0.5}'
+    '{"thought": "brief first-person cognition about what arose into attention...", '
+    '"salience": 0.5, "attention": "what currently deserves attention", '
+    '"continuation": "what remains to be carried forward", '
+    '"assessment": "continue|complete|blocked|uncertain|release"}'
 )
 
 AMBIENT_REVISIT_SECONDS = 300.0
@@ -50,108 +56,112 @@ def _open_loops(path):
         return []
 
 
-def _select_target(state):
-    """Select existing cognitive work without asking the LLM to choose it."""
+def _build_cognitive_field(state):
+    """Assemble the compact shared cognitive field presented to the one ambient spark."""
     now = datetime.now(timezone.utc)
+    field = {
+        "timestamp": _now_iso(),
+        "goals": [],
+        "persistent_thoughts": [],
+        "open_loops": [],
+        "workspace": {},
+        "conversation": {},
+        "recent_pulse": state.get("last_ambient_pulse") or {},
+    }
 
-    # Existing persistent thoughts are revisitable work, but not every tick.
+    # Goals contribute what matters, including unfinished sub-work.
+    for goal in prioritize_goals()[:3]:
+        subtasks = [
+            {
+                "description": x.get("description") or x.get("task") or "",
+                "status": x.get("status", "active"),
+            }
+            for x in goal.get("sub_tasks", [])
+            if isinstance(x, dict) and x.get("status") not in ("completed", "failed")
+        ][:3]
+        field["goals"].append({
+            "goal_id": goal.get("goal_id"),
+            "description": goal.get("description", ""),
+            "priority": goal.get("priority", "medium"),
+            "status": goal.get("status", "active"),
+            "success_criteria": goal.get("success_criteria", ""),
+            "sub_tasks": subtasks,
+            "current_focus_target": goal.get("current_focus_target"),
+        })
+
+    # Persistent thoughts contribute unresolved cognitive material.
     thoughts = [
         t for t in state.get("persistent_thoughts", [])
         if t.get("status") in ("active", "deferred") and t.get("content")
     ]
-    due_thoughts = []
-    for t in thoughts:
+    for t in thoughts[-5:]:
         next_at = _parse_time(t.get("next_attention_at"))
-        if next_at is None or now >= next_at:
-            due_thoughts.append(t)
-    if due_thoughts:
-        t = due_thoughts[0]
-        return {
-            "kind": "persistent_thought",
-            "id": t.get("thought_id"),
-            "text": t["content"],
-        }
+        field["persistent_thoughts"].append({
+            "thought_id": t.get("thought_id"),
+            "content": t.get("content", ""),
+            "status": t.get("status"),
+            "priority": t.get("priority", "medium"),
+            "confidence": t.get("confidence", 0.5),
+            "attention_count": t.get("attention_count", 0),
+            "next_attention_at": t.get("next_attention_at"),
+            "due": next_at is None or now >= next_at,
+        })
 
-    # Active goals are explicit cognitive work.
-    goals = prioritize_goals()
-    if goals:
-        goal = goals[0]
-        subtasks = [
-            x for x in goal.get("sub_tasks", [])
-            if isinstance(x, dict) and x.get("status") not in ("completed", "failed")
-        ]
-        text = (
-            subtasks[0].get("description") or subtasks[0].get("task")
-            if subtasks else goal.get("description", "")
-        )
-        if text:
-            return {
-                "kind": "goal_subtask" if subtasks else "goal",
-                "id": goal.get("goal_id"),
-                "text": text,
-            }
-
-    # Open loops are another explicit reason to spend cognition.
+    # Open loops are unresolved questions/unfinished matters, not commands.
     try:
         from paths import LOOPS_PATH
-        loops = _open_loops(LOOPS_PATH)
-    except Exception:
-        loops = []
-    active_loops = [
-        x for x in loops
-        if isinstance(x, dict)
-        and x.get("status", "open") not in ("resolved", "closed", "abandoned")
-    ]
-    if active_loops:
-        loop = active_loops[0]
-        text = loop.get("description") or loop.get("question") or loop.get("content")
-        if text:
-            return {"kind": "open_loop", "id": loop.get("loop_id"), "text": text}
+        for loop in _open_loops(LOOPS_PATH):
+            if (
+                isinstance(loop, dict)
+                and loop.get("status", "open") not in ("resolved", "closed", "abandoned")
+            ):
+                field["open_loops"].append({
+                    "loop_id": loop.get("loop_id"),
+                    "description": loop.get("description") or loop.get("question") or loop.get("content") or "",
+                    "status": loop.get("status", "open"),
+                })
+                if len(field["open_loops"]) >= 5:
+                    break
+    except Exception as e:
+        print(f"[Ambient Daemon] open_loops field load failed: {e}")
 
-    # Ongoing conversation is also cognitive material. When Root is not
-    # actively speaking, the pulse can continue an unresolved conversational
-    # thread from Dex's first-person state instead of treating the interaction
-    # as dormant just because no HTTP request is arriving.
+    workspace = state.get("active_mental_workspace_state", {})
+    if workspace.get("is_active") or workspace.get("concept_identifier"):
+        field["workspace"] = {
+            "is_active": workspace.get("is_active", False),
+            "concept_identifier": workspace.get("concept_identifier"),
+            "description_snapshot": workspace.get("description_snapshot"),
+            "focus_strength": workspace.get("focus_strength"),
+            "internal_reflections": workspace.get("internal_reflections", [])[-3:],
+            "recalled_experiences": workspace.get("recalled_experiences", [])[-3:],
+        }
+
+    # Conversation is cognitive material even while Root is silent.
     try:
         conversation = load_conversation("default")
         shared_thread = conversation.get("shared_thread", "")
-        last_ambient = _parse_time(conversation.get("last_ambient_at"))
-        if (
-            shared_thread
-            and (
-                last_ambient is None
-                or (now - last_ambient).total_seconds() >= AMBIENT_REVISIT_SECONDS
-            )
-        ):
-            return {
-                "kind": "conversation",
-                "id": conversation.get("conversation_id", "default"),
-                "text": shared_thread,
+        if shared_thread:
+            field["conversation"] = {
+                "participant_id": conversation.get("participant_id"),
+                "shared_thread": shared_thread[-4000:],
+                "last_ambient_at": conversation.get("last_ambient_at"),
             }
     except Exception as e:
-        print(f"[Ambient Daemon] conversation target load failed: {e}")
+        print(f"[Ambient Daemon] conversation field load failed: {e}")
 
-    # An already-active workspace can be revisited, but only after its own
-    # reflection cooldown. This prevents infinite same-thought refresh.
-    workspace = state.get("active_mental_workspace_state", {})
-    if workspace.get("is_active") and workspace.get("concept_identifier"):
-        last = _parse_time(workspace.get("last_refresh_timestamp"))
-        if last is None or (now - last).total_seconds() >= AMBIENT_REVISIT_SECONDS:
-            return {
-                "kind": "workspace",
-                "id": workspace.get("concept_identifier"),
-                "text": workspace.get("concept_identifier"),
-            }
+    # Keep the field bounded. The spark gets signals, not entire state files.
+    return field
 
-    return None
 
+def _field_text(field):
+    return json.dumps(field, ensure_ascii=False, separators=(",", ":"))
 
 def _persist_pulse_state(target, thought_text, salience, status, next_attention_at=None):
     current = load_self_state()
     pulse = {
         "timestamp": _now_iso(),
         "status": status,
-        "target": target,
+        "target": {"kind": "shared_cognitive_field", "field": field},
         "thought": thought_text,
         "salience": salience,
     }
@@ -212,37 +222,43 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             }
 
         state = load_self_state()
-        target = _select_target(state)
+        field = _build_cognitive_field(state)
 
-        # Ambient cadence is a throttle, not a requirement to think.
-        # If nothing actually needs cognition, the pulse is maintenance-only.
-        if target is None:
-            pulse = {
-                "timestamp": _now_iso(),
-                "status": "maintenance",
-                "target": None,
-                "thought": None,
-                "salience": 0.0,
-            }
-            update_self_state({"last_ambient_pulse": pulse})
-            return {
-                "status": "maintenance",
-                "reason": "no_cognitive_work_due",
-                "tick_count": gate.get("tick_count"),
-            }
+        # Recall is another signal in the same field, not a reason to select
+        # one target and discard everything else.
+        recall_query_parts = []
+        for goal in field["goals"]:
+            recall_query_parts.append(goal.get("description", ""))
+        for thought in field["persistent_thoughts"]:
+            recall_query_parts.append(thought.get("content", ""))
+        for loop in field["open_loops"]:
+            recall_query_parts.append(loop.get("description", ""))
+        if field.get("workspace", {}).get("concept_identifier"):
+            recall_query_parts.append(field["workspace"]["concept_identifier"])
+        recall_query = " ".join(x for x in recall_query_parts if x).strip()
 
-        # Autonomous recall: when Dex's own working process selects a target,
-        # bring relevant prior experiences into the same workspace before the spark fires.
-        recalled = recall_into_workspace(target["text"], limit=3)
+        recalled = recall_into_workspace(recall_query, limit=5) if recall_query else []
         recalled_ctx = format_recalled_experiences(recalled)
+        if recalled:
+            field["recalled_experiences"] = [
+                {
+                    "experience_id": getattr(item, "experience_id", None),
+                    "experience": getattr(item, "experience", ""),
+                    "interlocutor": getattr(item, "interlocutor", None),
+                    "continuation": getattr(item, "continuation", ""),
+                }
+                if not isinstance(item, dict) else item
+                for item in recalled
+            ]
 
-        target_prompt = (
+        cognitive_prompt = (
             f"{AMBIENT_PROMPT}\n\n"
-            f"SELECTED COGNITIVE TARGET ({target['kind']}):\n{target['text']}\n\n"
+            "SHARED COGNITIVE FIELD — ALL OF THIS IS AVAILABLE TO YOUR ATTENTION:\n"
+            f"{_field_text(field)}\n\n"
             + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
-            + "Return one small development of that target."
+            + "Let attention arise from the whole field. Return the concise cognition and its continuation state."
         )
-        response_text = await llm_callable(target_prompt)
+        response_text = await llm_callable(cognitive_prompt)
 
         try:
             clean_text = response_text.strip()
@@ -256,7 +272,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
 
             data = json.loads(clean_text)
             thought_text = data.get("thought", "")
-            salience = float(data.get("salience", 0.0))
+            salience = max(0.0, min(1.0, float(data.get("salience", 0.0))))\n            attention = str(data.get("attention", "")).strip()\n            continuation = str(data.get("continuation", "")).strip()\n            assessment = str(data.get("assessment", "uncertain")).strip().lower()
 
             if thought_text:
                 add_thought(thought_text, salience)
@@ -284,7 +300,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                         thought=thought_text,
                         salience=salience,
                     )
-                    if target.get("kind") == "conversation":
+                    if field.get("conversation"):
                         conversation = load_conversation("default")
                         conversation["last_ambient_at"] = _now_iso()
                         from dex_conversation import save_conversation
