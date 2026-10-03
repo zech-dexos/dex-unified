@@ -37,7 +37,11 @@ def _default_state(user_id: str = "default") -> Dict[str, Any]:
 
 
 def _canonical_participant_id(user_id: str = "default") -> str:
-    """Resolve request aliases to the participant identity used by experiences."""
+    """Resolve only the root/default alias to the active interlocutor identity."""
+    requested_id = str(user_id or "default")
+    if requested_id not in {"root", "default"}:
+        return requested_id
+
     try:
         from participant import ParticipantSnapshot
         snapshot = ParticipantSnapshot.load()
@@ -47,7 +51,7 @@ def _canonical_participant_id(user_id: str = "default") -> str:
             return canonical_id
     except Exception as e:
         print(f"[conversation] canonical participant resolution failed: {e}")
-    return str(user_id or "default")
+    return requested_id
 
 
 def load_conversation(user_id: str = "default") -> Dict[str, Any]:
