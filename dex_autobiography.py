@@ -50,6 +50,13 @@ def _describe_event(payload: Dict[str, Any]) -> str:
             return f"Dex generated a persistent thought: {thought}"
         return "Dex generated a thought."
 
+    if event_type == "THOUGHT_CHANGED":
+        thought = _first(payload, "thought", "content", "description")
+        action = _first(payload, "result", "action")
+        if thought:
+            return f"Dex deliberately changed a persistent thought ({action or 'updated'}): {thought}"
+        return f"Dex deliberately changed a persistent thought ({action or 'updated'})."
+
     if event_type == "GOAL_CREATED":
         goal = _first(payload, "goal", "description", "title")
         if goal:
@@ -185,6 +192,7 @@ def setup_autobiography():
     for event_type in (
         "RESPONSE_COMPLETED",
         "THOUGHT_GENERATED",
+        "THOUGHT_CHANGED",
         "GOAL_CREATED",
         "GOAL_CHANGED",
         "GOAL_COMPLETED",
