@@ -175,7 +175,21 @@ async def start_continuous_substrate():
         from dex_attention import setup_attention
         from dex_workspace import setup_workspace
 
-        # Initialize event subscriptions
+        # Rehydrate Dex's durable state before any continuity/workspace
+        # subscriber can read or mutate it. Cloud Run instances are ephemeral;
+        # GitHub is the durable ledger for DexOS state.
+        try:
+            from github_persistence import pull_from_github
+            if pull_from_github():
+                print("[Continuity] Durable DexOS state rehydrated from GitHub")
+            else:
+                print("[Continuity] No GitHub state rehydrated; using existing local state")
+        except Exception as e:
+            # A persistence outage must not prevent the API from serving.
+            # Firestore interaction memory remains independently available.
+            print(f"[Continuity] GitHub state rehydration skipped: {e}")
+
+        # Initialize event subscriptions only after durable state is present.
         setup_continuity()
         setup_autobiography()
         setup_attention()
