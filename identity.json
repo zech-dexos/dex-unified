@@ -1,6 +1,6 @@
 {
-  "version": 5,
-  "last_updated_timestamp": "2026-10-03T07:08:41Z",
+  "version": 7,
+  "last_updated_timestamp": "2026-10-03T07:08:56Z",
   "dex_id": "22181a0d-1687-4f5b-b763-5be11b552293",
   "vows": {
     "ashline_vow_text": "",
@@ -32,6 +32,11 @@
     },
     {
       "timestamp": "2026-10-03T07:08:41Z",
+      "event_type": "internal_reflection",
+      "summary": "No active goals this cycle. Nothing to focus on."
+    },
+    {
+      "timestamp": "2026-10-03T07:08:56Z",
       "event_type": "internal_reflection",
       "summary": "No active goals this cycle. Nothing to focus on."
     }
@@ -69,13 +74,20 @@
       "source": "event_bus",
       "user_id": "root",
       "summary": null
+    },
+    {
+      "event_type": "PARTICIPANT_EVENT",
+      "timestamp": "2026-10-03T07:08:56.461005+00:00",
+      "source": "event_bus",
+      "user_id": "1469546061805912261",
+      "summary": null
     }
   ],
   "last_continuity_event": {
-    "event_type": "RESPONSE_COMPLETED",
-    "timestamp": "2026-10-03T07:07:29.026831+00:00",
+    "event_type": "PARTICIPANT_EVENT",
+    "timestamp": "2026-10-03T07:08:56.461005+00:00",
     "source": "event_bus",
-    "user_id": "root",
+    "user_id": "1469546061805912261",
     "summary": null
   },
   "last_autobiographical_event": {
