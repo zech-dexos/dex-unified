@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-from paths import IDENTITY_PATH, LOOPS_PATH, STATE_PATH
+from paths import IDENTITY_PATH, LOOPS_PATH, LEDGER_PATH
 
 
 def _state() -> Dict[str, Any]:
@@ -71,7 +71,7 @@ def inspect_experiences() -> Dict[str, Any]:
     return {
         "last_continuity_event": state.get("last_continuity_event"),
         "last_autobiographical_event": state.get("last_autobiographical_event"),
-        "recent_lineage": _recent_jsonl(STATE_PATH.parent / "dex_lineage.jsonl", 10),
+        "recent_lineage": _recent_jsonl(LEDGER_PATH, 10),
     }
 
 
