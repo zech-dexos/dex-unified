@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from gosdw import update_goal_status
 from thought import update_thought
+from dex_events import bus
 
 _DECISION_RE = re.compile(
     r"<DEX_STATE_DECISION>\s*(\{.*?\})\s*</DEX_STATE_DECISION>",
@@ -66,13 +67,27 @@ def apply_conversational_decision(reply: str) -> Tuple[str, Optional[Dict[str, A
             note=reason or "Conversational cognition applied a deliberate state decision.",
             next_attention_at=decision.get("next_attention_at"),
         )
-        return clean_reply, {
+        result = {
             "applied": updated is not None,
             "target_type": "thought",
             "target_id": target_id,
             "action": action,
             "status": updated.get("status") if updated else None,
         }
+        if updated is not None:
+            import asyncio
+            event_type = "THOUGHT_CHANGED"
+            asyncio.create_task(bus.publish(event_type, {
+                "event_type": event_type,
+                "source": "conversational_decision",
+                "thought_id": target_id,
+                "thought": updated.get("content", ""),
+                "result": action,
+                "status": updated.get("status"),
+                "reason": reason,
+                "state_changes": [{"type": "thought", "action": action, "status": updated.get("status")}],
+            }))
+        return clean_reply, result
 
     if target_type == "goal":
         if action not in VALID_GOAL_STATUSES:
@@ -88,13 +103,27 @@ def apply_conversational_decision(reply: str) -> Tuple[str, Optional[Dict[str, A
             action,
             progress_report=reason or None,
         )
-        return clean_reply, {
+        result = {
             "applied": updated is not None,
             "target_type": "goal",
             "target_id": target_id,
             "action": action,
             "status": updated.get("status") if updated else None,
         }
+        if updated is not None:
+            import asyncio
+            event_type = "GOAL_COMPLETED" if action == "completed" else "GOAL_CHANGED"
+            asyncio.create_task(bus.publish(event_type, {
+                "event_type": event_type,
+                "source": "conversational_decision",
+                "goal_id": target_id,
+                "goal": updated.get("description", ""),
+                "result": action,
+                "status": updated.get("status"),
+                "reason": reason,
+                "state_changes": [{"type": "goal", "action": action, "status": updated.get("status")}],
+            }))
+        return clean_reply, result
 
     return clean_reply, {
         "applied": False,
