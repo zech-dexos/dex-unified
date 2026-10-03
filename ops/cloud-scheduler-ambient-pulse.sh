@@ -12,7 +12,7 @@ set -euo pipefail
 #   PULSE_SECRET     Same secret configured on Cloud Run
 #
 # Optional:
-#   JOB_NAME         defaults to dex-ambient-pulse
+#   JOB_NAME         defaults to the existing production job dex-pulse-6h
 #   SCHEDULE         defaults to every minute
 #   TIME_ZONE        defaults to UTC
 
@@ -20,7 +20,7 @@ PROJECT_ID="${PROJECT_ID:?set PROJECT_ID}"
 REGION="${REGION:-us-central1}"
 SERVICE_URL="${SERVICE_URL:?set SERVICE_URL}"
 PULSE_SECRET="${PULSE_SECRET:?set PULSE_SECRET}"
-JOB_NAME="${JOB_NAME:-dex-ambient-pulse}"
+JOB_NAME="${JOB_NAME:-dex-pulse-6h}"
 SCHEDULE="${SCHEDULE:-* * * * *}"
 TIME_ZONE="${TIME_ZONE:-UTC}"
 
