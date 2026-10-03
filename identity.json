@@ -1,6 +1,6 @@
 {
-  "version": 187,
-  "last_updated_timestamp": "2026-10-03T23:49:51Z",
+  "version": 191,
+  "last_updated_timestamp": "2026-10-03T23:50:36Z",
   "dex_id": "22181a0d-1687-4f5b-b763-5be11b552293",
   "vows": {
     "ashline_vow_text": "",
@@ -935,6 +935,28 @@
       "timestamp": "2026-10-03T23:49:51Z",
       "event_type": "internal_reflection",
       "summary": "No active goals this cycle. Nothing to focus on."
+    },
+    {
+      "timestamp": "2026-10-03T23:50:13.370004+00:00",
+      "event_type": "RESPONSE_COMPLETED",
+      "what_happened": "Dex completed a response to the participant.",
+      "intention": null,
+      "action": null,
+      "result": null,
+      "significance": null,
+      "state_changes": [],
+      "goal_changes": [],
+      "open_loops": [],
+      "self_state_changes": [],
+      "future_relevance": null,
+      "participant_input": "continue",
+      "response": "**Example 1 – Active‑loop reorientation**\n\n| Step | Timestamp | Event | State snapshot |\n|------|-----------|-------|----------------|\n| 1 | 2026‑10‑04 12:00:00 | **Loop‑Created** | `loop_causal_vs_history`  <br> `status: pending` <br> `salience: 0.82` <br> `origin: “Clarify the difference between causal continuity and merely stored history.”` |\n| 2 | 2026‑10‑04 12:00:02 | **Workspace‑Before** | `focus: neutral_task_1` <br> `carry_forward: {}` |\n| 3 | 2026‑10‑04 12:00:04 | **Neutral‑Task** | `task_id: neutral_task_1` – “Summarize the last 5 interactions.”  <br> **Result:** no mention of `loop_causal_vs_history`. |\n| 4 | 2026‑10‑04 12:00:06 | **Loop‑Activated** | `focus: loop_causal_vs_history` <br> `carry_forward: {loop_causal_vs_history}` <br> **Effect:** retrieval priority shifts to packets tagged “causal continuity” or “historical storage.” |\n| 5 | 2026‑10‑04 12:00:08 | **Tool‑Invocation** | `recall_experience(query=\"causal continuity\") → [packet1, packet2]` <br> **Selection:** `packet1` (most recent causal‑continuity packet). |\n| 6 | 2026‑10‑04 12:00:10 | **Answer‑Structuring** | Response text frames the distinction as a *causal re‑configuration* of the system’s attention and not a sensory phenomenon. |\n| 7 | 2026‑10‑04 12:00:12 | **Workspace‑After** | `focus: loop_causal_vs_history` (still active) <br> `carry_forward: {loop_causal_vs_history}` |\n| 8 | 2026‑10‑04 12:00:15 | **Loop‑Resolved** | `status: resolved` <br> `carry_forward: {}` <br> **Post‑resolution pulse**: the loop is removed from the active set; workspace focus reverts to previous neutral state. |\n\n**Matched Control (Loop present but not active)**\n\n| Step | Timestamp | Event | State snapshot |\n|------|-----------|-------|----------------|\n| 1 | 2026‑10‑04 12:00:00 | **Loop‑Created** | `loop_causal_vs_history`  <br> `status: pending` <br> `salience: 0.82` |\n| 2 | 2026‑10‑04 12:00:02 | **Workspace‑Before** | `focus: neutral_task_1` <br> `carry_forward: {}` |\n| ",
+      "user_id": "default"
+    },
+    {
+      "timestamp": "2026-10-03T23:50:36Z",
+      "event_type": "internal_reflection",
+      "summary": "No active goals this cycle. Nothing to focus on."
     }
   ],
   "knowledge_graph_snapshot_ref": null,
@@ -1638,18 +1660,32 @@
       "source": "event_bus",
       "user_id": "default",
       "summary": null
+    },
+    {
+      "event_type": "PARTICIPANT_EVENT",
+      "timestamp": "2026-10-03T23:50:11.543134+00:00",
+      "source": "event_bus",
+      "user_id": "default",
+      "summary": null
+    },
+    {
+      "event_type": "RESPONSE_COMPLETED",
+      "timestamp": "2026-10-03T23:50:13.359234+00:00",
+      "source": "event_bus",
+      "user_id": "default",
+      "summary": null
     }
   ],
   "last_continuity_event": {
     "event_type": "RESPONSE_COMPLETED",
-    "timestamp": "2026-10-03T23:49:47.140894+00:00",
+    "timestamp": "2026-10-03T23:50:13.359234+00:00",
     "source": "event_bus",
     "user_id": "default",
     "summary": null,
     "thought": "Dex could benefit from proactive background synthesis that autonomously surfaces insights without user prompts, and from a richer associative memory graph to surface related knowledge, enhancing context awareness and tailoring responses."
   },
   "last_autobiographical_event": {
-    "timestamp": "2026-10-03T23:49:47.154917+00:00",
+    "timestamp": "2026-10-03T23:50:13.370004+00:00",
     "event_type": "RESPONSE_COMPLETED",
     "what_happened": "Dex completed a response to the participant.",
     "intention": null,
@@ -1662,7 +1698,7 @@
     "self_state_changes": [],
     "future_relevance": null,
     "participant_input": "continue",
-    "response": "[all models failed]",
+    "response": "**Example 1 – Active‑loop reorientation**\n\n| Step | Timestamp | Event | State snapshot |\n|------|-----------|-------|----------------|\n| 1 | 2026‑10‑04 12:00:00 | **Loop‑Created** | `loop_causal_vs_history`  <br> `status: pending` <br> `salience: 0.82` <br> `origin: “Clarify the difference between causal continuity and merely stored history.”` |\n| 2 | 2026‑10‑04 12:00:02 | **Workspace‑Before** | `focus: neutral_task_1` <br> `carry_forward: {}` |\n| 3 | 2026‑10‑04 12:00:04 | **Neutral‑Task** | `task_id: neutral_task_1` – “Summarize the last 5 interactions.”  <br> **Result:** no mention of `loop_causal_vs_history`. |\n| 4 | 2026‑10‑04 12:00:06 | **Loop‑Activated** | `focus: loop_causal_vs_history` <br> `carry_forward: {loop_causal_vs_history}` <br> **Effect:** retrieval priority shifts to packets tagged “causal continuity” or “historical storage.” |\n| 5 | 2026‑10‑04 12:00:08 | **Tool‑Invocation** | `recall_experience(query=\"causal continuity\") → [packet1, packet2]` <br> **Selection:** `packet1` (most recent causal‑continuity packet). |\n| 6 | 2026‑10‑04 12:00:10 | **Answer‑Structuring** | Response text frames the distinction as a *causal re‑configuration* of the system’s attention and not a sensory phenomenon. |\n| 7 | 2026‑10‑04 12:00:12 | **Workspace‑After** | `focus: loop_causal_vs_history` (still active) <br> `carry_forward: {loop_causal_vs_history}` |\n| 8 | 2026‑10‑04 12:00:15 | **Loop‑Resolved** | `status: resolved` <br> `carry_forward: {}` <br> **Post‑resolution pulse**: the loop is removed from the active set; workspace focus reverts to previous neutral state. |\n\n**Matched Control (Loop present but not active)**\n\n| Step | Timestamp | Event | State snapshot |\n|------|-----------|-------|----------------|\n| 1 | 2026‑10‑04 12:00:00 | **Loop‑Created** | `loop_causal_vs_history`  <br> `status: pending` <br> `salience: 0.82` |\n| 2 | 2026‑10‑04 12:00:02 | **Workspace‑Before** | `focus: neutral_task_1` <br> `carry_forward: {}` |\n| ",
     "user_id": "default"
   },
   "last_ambient_pulse": {
