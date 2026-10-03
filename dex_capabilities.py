@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-from paths import IDENTITY_PATH, LOOPS_PATH, LEDGER_PATH
+from paths import IDENTITY_PATH, LOOPS_PATH, LEDGER_PATH, PARTICIPANT_PATH, SESSION_PATH, EXPERIENCES_PATH
 
 
 def _state() -> Dict[str, Any]:
@@ -66,12 +66,43 @@ def inspect_thoughts() -> Dict[str, Any]:
     return {"thoughts": _state().get("persistent_thoughts", [])[-20:]}
 
 
-def inspect_experiences() -> Dict[str, Any]:
+def inspect_experiences(limit: int = 10) -> Dict[str, Any]:
+    """Inspect actual durable ExperiencePackets, plus continuity lineage."""
+    from dex_experience_recall import recall_experiences
     state = _state()
     return {
+        "recent_experiences": recall_experiences("", limit=max(1, min(limit, 20))),
         "last_continuity_event": state.get("last_continuity_event"),
         "last_autobiographical_event": state.get("last_autobiographical_event"),
         "recent_lineage": _recent_jsonl(LEDGER_PATH, 10),
+    }
+
+
+def inspect_participant() -> Dict[str, Any]:
+    from participant import ParticipantSnapshot
+    return {
+        "participant": ParticipantSnapshot.load().__dict__,
+        "source": str(PARTICIPANT_PATH),
+    }
+
+
+def inspect_conversation(user_id: str = "default") -> Dict[str, Any]:
+    from dex_conversation import load_conversation
+    return {
+        "conversation": load_conversation(user_id),
+        "source": str(SESSION_PATH),
+    }
+
+
+def recall_experience(query: str, limit: int = 5) -> Dict[str, Any]:
+    """Deliberately evoke matching lived experiences into active workspace."""
+    from dex_experience_recall import recall_into_workspace
+    recalled = recall_into_workspace(query, limit=max(1, min(limit, 10)))
+    return {
+        "query": query,
+        "recalled_count": len(recalled),
+        "experiences": recalled,
+        "workspace": inspect_workspace(),
     }
 
 
@@ -94,6 +125,8 @@ def evoke(resource: str) -> Dict[str, Any]:
         "open_loops": inspect_open_loops,
         "thoughts": inspect_thoughts,
         "experiences": inspect_experiences,
+        "participant": inspect_participant,
+        "conversation": inspect_conversation,
         "signals": listen,
     }
     fn = resources.get(resource)
