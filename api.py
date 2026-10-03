@@ -294,7 +294,7 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL   = "google/gemma-4-31b-it:free"
 GROQ_KEY = os.environ.get("GROQ_KEY", "")
 GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "openai/gpt-oss-20b"
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 from gemini_client import call_gemini
@@ -325,7 +325,8 @@ async def call_llm(client, messages, max_tokens=1000):
             )
             data = res.json()
             if "error" not in data:
-                content = data.get("choices",[{}])[0].get("message",{}).get("content","")
+                msg = data.get("choices",[{}])[0].get("message",{})
+                content = msg.get("content","") or msg.get("reasoning","")
                 if content:
                     return {"reply": content, "model": GROQ_MODEL}
         except Exception:
@@ -346,7 +347,8 @@ async def call_llm(client, messages, max_tokens=1000):
             )
             data = res.json()
             if "error" not in data:
-                content = data.get("choices",[{}])[0].get("message",{}).get("content","")
+                msg = data.get("choices",[{}])[0].get("message",{})
+                content = msg.get("content","") or msg.get("reasoning","")
                 if content:
                     return {"reply": content, "model": model}
             else:
