@@ -36,18 +36,40 @@ def _default_state(user_id: str = "default") -> Dict[str, Any]:
     }
 
 
+def _canonical_participant_id(user_id: str = "default") -> str:
+    """Resolve request aliases to the participant identity used by experiences."""
+    try:
+        from participant import ParticipantSnapshot
+        snapshot = ParticipantSnapshot.load()
+        interlocutor = snapshot.current_interlocutor or {}
+        canonical_id = str(interlocutor.get("participant_id") or "").strip()
+        if canonical_id:
+            return canonical_id
+    except Exception as e:
+        print(f"[conversation] canonical participant resolution failed: {e}")
+    return str(user_id or "default")
+
+
 def load_conversation(user_id: str = "default") -> Dict[str, Any]:
-    """Load the ongoing conversational experience for one participant."""
+    """Load conversation state using the canonical participant identity."""
+    canonical_id = _canonical_participant_id(user_id)
     try:
         if SESSION_PATH.exists():
             data = json.loads(SESSION_PATH.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 conversations = data.get("conversations", {})
-                if isinstance(conversations, dict) and user_id in conversations:
-                    return conversations[user_id]
+                if isinstance(conversations, dict):
+                    if canonical_id in conversations:
+                        return conversations[canonical_id]
+                    # Preserve any pre-fix state written under the request alias.
+                    if user_id in conversations:
+                        legacy = dict(conversations[user_id])
+                        legacy["conversation_id"] = canonical_id
+                        legacy["participant_id"] = canonical_id
+                        return legacy
     except Exception as e:
         print(f"[conversation] load failed: {e}")
-    return _default_state(user_id)
+    return _default_state(canonical_id)
 
 
 def save_conversation(state: Dict[str, Any]) -> Dict[str, Any]:
