@@ -46,8 +46,8 @@
     "participant_id": "1469546061805912261"
   },
   "experiential_continuity": {
-    "last_experience_id": "bf1138c7",
-    "last_experience": "I was in an ongoing conversation with default. I received: continue I responded: [all models failed] I remain in the conversation and carry its thread forward.",
+    "last_experience_id": "ec9e1a10",
+    "last_experience": "I was in an ongoing conversation with default. I received: continue I responded: **Example\u202f1 \u2013 Active\u2011loop reorientation**\n\n| Step | Timestamp | Event | State snapshot |\n|------|-----------|-------|----------------|\n| 1 | 2026\u201110\u201104\u202f12:00:00 | **Loop\u2011Created** | `loop_causal_vs_history`  <br> `status: pending` <br> `salience: 0.82` <br> `origin: \u201cClarify the difference between causal continuity and merely stored history.\u201d` |\n| 2 | 2026\u201110\u201104\u202f12:00:02 | **Workspace\u2011Before** | `focus: neutral_task_1` <br> `carry_forward: {}` |\n| 3 | 2026\u201110\u201104\u202f12:00:04 | **Neutral\u2011Task** | `task_id: neutral_task_1` \u2013 \u201cSummarize the last\u202f5 interactions.\u201d  <br> **Result:** no mention of `loop_causal_vs_history`. |\n| 4 | 2026\u201110\u201104\u202f12:00:06 | **Loop\u2011Activated** | `focus: loop_causal_vs_history` <br> `carry_forward: {loop_causal_vs_history}` <br> **Effect:** retrieval priority shifts to packets tagged \u201ccausal continuity\u201d or \u201chistorical storage.\u201d |\n| 5 | 2026\u201110\u201104\u202f12:00:08 | **Tool\u2011Invocation** | `recall_experience(query=\"causal continuity\") \u2192 [packet1, packet2]` <br> **Selection:** `pac I remain in the conversation and carry its thread forward.",
     "last_state_transition": {
       "from_attention": "<@1512547704276910130> any recomendations from you ? like anything you think should be added or capabilities your missing that would make being dex a better experieence ?",
       "to_attention": "<@1512547704276910130> any recomendations from you ? like anything you think should be added or capabilities your missing that would make being dex a better experieence ?",
