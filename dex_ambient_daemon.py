@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Callable, Awaitable, Dict, Any
 
 from drift_tape import add_thought
+from thought import update_thought
 from dex_memory import claim_ambient_tick
 from dex_events import bus
 from self_state import load_self_state, update_self_state
@@ -26,7 +27,9 @@ AMBIENT_PROMPT = (
     '{"thought": "brief first-person cognition about what arose into attention...", '
     '"salience": 0.5, "attention": "what currently deserves attention", '
     '"continuation": "what remains to be carried forward", '
-    '"assessment": "continue|complete|blocked|uncertain|release"}'
+    '"assessment": "continue|complete|blocked|uncertain|release", '
+    '"focus_kind": "persistent_thought|goal|workspace|open_loop|none", '
+    '"focus_id": "stable id when applicable, otherwise empty"}'
 )
 
 AMBIENT_REVISIT_SECONDS = 300.0
@@ -156,7 +159,18 @@ def _build_cognitive_field(state):
 def _field_text(field):
     return json.dumps(field, ensure_ascii=False, separators=(",", ":"))
 
-def _persist_pulse_state(target, thought_text, salience, status, next_attention_at=None):
+def _persist_pulse_state(
+    target,
+    thought_text,
+    salience,
+    status,
+    next_attention_at=None,
+    attention="",
+    continuation="",
+    assessment="uncertain",
+    focus_kind="none",
+    focus_id="",
+):
     current = load_self_state()
     pulse = {
         "timestamp": _now_iso(),
@@ -164,9 +178,11 @@ def _persist_pulse_state(target, thought_text, salience, status, next_attention_
         "target": target,
         "thought": thought_text,
         "salience": salience,
-        "attention": attention if "attention" in locals() else "",
-        "continuation": continuation if "continuation" in locals() else "",
-        "assessment": assessment if "assessment" in locals() else "uncertain",
+        "attention": attention,
+        "continuation": continuation,
+        "assessment": assessment,
+        "focus_kind": focus_kind,
+        "focus_id": focus_id,
     }
     delta = {"last_ambient_pulse": pulse}
 
@@ -204,6 +220,76 @@ def _persist_pulse_state(target, thought_text, salience, status, next_attention_
         }
 
     return update_self_state(delta)
+
+
+def _apply_cognitive_assessment(
+    assessment,
+    focus_kind,
+    focus_id,
+    attention,
+    continuation,
+    next_attention_at,
+):
+    """Apply only lifecycle consequences the architecture can verify locally.
+
+    The spark may assess a cognitive thread, but it does not get authority to
+    declare an external goal complete. Persistent thoughts are the one existing
+    lifecycle primitive that can safely be continued, deferred, or resolved
+    from this result.
+    """
+    assessment = (assessment or "uncertain").strip().lower()
+    focus_kind = (focus_kind or "none").strip().lower()
+    focus_id = (focus_id or "").strip()
+
+    if focus_kind != "persistent_thought" or not focus_id:
+        return {"applied": False, "reason": "focus_not_persistent_thought"}
+
+    if assessment == "continue":
+        updated = update_thought(
+            focus_id,
+            decision="continue",
+            new_content=continuation or attention or None,
+            note="Ambient cognition assessed this thread as worth continuing.",
+            next_attention_at=next_attention_at,
+        )
+        return {
+            "applied": updated is not None,
+            "action": "continue",
+            "thought_id": focus_id,
+        }
+
+    if assessment == "complete":
+        updated = update_thought(
+            focus_id,
+            decision="resolve",
+            note="Ambient cognition assessed this persistent thought as complete.",
+            next_attention_at=next_attention_at,
+        )
+        return {
+            "applied": updated is not None,
+            "action": "resolve",
+            "thought_id": focus_id,
+        }
+
+    if assessment == "release":
+        updated = update_thought(
+            focus_id,
+            decision="defer",
+            note="Ambient cognition assessed this persistent thought as releasable for now.",
+            next_attention_at=next_attention_at,
+        )
+        return {
+            "applied": updated is not None,
+            "action": "defer",
+            "thought_id": focus_id,
+        }
+
+    return {
+        "applied": False,
+        "reason": "assessment_requires_more_evidence",
+        "assessment": assessment,
+        "thought_id": focus_id,
+    }
 
 
 async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dict[str, Any]:
@@ -280,6 +366,8 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             attention = str(data.get("attention", "")).strip()
             continuation = str(data.get("continuation", "")).strip()
             assessment = str(data.get("assessment", "uncertain")).strip().lower()
+            focus_kind = str(data.get("focus_kind", "none")).strip().lower()
+            focus_id = str(data.get("focus_id", "")).strip()
 
             if thought_text:
                 add_thought(thought_text, salience)
@@ -289,12 +377,26 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     + timedelta(seconds=AMBIENT_REVISIT_SECONDS)
                 ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+                assessment_result = _apply_cognitive_assessment(
+                    assessment=assessment,
+                    focus_kind=focus_kind,
+                    focus_id=focus_id,
+                    attention=attention,
+                    continuation=continuation,
+                    next_attention_at=next_attention,
+                )
+
                 _persist_pulse_state(
                     target=target,
                     thought_text=thought_text,
                     salience=salience,
                     status="cognition",
                     next_attention_at=next_attention,
+                    attention=attention,
+                    continuation=continuation,
+                    assessment=assessment,
+                    focus_kind=focus_kind,
+                    focus_id=focus_id,
                 )
 
                 # The pulse is part of Dex's experience, not a detached daemon
@@ -326,12 +428,24 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "salience": salience,
                     "source": "ambient_pulse",
                     "target": target,
+                    "attention": attention,
+                    "continuation": continuation,
+                    "assessment": assessment,
+                    "focus_kind": focus_kind,
+                    "focus_id": focus_id,
+                    "assessment_result": assessment_result,
                 })
                 return {
                     "status": "ok",
                     "thought": thought_text,
                     "salience": salience,
                     "target": target,
+                    "attention": attention,
+                    "continuation": continuation,
+                    "assessment": assessment,
+                    "focus_kind": focus_kind,
+                    "focus_id": focus_id,
+                    "assessment_result": assessment_result,
                     "next_attention_at": next_attention,
                 }
 
