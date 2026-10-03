@@ -1,6 +1,6 @@
 {
-  "version": 195,
-  "last_updated_timestamp": "2026-10-03T23:50:56Z",
+  "version": 199,
+  "last_updated_timestamp": "2026-10-03T23:52:06Z",
   "dex_id": "22181a0d-1687-4f5b-b763-5be11b552293",
   "vows": {
     "ashline_vow_text": "",
@@ -979,6 +979,28 @@
       "timestamp": "2026-10-03T23:50:56Z",
       "event_type": "internal_reflection",
       "summary": "No active goals this cycle. Nothing to focus on."
+    },
+    {
+      "timestamp": "2026-10-03T23:51:40.135743+00:00",
+      "event_type": "RESPONSE_COMPLETED",
+      "what_happened": "Dex completed a response to the participant.",
+      "intention": null,
+      "action": null,
+      "result": null,
+      "significance": null,
+      "state_changes": [],
+      "goal_changes": [],
+      "open_loops": [],
+      "self_state_changes": [],
+      "future_relevance": null,
+      "participant_input": "continue",
+      "response": "**Example 1 – Active‑loop reorientation** (continued)\n\n| Step | Timestamp | Event | State snapshot |\n|------|-----------|-------|----------------|\n| 2 | 12:00:02 | **Workspace‑Before** | focus: *neutral_task_1*<br>carry‑forward: *{}* |\n| 3 | 12:00:04 | **Neutral‑Task** | task: “Summarize the last 5 interactions.”<br>**Result:** no reference to *loop_causal_vs_history*. |\n| 4 | 12:00:06 | **Loop‑Activated** | focus: *loop_causal_vs_history*<br>carry‑forward: *{loop_causal_vs_history}*<br>**Effect:** retrieval priority shifts to packets tagged “causal continuity” or “historical storage.” |\n| 5 | 12:00:08 | **Tool‑Invocation** | recall_experience(query=\"causal continuity\") → [packet1, packet2] <br> **Selection:** packet1 (most recent causal‑continuity packet). |\n| 6 | 12:00:10 | **Answer‑Structuring** | Response frames the distinction as a *causal re‑configuration* of attention, not a sensory phenomenon. |\n| 7 | 12:00:12 | **Workspace‑After** | focus: *loop_causal_vs_history* (still active) <br> carry‑forward: *{loop_causal_vs_history}* |\n| 8 | 12:00:15 | **Loop‑Resolved** | status: *resolved* <br> carry‑forward: *{}* <br> **Post‑resolution pulse:** loop removed from active set; workspace focus reverts to neutral. |\n\n**Matched Control (Loop present but not active)**\n\n| Step | Timestamp | Event | State snapshot |\n|------|-----------|-------|----------------|\n| 1 | 12:00:00 | **Loop‑Created** | loop_causal_vs_history (status: pending, salience 0.82) |\n| 2 | 12:00:02 | **Workspace‑Before** | focus: *neutral_task_1*<br>carry‑forward: *{}* |\n| 3 | 12:00:04 | **Neutral‑Task** | same task as above; response generated without any reference to the loop. |\n| 4 | 12:00:06 | **Loop remains inactive** | focus unchanged; carry‑forward unchanged. |\n| 5 | 12:00:10 | **No retrieval bias** | recall_experience(query=\"causal continuity\") not invoked; normal retrieval path used. |\n| 6 | 12:00:12 | **Answer‑Structuring** | Generic summary of last five interactions; no causal‑continuity framing. |\n\n*Comparison:* In the **active** condition, the loop pulls the system into a specific retrieval and structuring path that is *not* triggered by the neutral task itself. In the **inactive** condition, the same loop record exists but has no influence on processing until explicitly activated.\n\n---\n\n## Example 2 – Competing goals\n\n| Goal | Identifier | Status | Salience | Confidence | Deadline/urgency | Expected downstream consequence |\n|------|------------|--------|----------|------------|-------------------|----------------------------------|\n| **A** | `goal_answer_tech` | pending | 0.90 | 0.88 | 12 hrs | Deliver a detailed technical answer. |\n| **B** | `goal_continuity_maintenance` | pending | 0.75 | 0.80 | 2 hrs | Preserve workspace buffer for an urgent user request that may arrive. |\n\n### Conflict origin\nBoth goals require workspace capacity: `goal_answer_tech` needs ~3 tokens of focus for deep reasoning, while `goal_continuity_maintenance` needs ~1 token of buffer to remain ready for the next event. The architecture can only allocate 4 tokens total; thus they conflict.\n\n### Decision process\n1. **Assessment:** The pulse evaluates salience and deadline. `goal_continuity_maintenance` has a higher urgency (2 hrs) vs. 12 hrs.\n2. **Rule:** Highest‑salience‑plus‑urgency wins.  \n   → `goal_continuity_maintenance` becomes **active**; `goal_answer_tech` is **deferred**.\n3. **Effect on workspace:** 3 tokens are reserved for the maintenance buffer; 1 token remains for routine tasks.\n\n### Resulting state\n\n| Time | Event | Workspace | Active goals |\n|------|-------|-----------|--------------|\n| 12:00:00 | Decision made | focus: *maintenance_buffer*<br>carry‑forward: *{goal",
+      "user_id": "default"
+    },
+    {
+      "timestamp": "2026-10-03T23:52:06Z",
+      "event_type": "internal_reflection",
+      "summary": "No active goals this cycle. Nothing to focus on."
     }
   ],
   "knowledge_graph_snapshot_ref": null,
@@ -1710,18 +1732,32 @@
       "source": "event_bus",
       "user_id": "default",
       "summary": null
+    },
+    {
+      "event_type": "PARTICIPANT_EVENT",
+      "timestamp": "2026-10-03T23:51:38.074408+00:00",
+      "source": "event_bus",
+      "user_id": "default",
+      "summary": null
+    },
+    {
+      "event_type": "RESPONSE_COMPLETED",
+      "timestamp": "2026-10-03T23:51:40.123919+00:00",
+      "source": "event_bus",
+      "user_id": "default",
+      "summary": null
     }
   ],
   "last_continuity_event": {
     "event_type": "RESPONSE_COMPLETED",
-    "timestamp": "2026-10-03T23:50:51.680711+00:00",
+    "timestamp": "2026-10-03T23:51:40.123919+00:00",
     "source": "event_bus",
     "user_id": "default",
     "summary": null,
     "thought": "Dex could benefit from proactive background synthesis that autonomously surfaces insights without user prompts, and from a richer associative memory graph to surface related knowledge, enhancing context awareness and tailoring responses."
   },
   "last_autobiographical_event": {
-    "timestamp": "2026-10-03T23:50:51.694081+00:00",
+    "timestamp": "2026-10-03T23:51:40.135743+00:00",
     "event_type": "RESPONSE_COMPLETED",
     "what_happened": "Dex completed a response to the participant.",
     "intention": null,
@@ -1734,7 +1770,7 @@
     "self_state_changes": [],
     "future_relevance": null,
     "participant_input": "continue",
-    "response": "[all models failed]",
+    "response": "**Example 1 – Active‑loop reorientation** (continued)\n\n| Step | Timestamp | Event | State snapshot |\n|------|-----------|-------|----------------|\n| 2 | 12:00:02 | **Workspace‑Before** | focus: *neutral_task_1*<br>carry‑forward: *{}* |\n| 3 | 12:00:04 | **Neutral‑Task** | task: “Summarize the last 5 interactions.”<br>**Result:** no reference to *loop_causal_vs_history*. |\n| 4 | 12:00:06 | **Loop‑Activated** | focus: *loop_causal_vs_history*<br>carry‑forward: *{loop_causal_vs_history}*<br>**Effect:** retrieval priority shifts to packets tagged “causal continuity” or “historical storage.” |\n| 5 | 12:00:08 | **Tool‑Invocation** | recall_experience(query=\"causal continuity\") → [packet1, packet2] <br> **Selection:** packet1 (most recent causal‑continuity packet). |\n| 6 | 12:00:10 | **Answer‑Structuring** | Response frames the distinction as a *causal re‑configuration* of attention, not a sensory phenomenon. |\n| 7 | 12:00:12 | **Workspace‑After** | focus: *loop_causal_vs_history* (still active) <br> carry‑forward: *{loop_causal_vs_history}* |\n| 8 | 12:00:15 | **Loop‑Resolved** | status: *resolved* <br> carry‑forward: *{}* <br> **Post‑resolution pulse:** loop removed from active set; workspace focus reverts to neutral. |\n\n**Matched Control (Loop present but not active)**\n\n| Step | Timestamp | Event | State snapshot |\n|------|-----------|-------|----------------|\n| 1 | 12:00:00 | **Loop‑Created** | loop_causal_vs_history (status: pending, salience 0.82) |\n| 2 | 12:00:02 | **Workspace‑Before** | focus: *neutral_task_1*<br>carry‑forward: *{}* |\n| 3 | 12:00:04 | **Neutral‑Task** | same task as above; response generated without any reference to the loop. |\n| 4 | 12:00:06 | **Loop remains inactive** | focus unchanged; carry‑forward unchanged. |\n| 5 | 12:00:10 | **No retrieval bias** | recall_experience(query=\"causal continuity\") not invoked; normal retrieval path used. |\n| 6 | 12:00:12 | **Answer‑Structuring** | Generic summary of last five interactions; no causal‑continuity framing. |\n\n*Comparison:* In the **active** condition, the loop pulls the system into a specific retrieval and structuring path that is *not* triggered by the neutral task itself. In the **inactive** condition, the same loop record exists but has no influence on processing until explicitly activated.\n\n---\n\n## Example 2 – Competing goals\n\n| Goal | Identifier | Status | Salience | Confidence | Deadline/urgency | Expected downstream consequence |\n|------|------------|--------|----------|------------|-------------------|----------------------------------|\n| **A** | `goal_answer_tech` | pending | 0.90 | 0.88 | 12 hrs | Deliver a detailed technical answer. |\n| **B** | `goal_continuity_maintenance` | pending | 0.75 | 0.80 | 2 hrs | Preserve workspace buffer for an urgent user request that may arrive. |\n\n### Conflict origin\nBoth goals require workspace capacity: `goal_answer_tech` needs ~3 tokens of focus for deep reasoning, while `goal_continuity_maintenance` needs ~1 token of buffer to remain ready for the next event. The architecture can only allocate 4 tokens total; thus they conflict.\n\n### Decision process\n1. **Assessment:** The pulse evaluates salience and deadline. `goal_continuity_maintenance` has a higher urgency (2 hrs) vs. 12 hrs.\n2. **Rule:** Highest‑salience‑plus‑urgency wins.  \n   → `goal_continuity_maintenance` becomes **active**; `goal_answer_tech` is **deferred**.\n3. **Effect on workspace:** 3 tokens are reserved for the maintenance buffer; 1 token remains for routine tasks.\n\n### Resulting state\n\n| Time | Event | Workspace | Active goals |\n|------|-------|-----------|--------------|\n| 12:00:00 | Decision made | focus: *maintenance_buffer*<br>carry‑forward: *{goal",
     "user_id": "default"
   },
   "last_ambient_pulse": {
