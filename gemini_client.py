@@ -50,8 +50,36 @@ def _capability_tools():
             ),
             types.FunctionDeclaration(
                 name="inspect_experiences",
-                description="Inspect recent durable continuity/experience records.",
+                description="Inspect actual durable ExperiencePackets and recent continuity lineage.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={"limit": types.Schema(type="INTEGER")},
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="inspect_participant",
+                description="Inspect Dex's current ParticipantSnapshot, including interlocutor and experiential continuity.",
                 parameters=types.Schema(type="OBJECT", properties={}),
+            ),
+            types.FunctionDeclaration(
+                name="inspect_conversation",
+                description="Inspect the durable ongoing first-person conversation state for a participant.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={"user_id": types.Schema(type="STRING")},
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="recall_experience",
+                description="Deliberately evoke matching lived experiences from durable experience memory into Dex's active workspace.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "query": types.Schema(type="STRING"),
+                        "limit": types.Schema(type="INTEGER"),
+                    },
+                    required=["query"],
+                ),
             ),
             types.FunctionDeclaration(
                 name="listen",
@@ -60,7 +88,7 @@ def _capability_tools():
             ),
             types.FunctionDeclaration(
                 name="evoke",
-                description="Deliberately retrieve one DexOS resource into active cognition. Resources: state, workspace, goals, open_loops, thoughts, experiences, signals.",
+                description="Deliberately retrieve one DexOS resource into active cognition. Resources: state, workspace, goals, open_loops, thoughts, experiences, participant, conversation, signals.",
                 parameters=types.Schema(
                     type="OBJECT",
                     properties={
