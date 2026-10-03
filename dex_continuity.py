@@ -35,6 +35,7 @@ def _meaningful_event(payload: Dict[str, Any]) -> bool:
         "PARTICIPANT_EVENT",
         "RESPONSE_COMPLETED",
         "THOUGHT_GENERATED",
+        "THOUGHT_CHANGED",
         "GOAL_CREATED",
         "GOAL_CHANGED",
         "GOAL_COMPLETED",
