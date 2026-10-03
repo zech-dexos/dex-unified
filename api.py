@@ -309,7 +309,7 @@ FALLBACK_MODELS = [
 ]
 
 async def call_llm(client, messages, max_tokens=1000):
-    gemini_result = await call_gemini(client, messages, max_tokens)
+    gemini_result = await call_gemini(client, messages, max_tokens, enable_tools=True)
     if gemini_result:
         return gemini_result
 
