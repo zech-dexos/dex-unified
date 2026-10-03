@@ -83,7 +83,7 @@ def _default_self_state(dex_id: Optional[str] = None) -> Dict[str, Any]:
 
 def load_self_state(path: Path = SELF_STATE_PATH) -> Dict[str, Any]:
     """Load SelfState from disk. Creates a fresh default state on first run."""
-    if not path.exists():
+    if not path.exists() or not path.read_text(encoding="utf-8").strip():
         state = _default_self_state()
         path.parent.mkdir(parents=True, exist_ok=True)
 
