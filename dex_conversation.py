@@ -108,12 +108,13 @@ def experience_contribution(
     deliberately does not infer that silence means the conversation ended.
     """
     state = load_conversation(user_id)
+    canonical_id = str(state.get("conversation_id") or _canonical_participant_id(user_id))
     text = message.strip()
     responded = bool(reply and reply.strip())
 
     if responded:
         first_person = (
-            f"I was with {user_id} in an ongoing conversation. "
+            f"I was with {canonical_id} in an ongoing conversation. "
             f"I received: {text[:500]} "
             f"I responded: {reply[:1000]} "
             f"I remain in the conversation and carry its thread forward."
@@ -121,7 +122,7 @@ def experience_contribution(
         state["interaction_state"] = "CONTINUING"
     else:
         first_person = (
-            f"I was with {user_id} in an ongoing conversation. "
+            f"I was with {canonical_id} in an ongoing conversation. "
             f"I received: {text[:500]} "
             f"I held this contribution without expressing a response. "
             f"The conversation remains open; silence did not end my experience."
