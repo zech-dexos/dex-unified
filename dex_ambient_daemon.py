@@ -161,9 +161,12 @@ def _persist_pulse_state(target, thought_text, salience, status, next_attention_
     pulse = {
         "timestamp": _now_iso(),
         "status": status,
-        "target": {"kind": "shared_cognitive_field", "field": field},
+        "target": target,
         "thought": thought_text,
         "salience": salience,
+        "attention": attention if "attention" in locals() else "",
+        "continuation": continuation if "continuation" in locals() else "",
+        "assessment": assessment if "assessment" in locals() else "uncertain",
     }
     delta = {"last_ambient_pulse": pulse}
 
@@ -223,6 +226,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
 
         state = load_self_state()
         field = _build_cognitive_field(state)
+        target = {"kind": "shared_cognitive_field", "field": field}
 
         # Recall is another signal in the same field, not a reason to select
         # one target and discard everything else.
@@ -272,7 +276,10 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
 
             data = json.loads(clean_text)
             thought_text = data.get("thought", "")
-            salience = max(0.0, min(1.0, float(data.get("salience", 0.0))))\n            attention = str(data.get("attention", "")).strip()\n            continuation = str(data.get("continuation", "")).strip()\n            assessment = str(data.get("assessment", "uncertain")).strip().lower()
+            salience = max(0.0, min(1.0, float(data.get("salience", 0.0))))
+            attention = str(data.get("attention", "")).strip()
+            continuation = str(data.get("continuation", "")).strip()
+            assessment = str(data.get("assessment", "uncertain")).strip().lower()
 
             if thought_text:
                 add_thought(thought_text, salience)
