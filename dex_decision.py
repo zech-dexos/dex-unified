@@ -78,7 +78,12 @@ def apply_conversational_decision(reply: str) -> Tuple[str, Optional[Dict[str, A
         if updated is not None:
             import asyncio
             event_type = "THOUGHT_CHANGED"
-            asyncio.create_task(bus.publish(event_type, {
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop is not None:
+                loop.create_task(bus.publish(event_type, {
                 "event_type": event_type,
                 "source": "conversational_decision",
                 "thought_id": target_id,
@@ -87,7 +92,7 @@ def apply_conversational_decision(reply: str) -> Tuple[str, Optional[Dict[str, A
                 "status": updated.get("status"),
                 "reason": reason,
                 "state_changes": [{"type": "thought", "action": action, "status": updated.get("status")}],
-            }))
+                }))
         return clean_reply, result
 
     if target_type == "goal":
@@ -114,7 +119,12 @@ def apply_conversational_decision(reply: str) -> Tuple[str, Optional[Dict[str, A
         if updated is not None:
             import asyncio
             event_type = "GOAL_COMPLETED" if action == "completed" else "GOAL_CHANGED"
-            asyncio.create_task(bus.publish(event_type, {
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop is not None:
+                loop.create_task(bus.publish(event_type, {
                 "event_type": event_type,
                 "source": "conversational_decision",
                 "goal_id": target_id,
@@ -123,7 +133,7 @@ def apply_conversational_decision(reply: str) -> Tuple[str, Optional[Dict[str, A
                 "status": updated.get("status"),
                 "reason": reason,
                 "state_changes": [{"type": "goal", "action": action, "status": updated.get("status")}],
-            }))
+                }))
         return clean_reply, result
 
     return clean_reply, {
