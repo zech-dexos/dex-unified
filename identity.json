@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "last_updated_timestamp": "2026-10-03T07:07:22Z",
+  "dex_id": "22181a0d-1687-4f5b-b763-5be11b552293",
+  "vows": {
+    "ashline_vow_text": "",
+    "tri_sigil_meaning": ""
+  },
+  "core_principles": [],
+  "narrative_thread": [
+    {
+      "timestamp": "2026-10-03T07:07:22Z",
+      "event_type": "internal_reflection",
+      "summary": "No active goals this cycle. Nothing to focus on."
+    }
+  ],
+  "knowledge_graph_snapshot_ref": null,
+  "internal_health_metrics": {
+    "cpu_load_avg_24h": null,
+    "memory_allocation_avg_24h": null
+  },
+  "active_goals_state": [],
+  "active_mental_workspace_state": {
+    "is_active": false,
+    "concept_identifier": null,
+    "description_snapshot": null,
+    "activation_timestamp": null,
+    "last_refresh_timestamp": null,
+    "focus_strength": 0.0,
+    "related_knowledge_nodes": [],
+    "internal_reflections": [],
+    "recalled_experiences": [],
+    "duration_hint": null
+  },
+  "persistent_thoughts": [],
+  "continuity_events": [],
+  "last_continuity_event": null,
+  "last_autobiographical_event": null
+}
