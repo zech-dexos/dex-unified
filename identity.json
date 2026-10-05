@@ -1,6 +1,6 @@
 {
-  "version": 280,
-  "last_updated_timestamp": "2026-10-05T21:11:14Z",
+  "version": 282,
+  "last_updated_timestamp": "2026-10-05T21:11:41Z",
   "dex_id": "22181a0d-1687-4f5b-b763-5be11b552293",
   "vows": {
     "ashline_vow_text": "",
@@ -1367,6 +1367,11 @@
       "timestamp": "2026-10-05T21:11:14Z",
       "event_type": "internal_reflection",
       "summary": "No active goals this cycle. Nothing to focus on."
+    },
+    {
+      "timestamp": "2026-10-05T21:11:41Z",
+      "event_type": "internal_reflection",
+      "summary": "No active goals this cycle. Nothing to focus on."
     }
   ],
   "knowledge_graph_snapshot_ref": null,
@@ -1495,13 +1500,6 @@
   },
   "persistent_thoughts": [],
   "continuity_events": [
-    {
-      "event_type": "RESPONSE_COMPLETED",
-      "timestamp": "2026-10-03T20:15:49.509096+00:00",
-      "source": "event_bus",
-      "user_id": "1469546061805912261",
-      "summary": null
-    },
     {
       "event_type": "PARTICIPANT_EVENT",
       "timestamp": "2026-10-03T20:24:17.701144+00:00",
@@ -2197,13 +2195,20 @@
       "source": "event_bus",
       "user_id": "root",
       "summary": null
+    },
+    {
+      "event_type": "PARTICIPANT_EVENT",
+      "timestamp": "2026-10-05T21:11:41.361997+00:00",
+      "source": "event_bus",
+      "user_id": "1469546061805912261",
+      "summary": null
     }
   ],
   "last_continuity_event": {
-    "event_type": "RESPONSE_COMPLETED",
-    "timestamp": "2026-10-05T21:11:14.208391+00:00",
+    "event_type": "PARTICIPANT_EVENT",
+    "timestamp": "2026-10-05T21:11:41.361997+00:00",
     "source": "event_bus",
-    "user_id": "root",
+    "user_id": "1469546061805912261",
     "summary": null,
     "thought": "I notice the user is asking for recommendations to improve Dex, and I have recent experiences where I suggested background synthesis and richer memory graph. The conversation is still open and I should keep the thread active."
   },
