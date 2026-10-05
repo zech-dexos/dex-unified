@@ -310,8 +310,26 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                 "tick_count": gate.get("tick_count"),
             }
 
+        # Let the architecture's autonomous selector establish a persistent
+        # cognitive target before the ambient spark sees the field. This joins
+        # GOSDW/APE goal selection to the shared cognitive field instead of
+        # leaving those autonomous mechanisms as a parallel, unused path.
+        try:
+            from ape_scheduler import run_cycle
+            autonomous_selection = run_cycle()
+            print(
+                "[Ambient Daemon] autonomous selection: "
+                f"goal={autonomous_selection.get('top_goal')} "
+                f"thought={autonomous_selection.get('thought_id')} "
+                f"source={autonomous_selection.get('thought_source')}"
+            )
+        except Exception as e:
+            autonomous_selection = {"ran": False, "error": str(e)}
+            print(f"[Ambient Daemon] autonomous selection failed: {e}")
+
         state = load_self_state()
         field = _build_cognitive_field(state)
+        field["autonomous_selection"] = autonomous_selection
         target = {"kind": "shared_cognitive_field", "field": field}
 
         # Recall is another signal in the same field, not a reason to select
