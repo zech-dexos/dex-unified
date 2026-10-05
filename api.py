@@ -71,7 +71,6 @@ app = FastAPI(title="ReasonFlow API", version="1.0.0")
 # ─── DEX AMBIENT COGNITION ─────────────────────────────────────────────────────
 
 from gemini_client import call_gemini, _get_client
-from self_state import load_self_state
 
 # Ambient cognition is deliberately isolated from Vertex/Gemini.
 # The ambient pulse uses a small Groq model; top-tier Gemini is never
@@ -82,45 +81,9 @@ if ambient_model.startswith(("gemini", "vertex")):
     ambient_model = "openai/gpt-oss-20b"
 
 
-def _build_ambient_context() -> str:
-    """Lightweight self-state summary for ambient ticks — no full
-    constitution, no participant/recall context. Keeps the tick
-    grounded in real Dex state instead of a bare instruction string."""
-    try:
-        state = load_self_state()
-    except Exception as e:
-        print(f"[Ambient Daemon] self_state load failed: {e}")
-        return ""
-
-    ctx = ["[DEX SELF-STATE — AMBIENT TICK]"]
-    workspace = state.get("active_mental_workspace_state", {})
-    if workspace.get("is_active") or workspace.get("concept_identifier"):
-        ctx.append(f"Active workspace: {workspace.get('concept_identifier')}")
-
-    goals = state.get("active_goals_state", [])
-    if goals:
-        ctx.append(f"Active goals: {goals}")
-
-    thoughts = state.get("persistent_thoughts", [])
-    unresolved = [
-        t for t in thoughts
-        if t.get("status") in ("active", "deferred")
-    ]
-    if unresolved:
-        ctx.append("Unresolved thoughts:")
-        for t in unresolved[-5:]:
-            ctx.append(
-                f"- [{t.get('priority', 'medium')}] {t.get('content', '')}"
-            )
-
-    return "\n".join(ctx) if len(ctx) > 1 else ""
-
 
 async def ambient_llm_callable(prompt: str) -> str:
-    """Cheap ambient cognition adapter. Never routes ambient work through Vertex/Gemini."""
-    context = _build_ambient_context()
-    full_prompt = f"{context}\n\n{prompt}" if context else prompt
-
+    """Cheap ambient cognition adapter. The daemon supplies the complete shared cognitive field."""
     if not GROQ_KEY:
         raise ValueError("GROQ_KEY is not configured for ambient cognition")
 
@@ -133,7 +96,7 @@ async def ambient_llm_callable(prompt: str) -> str:
             },
             json={
                 "model": ambient_model,
-                "messages": [{"role": "user", "content": full_prompt}],
+                "messages": [{"role": "user", "content": prompt}],
                 "max_completion_tokens": 512,
                 "temperature": 0.4,
                 "reasoning_effort": "low",
