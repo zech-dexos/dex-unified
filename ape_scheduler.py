@@ -79,20 +79,10 @@ def _derive_autonomous_thought(current, ranked):
                 "goal_id": goal.get("goal_id"),
             }
 
-        workspace = current.get("active_mental_workspace_state", {})
-        if workspace.get("is_active"):
-            concept = workspace.get("concept_identifier")
-            if concept:
-                PREFIX = "Reconsider and develop: "
-                base = concept
-                while base.startswith(PREFIX):
-                    base = base[len(PREFIX):]
-                return {
-                    "content": f"{PREFIX}{base}",
-                    "source": "workspace_reconsideration",
-                    "goal_id": goal.get("goal_id"),
-                }
-
+        # A selected goal is the authoritative cognitive target for this
+        # cycle. An unrelated active workspace must not override it.
+        # Workspace continuity is already represented by persistent_thoughts
+        # when it belongs to the selected goal.
         return {
             "content": goal["description"],
             "source": "goal_derived",
