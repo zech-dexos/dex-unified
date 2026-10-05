@@ -255,6 +255,7 @@ def evoke(resource: str) -> Dict[str, Any]:
         "experiences": inspect_experiences,
         "participant": inspect_participant,
         "conversation": inspect_conversation,
+        "self_history": inspect_self_history,
         "signals": listen,
     }
     fn = resources.get(resource)
