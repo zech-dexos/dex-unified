@@ -5,11 +5,17 @@ This is the narrow boundary between Dex cognition and real runtime
 capabilities. Read-only introspection is exposed first; arbitrary shell
 execution is intentionally not exposed.
 """
+import hashlib
 import json
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from paths import IDENTITY_PATH, LOOPS_PATH, LEDGER_PATH, PARTICIPANT_PATH, SESSION_PATH, EXPERIENCES_PATH
+from paths import (
+    IDENTITY_PATH, LOOPS_PATH, LEDGER_PATH, PARTICIPANT_PATH, SESSION_PATH,
+    EXPERIENCES_PATH, NARRATIVE_PATH, PULSE_LOG_PATH, CAPABILITY_RECEIPTS_PATH,
+)
 
 
 def _state() -> Dict[str, Any]:
@@ -117,6 +123,128 @@ def listen() -> Dict[str, Any]:
     }
 
 
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _record_timestamp(record: Dict[str, Any]) -> Optional[str]:
+    for key in ("timestamp", "created_at", "updated_at", "recorded_at",
+                "event_timestamp", "last_updated_timestamp"):
+        value = record.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
+
+
+def _parse_timestamp(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _in_time_range(timestamp, from_timestamp, to_timestamp) -> bool:
+    value = _parse_timestamp(timestamp)
+    if value is None:
+        return False
+    start = _parse_timestamp(from_timestamp)
+    end = _parse_timestamp(to_timestamp)
+    return not ((start and value < start) or (end and value > end))
+
+
+def _jsonl_records(path, from_timestamp, to_timestamp, limit):
+    if not path.exists():
+        return []
+    records = []
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception:
+        return []
+    for line in reversed(lines):
+        try:
+            record = json.loads(line)
+        except Exception:
+            continue
+        if not isinstance(record, dict):
+            continue
+        if not _in_time_range(_record_timestamp(record), from_timestamp, to_timestamp):
+            continue
+        record["_source"] = path.name
+        records.append(record)
+        if len(records) >= limit:
+            break
+    records.reverse()
+    return records
+
+
+def inspect_self_history(
+    from_timestamp: Optional[str] = None,
+    to_timestamp: Optional[str] = None,
+    event_types: Optional[list] = None,
+    limit: int = 100,
+) -> Dict[str, Any]:
+    """Inspect durable history; never reconstruct missing historical state."""
+    limit = max(1, min(int(limit), 500))
+    wanted = {str(x).strip() for x in (event_types or []) if str(x).strip()}
+    sources = {
+        "continuity_ledger": LEDGER_PATH,
+        "pulse": PULSE_LOG_PATH,
+        "narrative": NARRATIVE_PATH,
+        "experiences": EXPERIENCES_PATH,
+    }
+    history = {}
+    for name, path in sources.items():
+        rows = _jsonl_records(path, from_timestamp, to_timestamp, limit)
+        if wanted:
+            rows = [r for r in rows
+                    if str(r.get("event_type", r.get("type", ""))) in wanted]
+        history[name] = rows
+    observed_versions = []
+    for rows in history.values():
+        for row in rows:
+            version = row.get("state_version", row.get("version"))
+            if version is not None:
+                observed_versions.append(version)
+    return {
+        "from_timestamp": from_timestamp,
+        "to_timestamp": to_timestamp,
+        "event_types": sorted(wanted),
+        "current_state": inspect_state(),
+        "history": history,
+        "observed_state_versions": observed_versions,
+        "state_history_note": (
+            "Historical snapshots are returned only when actually persisted; "
+            "current state is never presented as reconstructed history."
+        ),
+    }
+
+
+def _write_capability_receipt(receipt):
+    CAPABILITY_RECEIPTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with CAPABILITY_RECEIPTS_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(receipt, ensure_ascii=False, default=str) + "\\n")
+
+
+def _make_capability_receipt(name, args, result, started_at, finished_at):
+    payload = json.dumps(result, ensure_ascii=False, sort_keys=True, default=str)
+    return {
+        "receipt_id": str(uuid.uuid4()),
+        "capability": name,
+        "args": args,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "success": "error" not in result,
+        "state_version_observed": result.get("version"),
+        "result": result,
+        "result_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+    }
+
 def evoke(resource: str) -> Dict[str, Any]:
     resources = {
         "state": inspect_state,
@@ -179,15 +307,27 @@ CAPABILITY_FUNCTIONS = {
     "listen": listen,
     "evoke": evoke,
     "search_architecture": search_architecture,
+    "inspect_self_history": inspect_self_history,
 }
 
 
 def execute_capability(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute one real capability and persist an auditable receipt."""
+    started_at = _utc_now()
     fn = CAPABILITY_FUNCTIONS.get(name)
     if not fn:
-        return {"error": f"capability not available: {name}"}
+        result = {"error": f"capability not available: {name}"}
+    else:
+        try:
+            raw_result = fn(**args)
+            result = raw_result if isinstance(raw_result, dict) else {"result": raw_result}
+        except Exception as exc:
+            result = {"error": f"{name} failed: {exc}"}
+    finished_at = _utc_now()
+    receipt = _make_capability_receipt(name, args, result, started_at, finished_at)
     try:
-        result = fn(**args)
-        return result if isinstance(result, dict) else {"result": result}
+        _write_capability_receipt(receipt)
     except Exception as exc:
-        return {"error": f"{name} failed: {exc}"}
+        result = dict(result)
+        result["receipt_error"] = f"failed to persist capability receipt: {exc}"
+    return result
