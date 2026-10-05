@@ -44,17 +44,25 @@ def _derive_autonomous_thought(current, ranked):
         and t.get("content")
     ]
 
-    if active:
-        t = active[0]
-        return {
-            "content": t["content"],
-            "source": "persistent_thought",
-            "thought_id": t.get("thought_id"),
-            "status": t.get("status"),
-        }
-
     if ranked:
         goal = ranked[0]
+
+        # Continue an existing thought only when it belongs to the goal
+        # currently selected by GOSDW. An unrelated stale thought must not
+        # hijack a newly selected higher-priority objective.
+        goal_thoughts = [
+            t for t in active
+            if t.get("goal_id") == goal.get("goal_id")
+        ]
+        if goal_thoughts:
+            t = goal_thoughts[0]
+            return {
+                "content": t["content"],
+                "source": "persistent_thought",
+                "thought_id": t.get("thought_id"),
+                "status": t.get("status"),
+                "goal_id": goal.get("goal_id"),
+            }
 
         subtasks = [
             x for x in goal.get("sub_tasks", [])
