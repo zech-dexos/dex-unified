@@ -228,7 +228,7 @@ def inspect_self_history(
 def _write_capability_receipt(receipt):
     CAPABILITY_RECEIPTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with CAPABILITY_RECEIPTS_PATH.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(receipt, ensure_ascii=False, default=str) + "\\n")
+        handle.write(json.dumps(receipt, ensure_ascii=False, default=str) + "\n")
 
 
 def _make_capability_receipt(name, args, result, started_at, finished_at):
