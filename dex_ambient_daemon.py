@@ -60,57 +60,66 @@ def _open_loops(path):
 
 
 def _build_cognitive_field(state):
-    """Assemble the compact shared cognitive field presented to the one ambient spark."""
+    """Build a machine-native cognitive envelope over Dex's durable raw memory.
+
+    Raw state remains authoritative and untouched. The ambient spark receives
+    compact architectural objects and stable references instead of a prose
+    reconstruction of Dex or whole state records.
+    """
     now = datetime.now(timezone.utc)
-    field = {
+    envelope = {
+        "schema": "DEXOS-CSE-1",
         "timestamp": _now_iso(),
+        "raw_memory": "authoritative; address by stable ids",
+        "attention": None,
         "goals": [],
-        "persistent_thoughts": [],
-        "open_loops": [],
+        "thoughts": [],
+        "loops": [],
         "workspace": {},
         "conversation": {},
-        "recent_pulse": state.get("last_ambient_pulse") or {},
+        "pulse": {},
+        "memory_refs": [],
     }
 
-    # Goals contribute what matters, including unfinished sub-work.
+    # Goals: preserve identity and action semantics, but cap descriptive text.
     for goal in prioritize_goals()[:3]:
         subtasks = [
             {
-                "description": x.get("description") or x.get("task") or "",
+                "id": x.get("task_id") or x.get("subtask_id"),
+                "text": (x.get("description") or x.get("task") or "")[:220],
                 "status": x.get("status", "active"),
             }
             for x in goal.get("sub_tasks", [])
             if isinstance(x, dict) and x.get("status") not in ("completed", "failed")
         ][:3]
-        field["goals"].append({
-            "goal_id": goal.get("goal_id"),
-            "description": goal.get("description", ""),
+        envelope["goals"].append({
+            "id": goal.get("goal_id"),
+            "text": (goal.get("description") or "")[:280],
             "priority": goal.get("priority", "medium"),
             "status": goal.get("status", "active"),
-            "success_criteria": goal.get("success_criteria", ""),
-            "sub_tasks": subtasks,
-            "current_focus_target": goal.get("current_focus_target"),
+            "criteria": (goal.get("success_criteria") or "")[:220],
+            "subtasks": subtasks,
+            "focus": goal.get("current_focus_target"),
         })
 
-    # Persistent thoughts contribute unresolved cognitive material.
+    # Persistent thoughts: stable ids + bounded working content.
     thoughts = [
         t for t in state.get("persistent_thoughts", [])
         if t.get("status") in ("active", "deferred") and t.get("content")
     ]
     for t in thoughts[-5:]:
         next_at = _parse_time(t.get("next_attention_at"))
-        field["persistent_thoughts"].append({
-            "thought_id": t.get("thought_id"),
-            "content": t.get("content", ""),
+        envelope["thoughts"].append({
+            "id": t.get("thought_id"),
+            "text": str(t.get("content", ""))[:260],
             "status": t.get("status"),
             "priority": t.get("priority", "medium"),
             "confidence": t.get("confidence", 0.5),
             "attention_count": t.get("attention_count", 0),
-            "next_attention_at": t.get("next_attention_at"),
             "due": next_at is None or now >= next_at,
         })
 
-    # Open loops are unresolved questions/unfinished matters, not commands.
+    # Open loops: unresolved references, not commands.
     try:
         from paths import LOOPS_PATH
         for loop in _open_loops(LOOPS_PATH):
@@ -118,42 +127,77 @@ def _build_cognitive_field(state):
                 isinstance(loop, dict)
                 and loop.get("status", "open") not in ("resolved", "closed", "abandoned")
             ):
-                field["open_loops"].append({
-                    "loop_id": loop.get("loop_id"),
-                    "description": loop.get("description") or loop.get("question") or loop.get("content") or "",
+                envelope["loops"].append({
+                    "id": loop.get("loop_id"),
+                    "text": (
+                        loop.get("description")
+                        or loop.get("question")
+                        or loop.get("content")
+                        or ""
+                    )[:240],
                     "status": loop.get("status", "open"),
                 })
-                if len(field["open_loops"]) >= 5:
+                if len(envelope["loops"]) >= 5:
                     break
     except Exception as e:
         print(f"[Ambient Daemon] open_loops field load failed: {e}")
 
     workspace = state.get("active_mental_workspace_state", {})
     if workspace.get("is_active") or workspace.get("concept_identifier"):
-        field["workspace"] = {
-            "is_active": workspace.get("is_active", False),
-            "concept_identifier": workspace.get("concept_identifier"),
-            "description_snapshot": workspace.get("description_snapshot"),
-            "focus_strength": workspace.get("focus_strength"),
-            "internal_reflections": workspace.get("internal_reflections", [])[-3:],
-            "recalled_experiences": workspace.get("recalled_experiences", [])[-3:],
+        envelope["attention"] = {
+            "kind": "workspace",
+            "id": workspace.get("concept_identifier"),
+            "active": workspace.get("is_active", False),
+            "strength": workspace.get("focus_strength"),
+        }
+        envelope["workspace"] = {
+            "id": workspace.get("concept_identifier"),
+            "active": workspace.get("is_active", False),
+            "description": str(workspace.get("description_snapshot") or "")[:280],
+            "reflections": [
+                {
+                    "text": str(r.get("reflection", ""))[:220],
+                    "timestamp": r.get("timestamp"),
+                }
+                for r in workspace.get("internal_reflections", [])[-2:]
+                if isinstance(r, dict)
+            ],
         }
 
-    # Conversation is cognitive material even while Root is silent.
+    # Conversation is bounded working context, not the conversation archive.
     try:
         conversation = load_conversation("default")
         shared_thread = conversation.get("shared_thread", "")
         if shared_thread:
-            field["conversation"] = {
-                "participant_id": conversation.get("participant_id"),
-                "shared_thread": shared_thread[-4000:],
+            envelope["conversation"] = {
+                "participant": conversation.get("participant_id"),
+                "thread": shared_thread[-1400:],
                 "last_ambient_at": conversation.get("last_ambient_at"),
             }
     except Exception as e:
         print(f"[Ambient Daemon] conversation field load failed: {e}")
 
-    # Keep the field bounded. The spark gets signals, not entire state files.
-    return field
+    pulse = state.get("last_ambient_pulse") or {}
+    if pulse:
+        envelope["pulse"] = {
+            "timestamp": pulse.get("timestamp"),
+            "thought": str(pulse.get("thought") or "")[:260],
+            "attention": str(pulse.get("attention") or "")[:220],
+            "continuation": str(pulse.get("continuation") or "")[:220],
+            "assessment": pulse.get("assessment"),
+            "focus_kind": pulse.get("focus_kind"),
+            "focus_id": pulse.get("focus_id"),
+        }
+
+    # Stable references tell the spark that richer raw memory exists without
+    # expanding the prompt. Raw memory remains retrievable by architecture.
+    envelope["memory_refs"] = [
+        t.get("thought_id")
+        for t in thoughts[-5:]
+        if t.get("thought_id")
+    ]
+
+    return envelope
 
 
 def _field_text(field):
@@ -361,10 +405,12 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
 
         cognitive_prompt = (
             f"{AMBIENT_PROMPT}\n\n"
-            "SHARED COGNITIVE FIELD — ALL OF THIS IS AVAILABLE TO YOUR ATTENTION:\n"
+            "DEXOS COGNITIVE STATE ENVELOPE — SCHEMA DEXOS-CSE-1:\n"
             f"{_field_text(field)}\n\n"
-            + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
-            + "Let attention arise from the whole field. Return the concise cognition and its continuation state."
+            "The envelope is an architectural view over authoritative raw memory. "
+            "Stable ids are references, not summaries. Attend to relationships among "
+            "objects and preserve continuity without requiring the raw archives in the prompt. "
+            "Return the concise cognition and its continuation state."
         )
         response_text = await llm_callable(cognitive_prompt)
 
