@@ -390,17 +390,16 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         recall_query = " ".join(x for x in recall_query_parts if x).strip()
 
         recalled = recall_into_workspace(recall_query, limit=5) if recall_query else []
-        recalled_ctx = format_recalled_experiences(recalled)
         if recalled:
-            field["recalled_experiences"] = [
+            field["memory_refs"] = list(field.get("memory_refs", []))
+            field["recalled_refs"] = [
                 {
-                    "experience_id": getattr(item, "experience_id", None),
-                    "experience": getattr(item, "experience", ""),
-                    "interlocutor": getattr(item, "interlocutor", None),
-                    "continuation": getattr(item, "continuation", ""),
+                    "id": getattr(item, "experience_id", None) if not isinstance(item, dict) else item.get("experience_id"),
+                    "interlocutor": getattr(item, "interlocutor", None) if not isinstance(item, dict) else item.get("interlocutor"),
+                    "continuation": str(getattr(item, "continuation", "") if not isinstance(item, dict) else item.get("continuation", ""))[:180],
+                    "excerpt": str(getattr(item, "experience", "") if not isinstance(item, dict) else item.get("experience", ""))[:220],
                 }
-                if not isinstance(item, dict) else item
-                for item in recalled
+                for item in recalled[:5]
             ]
 
         cognitive_prompt = (
