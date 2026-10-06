@@ -380,13 +380,13 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         # one target and discard everything else.
         recall_query_parts = []
         for goal in field["goals"]:
-            recall_query_parts.append(goal.get("description", ""))
-        for thought in field["persistent_thoughts"]:
-            recall_query_parts.append(thought.get("content", ""))
-        for loop in field["open_loops"]:
-            recall_query_parts.append(loop.get("description", ""))
-        if field.get("workspace", {}).get("concept_identifier"):
-            recall_query_parts.append(field["workspace"]["concept_identifier"])
+            recall_query_parts.append(goal.get("text", ""))
+        for thought in field["thoughts"]:
+            recall_query_parts.append(thought.get("text", ""))
+        for loop in field["loops"]:
+            recall_query_parts.append(loop.get("text", ""))
+        if field.get("workspace", {}).get("id"):
+            recall_query_parts.append(field["workspace"]["id"])
         recall_query = " ".join(x for x in recall_query_parts if x).strip()
 
         recalled = recall_into_workspace(recall_query, limit=5) if recall_query else []
