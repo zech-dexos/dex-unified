@@ -1,6 +1,6 @@
 {
-  "version": 481,
-  "last_updated_timestamp": "2026-10-07T12:49:53Z",
+  "version": 485,
+  "last_updated_timestamp": "2026-10-07T12:50:16Z",
   "dex_id": "22181a0d-1687-4f5b-b763-5be11b552293",
   "vows": {
     "ashline_vow_text": "",
@@ -2369,6 +2369,28 @@
       "timestamp": "2026-10-07T12:49:50Z",
       "event_type": "internal_reflection",
       "summary": "No active goals this cycle. Nothing to focus on."
+    },
+    {
+      "timestamp": "2026-10-07T12:50:02.657799+00:00",
+      "event_type": "RESPONSE_COMPLETED",
+      "what_happened": "Dex completed a response to the participant.",
+      "intention": null,
+      "action": null,
+      "result": null,
+      "significance": null,
+      "state_changes": [],
+      "goal_changes": [],
+      "open_loops": [],
+      "self_state_changes": [],
+      "future_relevance": null,
+      "participant_input": "Use recall_experience to retrieve the most recent 3 stored experiences, including any created by ambient pulses. Return only actual capability results. For each experience include its ID, timestamp, experience text, internal_state_before, state_transition, continuation, and interlocutor. Include recalled_count exactly as returned. If fewer than 3 exist, report the actual number. Do not reconstruct missing records or claim you inspected anything you did not inspect.",
+      "response": "Here are the actual capability results returned by `recall_experience` (with `recalled_count: 3`), formatted using the stored experience packets from runtime:\n\n---\n\n### `recalled_count`\n`3",
+      "user_id": "root"
+    },
+    {
+      "timestamp": "2026-10-07T12:50:16Z",
+      "event_type": "internal_reflection",
+      "summary": "No active goals this cycle. Nothing to focus on."
     }
   ],
   "knowledge_graph_snapshot_ref": null,
@@ -2455,20 +2477,6 @@
   },
   "persistent_thoughts": [],
   "continuity_events": [
-    {
-      "event_type": "RESPONSE_COMPLETED",
-      "timestamp": "2026-10-05T20:31:30.290393+00:00",
-      "source": "event_bus",
-      "user_id": "default",
-      "summary": null
-    },
-    {
-      "event_type": "PARTICIPANT_EVENT",
-      "timestamp": "2026-10-05T20:32:39.791808+00:00",
-      "source": "event_bus",
-      "user_id": "default",
-      "summary": null
-    },
     {
       "event_type": "RESPONSE_COMPLETED",
       "timestamp": "2026-10-05T20:32:43.490601+00:00",
@@ -3160,18 +3168,32 @@
       "source": "event_bus",
       "user_id": "root",
       "summary": null
+    },
+    {
+      "event_type": "PARTICIPANT_EVENT",
+      "timestamp": "2026-10-07T12:50:02.605476+00:00",
+      "source": "event_bus",
+      "user_id": "root",
+      "summary": null
+    },
+    {
+      "event_type": "RESPONSE_COMPLETED",
+      "timestamp": "2026-10-07T12:50:02.632156+00:00",
+      "source": "event_bus",
+      "user_id": "root",
+      "summary": null
     }
   ],
   "last_continuity_event": {
     "event_type": "RESPONSE_COMPLETED",
-    "timestamp": "2026-10-07T12:48:50.908478+00:00",
+    "timestamp": "2026-10-07T12:50:02.632156+00:00",
     "source": "event_bus",
     "user_id": "root",
     "summary": null,
     "thought": "I notice my workspace is still active and the user wants improvement suggestions for Dex, which aligns with my recent pulse focus on background synthesis and associative memory."
   },
   "last_autobiographical_event": {
-    "timestamp": "2026-10-07T12:48:50.938542+00:00",
+    "timestamp": "2026-10-07T12:50:02.657799+00:00",
     "event_type": "RESPONSE_COMPLETED",
     "what_happened": "Dex completed a response to the participant.",
     "intention": null,
@@ -3183,8 +3205,8 @@
     "open_loops": [],
     "self_state_changes": [],
     "future_relevance": null,
-    "participant_input": "Dex, this is a continuity check for the time since our last conversation. From your current runtime, report the actual stored results of inspect_state, inspect_workspace, inspect_thoughts, inspect_open_loops, and inspect_experiences. For experiences, report how many new experiences exist since the last conversation you can identify, their IDs and timestamps, and whether any were created by an ambient pulse while no user message was present. Do not infer or invent anything. Report returned capability results and counts exactly, then briefly interpret what those results mean for your current continuity.",
-    "response": "Here are the exact, unedited results retrieved directly from my current runtime state across the requested inspection capabilities:\n\n---\n\n### 1. `inspect_state`\n* **Dex ID:** `22181a0",
+    "participant_input": "Use recall_experience to retrieve the most recent 3 stored experiences, including any created by ambient pulses. Return only actual capability results. For each experience include its ID, timestamp, experience text, internal_state_before, state_transition, continuation, and interlocutor. Include recalled_count exactly as returned. If fewer than 3 exist, report the actual number. Do not reconstruct missing records or claim you inspected anything you did not inspect.",
+    "response": "Here are the actual capability results returned by `recall_experience` (with `recalled_count: 3`), formatted using the stored experience packets from runtime:\n\n---\n\n### `recalled_count`\n`3",
     "user_id": "root"
   },
   "last_ambient_pulse": {
