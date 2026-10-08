@@ -88,11 +88,55 @@ def _capability_tools():
             ),
             types.FunctionDeclaration(
                 name="evoke",
-                description="Deliberately retrieve one DexOS resource into active cognition. Resources: state, workspace, goals, open_loops, thoughts, experiences, participant, conversation, signals.",
+                description=(
+                    "Deliberately retrieve one DexOS resource into active cognition. "
+                    "Resources: state, workspace, goals, open_loops, thoughts, experiences, "
+                    "participant, conversation, signals, spark. For spark, provide intention, "
+                    "reach_objective, and bounded Python code; selected_context is optional."
+                ),
                 parameters=types.Schema(
                     type="OBJECT",
                     properties={
-                        "resource": types.Schema(type="STRING"),
+                        "resource": types.Schema(
+                            type="STRING",
+                            enum=[
+                                "state",
+                                "workspace",
+                                "goals",
+                                "open_loops",
+                                "thoughts",
+                                "experiences",
+                                "participant",
+                                "conversation",
+                                "signals",
+                                "spark",
+                            ],
+                        ),
+                        "intention": types.Schema(
+                            type="STRING",
+                            description="Why Dex is choosing to use SparkReach.",
+                        ),
+                        "reach_objective": types.Schema(
+                            type="STRING",
+                            description="The specific evidence or question Dex wants the bounded spark to investigate.",
+                        ),
+                        "code": types.Schema(
+                            type="STRING",
+                            description="Bounded Python code for SparkReach to execute.",
+                        ),
+                        "selected_context": types.Schema(
+                            type="ARRAY",
+                            items=types.Schema(type="OBJECT"),
+                            description="Optional context Dex deliberately selects to extend into the spark.",
+                        ),
+                        "timeout_seconds": types.Schema(
+                            type="INTEGER",
+                            description="Optional SparkReach timeout, bounded by the runtime.",
+                        ),
+                        "memory_mb": types.Schema(
+                            type="INTEGER",
+                            description="Optional SparkReach memory limit, bounded by the runtime.",
+                        ),
                     },
                     required=["resource"],
                 ),
