@@ -91,7 +91,7 @@ def _capability_tools():
                 description=(
                     "Deliberately retrieve one DexOS resource into active cognition. "
                     "Resources: state, workspace, goals, open_loops, thoughts, experiences, "
-                    "participant, conversation, signals, spark. For spark, provide intention, "
+                    "participant, conversation, signals, spark, spark_reaches. For spark, provide intention, "
                     "reach_objective, and bounded Python code; selected_context is optional."
                 ),
                 parameters=types.Schema(
@@ -110,6 +110,7 @@ def _capability_tools():
                                 "conversation",
                                 "signals",
                                 "spark",
+                                "spark_reaches",
                             ],
                         ),
                         "intention": types.Schema(
