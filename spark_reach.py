@@ -7,8 +7,10 @@ caller receives immediately; completion is written back into durable state so
 a later cognition cycle can observe and judge the result.
 
 The process runs inside the existing application/container boundary. It is
-NOT exposed as unrestricted shell execution: only Python source is accepted,
-with an isolated per-run working directory, timeout, and address-space limit.
+NOT a hardened security sandbox: Python remains subject to the host/container
+filesystem and network boundary. Only Python source is accepted, with an
+isolated per-run working directory, timeout, address-space limit, CPU limit,
+and file-size limit.
 """
 
 import concurrent.futures
