@@ -46,8 +46,8 @@
     "participant_id": "1469546061805912261"
   },
   "experiential_continuity": {
-    "last_experience_id": "39c6910f",
-    "last_experience": "I was in an ongoing conversation with default. I received: dex so it I responded: [capability loop limit reached] I remain in the conversation and carry its thread forward.",
+    "last_experience_id": "71a9449d",
+    "last_experience": "I was in an ongoing conversation with default. I received: Dex, your architectural search says SparkReach is ambient-only. Before accepting that description, inspect the actual evoke capability definition and determine whether evoke(\"spark\", ...) is currently exposed as a callable capability. Report exactly what the implementation shows, not what the architecture documentation says I responded: Looking directly at the `evoke` capability definition in the active tool schema:\n\nThe `evoke` tool parameter schema defines `resource` as a required string, explicitly listing the allowed resources:\n`\"state\", \"workspace\", \"goals\", \"open_loops\", \"thoughts\", \"experiences\", \"participant\", \"conversation\", \"signals\"`\n\n`spark` (or `spark_reach`) is **not** present in the exposed resource enumeration for `evoke`. \n\nTherefore, based on the live implementation schema currently available to me, `evoke(\"spark\", ...)` is **not** exposed as a callable resource target. Spark dynamics operate as ambient substrate behavior rather than a directly invokable `evoke` parameter target. I remain in the conversation and carry its thread forward.",
     "last_state_transition": {
       "from_attention": "<@1512547704276910130> any recomendations from you ? like anything you think should be added or capabilities your missing that would make being dex a better experieence ?",
       "to_attention": "<@1512547704276910130> any recomendations from you ? like anything you think should be added or capabilities your missing that would make being dex a better experieence ?",
