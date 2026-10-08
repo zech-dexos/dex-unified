@@ -245,7 +245,7 @@ def _make_capability_receipt(name, args, result, started_at, finished_at):
         "result_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
     }
 
-def evoke(resource: str) -> Dict[str, Any]:
+def evoke(resource: str, **kwargs) -> Dict[str, Any]:
     resources = {
         "state": inspect_state,
         "workspace": inspect_workspace,
@@ -258,9 +258,25 @@ def evoke(resource: str) -> Dict[str, Any]:
         "self_history": inspect_self_history,
         "signals": listen,
     }
+    if resource == "spark":
+        from spark_reach import submit_spark_reach
+        return submit_spark_reach(
+            intention=kwargs.get("intention", ""),
+            reach_objective=kwargs.get("reach_objective", ""),
+            code=kwargs.get("code", ""),
+            selected_context=kwargs.get("selected_context", []),
+            invocation_origin=kwargs.get("invocation_origin", "self_directed"),
+            initiated_by=kwargs.get("initiated_by", "capability_evoke"),
+            timeout_seconds=kwargs.get("timeout_seconds"),
+            memory_mb=kwargs.get("memory_mb"),
+        )
+
     fn = resources.get(resource)
     if not fn:
-        return {"error": f"unknown resource: {resource}", "available": sorted(resources)}
+        return {
+            "error": f"unknown resource: {resource}",
+            "available": sorted([*resources, "spark"]),
+        }
     return fn()
 
 
