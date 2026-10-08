@@ -244,11 +244,22 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         recalled = recall_into_workspace(target["text"], limit=3)
         recalled_ctx = format_recalled_experiences(recalled)
 
+        from spark_reach import pending_spark_reaches
+        pending_reaches = pending_spark_reaches(limit=3)
+        completed_ctx = ""
+        if pending_reaches:
+            completed_ctx = (
+                "\n\nCOMPLETED SPARK REACHES AWAITING YOUR JUDGMENT:\n"
+                + json.dumps(pending_reaches, ensure_ascii=False)
+            )
+
         target_prompt = (
             f"{AMBIENT_PROMPT}\n\n"
             f"SELECTED COGNITIVE TARGET ({target['kind']}):\n{target['text']}\n\n"
             + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
-            + "Return one small development of that target."
+            + completed_ctx
+            + "\n\nReturn one small development of that target. "
+              "A SparkReach is optional; only choose it when the unresolved work itself gives you a reason."
         )
         response_text = await llm_callable(target_prompt)
 
@@ -288,7 +299,29 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                             packet["awaiting_dex_judgment"] = False
                             packet["integrated"] = judgment == "accepted"
                         updated.append(packet)
-                    update_self_state({"pending_spark_reaches": updated[-10:]})
+
+                    delta = {"pending_spark_reaches": updated[-10:]}
+                    if judgment == "accepted":
+                        matched = next(
+                            (p for p in updated if p.get("run_id") == run_id),
+                            None,
+                        )
+                        if matched:
+                            result = matched.get("spark_result", {})
+                            observation = str(result.get("stdout", "")).strip()
+                            if observation:
+                                ws = dict(current_state.get("active_mental_workspace_state", {}))
+                                reflections = list(ws.get("internal_reflections", []))
+                                reflections.append({
+                                    "timestamp": _now_iso(),
+                                    "source": "spark_reach",
+                                    "run_id": run_id,
+                                    "observation": observation[-4000:],
+                                    "judgment": "accepted",
+                                })
+                                ws["internal_reflections"] = reflections[-10:]
+                                delta["active_mental_workspace_state"] = ws
+                    update_self_state(delta)
 
             # Choosing a reach is itself a recorded act of cognition. Queue it
             # only when the ambient result explicitly requests one.
