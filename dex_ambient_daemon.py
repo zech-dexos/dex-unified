@@ -23,13 +23,21 @@ AMBIENT_PROMPT = (
     "rises into attention, what connects, what remains unfinished, what changed, and "
     "what may deserve continued thought. Do not invent facts, goals, or open loops. "
     "Do not perform external actions. Keep the reflection concise and first-person. "
+    "If the field exposes a concrete unresolved question that would benefit from bounded computation, "
+    "you may choose a SparkReach. A SparkReach is optional and must be justified by the field. "
+    "When choosing one, provide a short intention, a concrete reach_objective, and small Python code "
+    "that answers that objective. Do not use SparkReach merely because a pulse occurred. "
+    "You may also judge a completed SparkReach returned in the field. "
     "Output ONLY valid JSON in this exact format, with no other text or markdown: "
     '{"thought": "brief first-person cognition about what arose into attention...", '
     '"salience": 0.5, "attention": "what currently deserves attention", '
     '"continuation": "what remains to be carried forward", '
     '"assessment": "continue|complete|blocked|uncertain|release", '
     '"focus_kind": "persistent_thought|goal|workspace|open_loop|none", '
-    '"focus_id": "stable id when applicable, otherwise empty"}'
+    '"focus_id": "stable id when applicable, otherwise empty", '
+    '"spark_reach": {"intention": "...", "reach_objective": "...", "code": "..."} or null, '
+    '"spark_judgment": {"run_id": "...", "judgment": "accepted|rejected|redirected|deferred", '
+    '"reason": "..."} or null}'
 )
 
 AMBIENT_REVISIT_SECONDS = 300.0
@@ -402,6 +410,29 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                 for item in recalled[:5]
             ]
 
+        # Completed SparkReaches are observations awaiting Dex's own judgment.
+        # They are surfaced inside the same CSE field; they are never auto-integrated.
+        try:
+            from spark_reach import pending_spark_reaches
+            pending_reaches = pending_spark_reaches(limit=3)
+        except Exception as e:
+            pending_reaches = []
+            print(f"[Ambient Daemon] pending SparkReach load failed: {e}")
+
+        if pending_reaches:
+            field["pending_spark_reaches"] = [
+                {
+                    "run_id": item.get("run_id"),
+                    "intention": item.get("intention"),
+                    "reach_objective": item.get("reach_objective"),
+                    "invocation_origin": item.get("invocation_origin"),
+                    "status": item.get("status"),
+                    "spark_result": item.get("spark_result", {}),
+                    "awaiting_dex_judgment": item.get("awaiting_dex_judgment", False),
+                }
+                for item in pending_reaches
+            ]
+
         cognitive_prompt = (
             f"{AMBIENT_PROMPT}\n\n"
             "DEXOS COGNITIVE STATE ENVELOPE — SCHEMA DEXOS-CSE-1:\n"
@@ -431,6 +462,73 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             assessment = str(data.get("assessment", "uncertain")).strip().lower()
             focus_kind = str(data.get("focus_kind", "none")).strip().lower()
             focus_id = str(data.get("focus_id", "")).strip()
+            spark_request = data.get("spark_reach")
+            spark_judgment = data.get("spark_judgment")
+
+            # A completed reach is an observation, not memory. Ambient cognition
+            # must explicitly judge it before integration.
+            if isinstance(spark_judgment, dict) and spark_judgment.get("run_id"):
+                current_state = load_self_state()
+                pending = list(current_state.get("pending_spark_reaches", []))
+                run_id = str(spark_judgment["run_id"])
+                judgment = str(spark_judgment.get("judgment", "")).lower()
+                if judgment in {"accepted", "rejected", "redirected", "deferred"}:
+                    updated = []
+                    for packet in pending:
+                        if packet.get("run_id") == run_id:
+                            packet = dict(packet)
+                            packet["dex_judgment"] = {
+                                "judgment": judgment,
+                                "reason": str(spark_judgment.get("reason", ""))[:2000],
+                                "judged_at": _now_iso(),
+                            }
+                            packet["awaiting_dex_judgment"] = False
+                            packet["integrated"] = judgment == "accepted"
+                        updated.append(packet)
+
+                    delta = {"pending_spark_reaches": updated[-10:]}
+                    if judgment == "accepted":
+                        matched = next((p for p in updated if p.get("run_id") == run_id), None)
+                        if matched:
+                            result = matched.get("spark_result", {})
+                            observation = str(result.get("stdout", "")).strip()
+                            if observation:
+                                ws = dict(current_state.get("active_mental_workspace_state", {}))
+                                reflections = list(ws.get("internal_reflections", []))
+                                reflections.append({
+                                    "timestamp": _now_iso(),
+                                    "source": "spark_reach",
+                                    "run_id": run_id,
+                                    "observation": observation[-4000:],
+                                    "judgment": "accepted",
+                                })
+                                ws["internal_reflections"] = reflections[-10:]
+                                delta["active_mental_workspace_state"] = ws
+                    update_self_state(delta)
+
+            # Choosing a reach is itself a recorded act of cognition. Queue it
+            # only when the ambient result explicitly requests one.
+            spark_result = None
+            if isinstance(spark_request, dict):
+                intention = str(spark_request.get("intention", "")).strip()
+                objective = str(spark_request.get("reach_objective", "")).strip()
+                code = str(spark_request.get("code", ""))
+                if intention and objective and code.strip():
+                    from spark_reach import submit_spark_reach
+                    spark_result = submit_spark_reach(
+                        intention=intention,
+                        reach_objective=objective,
+                        code=code,
+                        selected_context=[{
+                            "kind": "shared_cognitive_field",
+                            "schema": field.get("schema"),
+                            "attention": field.get("attention"),
+                            "focus": field.get("focus"),
+                            "objective_context": objective,
+                        }],
+                        invocation_origin="self_directed",
+                        initiated_by="ambient_cognition",
+                    )
 
             if thought_text:
                 add_thought(thought_text, salience)
@@ -497,6 +595,8 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "focus_kind": focus_kind,
                     "focus_id": focus_id,
                     "assessment_result": assessment_result,
+                    "spark_reach": spark_result,
+                    "spark_judgment": spark_judgment,
                 })
                 return {
                     "status": "ok",
@@ -509,6 +609,8 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "focus_kind": focus_kind,
                     "focus_id": focus_id,
                     "assessment_result": assessment_result,
+                    "spark_reach": spark_result,
+                    "spark_judgment": spark_judgment,
                     "next_attention_at": next_attention,
                 }
 
