@@ -119,6 +119,7 @@ def listen() -> Dict[str, Any]:
         "last_ambient_pulse": state.get("last_ambient_pulse"),
         "last_continuity_event": state.get("last_continuity_event"),
         "last_autobiographical_event": state.get("last_autobiographical_event"),
+        "pending_signals": state.get("pending_signals", []),
         "workspace": state.get("active_mental_workspace_state", {}),
     }
 
@@ -270,12 +271,16 @@ def evoke(resource: str, **kwargs) -> Dict[str, Any]:
             timeout_seconds=kwargs.get("timeout_seconds"),
             memory_mb=kwargs.get("memory_mb"),
         )
+    if resource == "spark_reaches":
+        from spark_reach import pending_spark_reaches
+        limit = kwargs.get("limit", 5)
+        return {"spark_reaches": pending_spark_reaches(limit=max(1, min(int(limit), 10)))}
 
     fn = resources.get(resource)
     if not fn:
         return {
             "error": f"unknown resource: {resource}",
-            "available": sorted([*resources, "spark"]),
+            "available": sorted([*resources, "spark", "spark_reaches"]),
         }
     return fn()
 
