@@ -58,16 +58,16 @@ def _json_safe(value: Any) -> Any:
         return str(value)
 
 
-def _apply_limits() -> None:
+def _apply_limits(timeout_seconds: int, memory_mb: int) -> None:
     """Apply Unix process limits when the host supports resource.setrlimit."""
     try:
         import resource
 
-        limit = SPARK_MEMORY_MB * 1024 * 1024
+        limit = memory_mb * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
         resource.setrlimit(
             resource.RLIMIT_CPU,
-            (SPARK_TIMEOUT_SECONDS, SPARK_TIMEOUT_SECONDS),
+            (timeout_seconds, timeout_seconds),
         )
         resource.setrlimit(resource.RLIMIT_FSIZE, (10 * 1024 * 1024, 10 * 1024 * 1024))
     except Exception:
@@ -100,7 +100,7 @@ def _execute(run_id: str, code: str, timeout_seconds: int, memory_mb: int) -> Di
             text=True,
             timeout=timeout_seconds,
             check=False,
-            preexec_fn=_apply_limits if os.name == "posix" else None,
+            preexec_fn=(lambda: _apply_limits(timeout_seconds, memory_mb)) if os.name == "posix" else None,
         )
 
         status = "success" if proc.returncode == 0 else "error"
