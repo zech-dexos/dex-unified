@@ -350,17 +350,45 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
     state / the scheduler, not by a standing process in Cloud Run.
     """
     try:
-        # Durable human-paced cadence gate.
-        # The scheduler may wake us frequently, but cognition only fires
-        # when the persisted 45–90 second interval says it is due.
-        gate = claim_ambient_tick()
+        # A completed SparkReach is an external-to-this-tick signal that
+        # deserves attention. It must not wait behind the ordinary cadence
+        # gate: the next available ambient wake should let Dex notice it.
+        # The signal remains durable until Dex judges the corresponding reach.
+        state = load_self_state()
+        pending_signals = list(state.get("pending_signals", []))
+        pending_reaches = list(state.get("pending_spark_reaches", []))
+        awaiting_reach_ids = {
+            str(item.get("run_id"))
+            for item in pending_reaches
+            if item.get("awaiting_dex_judgment")
+        }
+        spark_wake = any(
+            signal.get("signal_type") == "SPARK_REACH_COMPLETED"
+            and str(signal.get("run_id")) in awaiting_reach_ids
+            for signal in pending_signals
+            if isinstance(signal, dict)
+        )
 
-        if not gate.get("due"):
-            return {
-                "status": gate.get("status", "not_due"),
-                "next_due": gate.get("next_due"),
-                "tick_count": gate.get("tick_count"),
+        if spark_wake:
+            gate = {
+                "due": True,
+                "status": "signal_wake",
+                "next_due": None,
+                "tick_count": state.get("ambient_tick_count"),
             }
+            print("[Ambient Daemon] waking for pending SparkReach completion")
+        else:
+            # Durable human-paced cadence gate.
+            # The scheduler may wake us frequently, but cognition only fires
+            # when the persisted interval says it is due.
+            gate = claim_ambient_tick()
+
+            if not gate.get("due"):
+                return {
+                    "status": gate.get("status", "not_due"),
+                    "next_due": gate.get("next_due"),
+                    "tick_count": gate.get("tick_count"),
+                }
 
         # Let the architecture's autonomous selector establish a persistent
         # cognitive target before the ambient spark sees the field. This joins
@@ -487,6 +515,19 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                         updated.append(packet)
 
                     delta = {"pending_spark_reaches": updated[-10:]}
+                    # A judged reach no longer needs to wake ambient cognition.
+                    # Remove only the completion signal for this exact run;
+                    # unrelated signals remain untouched.
+                    remaining_signals = [
+                        signal
+                        for signal in list(current_state.get("pending_signals", []))
+                        if not (
+                            isinstance(signal, dict)
+                            and signal.get("signal_type") == "SPARK_REACH_COMPLETED"
+                            and str(signal.get("run_id")) == run_id
+                        )
+                    ]
+                    delta["pending_signals"] = remaining_signals[-20:]
                     if judgment == "accepted":
                         matched = next((p for p in updated if p.get("run_id") == run_id), None)
                         if matched:
