@@ -373,7 +373,7 @@ def pending_spark_reaches(limit: int = 5) -> list:
     db = _shared_db()
     if db is not None:
         try:
-            for snap in db.collection(SPARK_REACH_COLLECTION).stream():
+            for snap in db.collection(SPARK_REACH_COLLECTION).where("awaiting_dex_judgment", "==", True).stream():
                 item = snap.to_dict() or {}
                 if item.get("run_id"):
                     # Shared state wins over any stale per-instance cache,
