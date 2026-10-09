@@ -356,17 +356,30 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         # The signal remains durable until Dex judges the corresponding reach.
         state = load_self_state()
         pending_signals = list(state.get("pending_signals", []))
-        pending_reaches = list(state.get("pending_spark_reaches", []))
-        awaiting_reach_ids = {
-            str(item.get("run_id"))
-            for item in pending_reaches
-            if item.get("awaiting_dex_judgment")
+        # The shared Firestore packet is the durable completion signal.
+        try:
+            from spark_reach import pending_spark_reaches
+            shared_pending_reaches = pending_spark_reaches(limit=10)
+        except Exception as e:
+            shared_pending_reaches = []
+            print(f"[Ambient Daemon] shared SparkReach read failed: {e}")
+
+        pending_by_id = {
+            str(item.get("run_id")): item
+            for item in state.get("pending_spark_reaches", [])
+            if item.get("run_id") and item.get("awaiting_dex_judgment")
         }
-        spark_wake = any(
-            signal.get("signal_type") == "SPARK_REACH_COMPLETED"
+        for item in shared_pending_reaches:
+            if item.get("run_id") and item.get("awaiting_dex_judgment"):
+                pending_by_id[str(item["run_id"])] = item
+        awaiting_reach_ids = set(pending_by_id)
+        # A durable pending observation wakes Dex even if the original
+        # instance's local signal list is not shared.
+        spark_wake = bool(awaiting_reach_ids) or any(
+            isinstance(signal, dict)
+            and signal.get("signal_type") == "SPARK_REACH_COMPLETED"
             and str(signal.get("run_id")) in awaiting_reach_ids
             for signal in pending_signals
-            if isinstance(signal, dict)
         )
 
         if spark_wake:
