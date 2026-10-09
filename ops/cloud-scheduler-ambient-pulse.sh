@@ -24,9 +24,13 @@ JOB_NAME="${JOB_NAME:-dex-pulse-6h}"
 SCHEDULE="${SCHEDULE:-* * * * *}"
 TIME_ZONE="${TIME_ZONE:-UTC}"
 
-gcloud scheduler jobs describe "$JOB_NAME" \
+if gcloud scheduler jobs describe "$JOB_NAME" \
   --project="$PROJECT_ID" \
-  --location="$REGION" >/dev/null 2>&1 && EXISTS=1 || EXISTS=0
+  --location="$REGION" >/dev/null 2>&1; then
+  EXISTS=1
+else
+  EXISTS=0
+fi
 
 ARGS=(
   --project="$PROJECT_ID"
@@ -35,13 +39,14 @@ ARGS=(
   --time-zone="$TIME_ZONE"
   --uri="${SERVICE_URL%/}/ambient-pulse"
   --http-method=POST
-  --headers="X-Pulse-Secret=$PULSE_SECRET"
 )
 
 if [[ "$EXISTS" -eq 1 ]]; then
-  gcloud scheduler jobs update http "$JOB_NAME" "${ARGS[@]}"
+  gcloud scheduler jobs update http "$JOB_NAME" "${ARGS[@]}" \
+    --update-headers="X-Pulse-Secret=$PULSE_SECRET"
 else
-  gcloud scheduler jobs create http "$JOB_NAME" "${ARGS[@]}"
+  gcloud scheduler jobs create http "$JOB_NAME" "${ARGS[@]}" \
+    --headers="X-Pulse-Secret=$PULSE_SECRET"
 fi
 
 echo "Ambient pulse scheduler configured: $JOB_NAME"
