@@ -558,7 +558,26 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                                 })
                                 ws["internal_reflections"] = reflections[-10:]
                                 delta["active_mental_workspace_state"] = ws
-                    update_self_state(delta)
+                    try:
+                        from spark_reach import record_spark_reach_judgment
+                        durable_judgment = record_spark_reach_judgment(
+                            run_id,
+                            judgment,
+                            str(spark_judgment.get("reason", ""))[:2000],
+                        )
+                    except Exception as e:
+                        durable_judgment = False
+                        print(f"[Ambient Daemon] SparkReach judgment persistence failed: {e}")
+
+                    if durable_judgment:
+                        update_self_state(delta)
+                    else:
+                        # Do not clear the local pending item unless Dex's
+                        # judgment is confirmed in the shared store.
+                        print(
+                            f"[Ambient Daemon] retaining pending SparkReach {run_id}; "
+                            "shared judgment was not confirmed"
+                        )
 
             # Choosing a reach is itself a recorded act of cognition. Queue it
             # only when the ambient result explicitly requests one.
