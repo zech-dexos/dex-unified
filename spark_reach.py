@@ -376,7 +376,9 @@ def pending_spark_reaches(limit: int = 5) -> list:
         try:
             for snap in db.collection(SPARK_REACH_COLLECTION).stream():
                 item = snap.to_dict() or {}
-                if item.get("run_id") and item.get("awaiting_dex_judgment"):
+                if item.get("run_id"):
+                    # Shared state wins over any stale per-instance cache,
+                    # including when Dex has already judged the observation.
                     by_id[str(item["run_id"])] = item
         except Exception as exc:
             print(f"[SparkReach] shared pending read failed; using local cache: {exc}")
