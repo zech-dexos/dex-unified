@@ -510,7 +510,19 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             # must explicitly judge it before integration.
             if isinstance(spark_judgment, dict) and spark_judgment.get("run_id"):
                 current_state = load_self_state()
-                pending = list(current_state.get("pending_spark_reaches", []))
+                pending_by_id = {
+                    str(item.get("run_id")): item
+                    for item in current_state.get("pending_spark_reaches", [])
+                    if item.get("run_id")
+                }
+                try:
+                    from spark_reach import pending_spark_reaches
+                    for item in pending_spark_reaches(limit=10):
+                        if item.get("run_id"):
+                            pending_by_id[str(item["run_id"])] = item
+                except Exception as e:
+                    print(f"[Ambient Daemon] shared SparkReach merge failed: {e}")
+                pending = list(pending_by_id.values())
                 run_id = str(spark_judgment["run_id"])
                 judgment = str(spark_judgment.get("judgment", "")).lower()
                 if judgment in {"accepted", "rejected", "redirected", "deferred"}:
