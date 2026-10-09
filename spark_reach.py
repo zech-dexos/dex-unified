@@ -63,7 +63,6 @@ def record_spark_reach_judgment(run_id: str, judgment: str, reason: str = "") ->
         print(f"[SparkReach] judgment handoff unavailable run={run_id}")
         return False
     try:
-        from google.cloud import firestore
         ref = db.collection(SPARK_REACH_COLLECTION).document(str(run_id))
         ref.update({
             "dex_judgment": {
