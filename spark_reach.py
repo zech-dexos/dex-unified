@@ -27,6 +27,59 @@ from typing import Any, Dict, Optional
 from paths import _STATE_BASE
 from self_state import update_self_state
 
+
+SPARK_REACH_COLLECTION = os.environ.get("SPARK_REACH_COLLECTION", "dex_spark_reaches")
+
+
+def _shared_db():
+    """Return the shared Firestore client, or None when unavailable."""
+    try:
+        from dex_memory import _get_db
+        return _get_db()
+    except Exception as exc:
+        print(f"[SparkReach] shared store unavailable: {exc}")
+        return None
+
+
+def _persist_shared_reach(packet: Dict[str, Any]) -> bool:
+    """Durably publish a completion packet for every Cloud Run instance."""
+    db = _shared_db()
+    if db is None:
+        print(f"[SparkReach] durable completion handoff unavailable run={packet.get('run_id')}")
+        return False
+    try:
+        db.collection(SPARK_REACH_COLLECTION).document(str(packet["run_id"])).set(packet)
+        print(f"[SparkReach] durable completion handoff stored run={packet.get('run_id')}")
+        return True
+    except Exception as exc:
+        print(f"[SparkReach] durable completion handoff failed run={packet.get('run_id')}: {exc}")
+        return False
+
+
+def record_spark_reach_judgment(run_id: str, judgment: str, reason: str = "") -> bool:
+    """Persist Dex's judgment; SparkReach itself never judges its observation."""
+    db = _shared_db()
+    if db is None:
+        print(f"[SparkReach] judgment handoff unavailable run={run_id}")
+        return False
+    try:
+        from google.cloud import firestore
+        ref = db.collection(SPARK_REACH_COLLECTION).document(str(run_id))
+        ref.update({
+            "dex_judgment": {
+                "judgment": str(judgment),
+                "reason": str(reason)[:2000],
+                "judged_at": _now_iso(),
+            },
+            "awaiting_dex_judgment": False,
+            "integrated": str(judgment) == "accepted",
+            "updated_at": _now_iso(),
+        })
+        return True
+    except Exception as exc:
+        print(f"[SparkReach] judgment persistence failed run={run_id}: {exc}")
+        return False
+
 SPARK_REACH_ROOT = Path(
     os.environ.get("SPARK_REACH_ROOT", str(_STATE_BASE.parent / "tmp" / "spark_reach"))
 )
@@ -184,9 +237,13 @@ def _complete(
         "awaiting_dex_judgment": True,
     }
 
+    # Firestore is the cross-instance handoff. Local JSON remains a convenient
+    # cache, but must never be the only place a completed observation exists.
+    durable = _persist_shared_reach(packet)
+
     try:
         state = update_self_state({})
-        pending = list(state.get("pending_spark_reaches", []))
+        pending = [item for item in state.get("pending_spark_reaches", []) if item.get("run_id") != invocation["run_id"]]
         pending.append(packet)
         pending = pending[-10:]
 
@@ -219,7 +276,8 @@ def _complete(
     print(
         f"[SparkReach] completed run={invocation['run_id']} "
         f"status={result.get('status')} "
-        f"origin={invocation.get('invocation_origin')}"
+        f"origin={invocation.get('invocation_origin')} "
+        f"durable_handoff={'success' if durable else 'FAILED'}"
     )
 
 
@@ -307,6 +365,21 @@ def submit_spark_reach(
 
 
 def pending_spark_reaches(limit: int = 5) -> list:
+    """Read pending observations from shared Firestore, merging local cache."""
     from self_state import load_self_state
+    limit = max(1, min(int(limit), 10))
     state = load_self_state()
-    return list(state.get("pending_spark_reaches", []))[-max(1, min(limit, 10)):]
+    local = list(state.get("pending_spark_reaches", []))
+    by_id = {str(item.get("run_id")): item for item in local if item.get("run_id")}
+    db = _shared_db()
+    if db is not None:
+        try:
+            for snap in db.collection(SPARK_REACH_COLLECTION).stream():
+                item = snap.to_dict() or {}
+                if item.get("run_id") and item.get("awaiting_dex_judgment"):
+                    by_id[str(item["run_id"])] = item
+        except Exception as exc:
+            print(f"[SparkReach] shared pending read failed; using local cache: {exc}")
+    pending = [item for item in by_id.values() if item.get("awaiting_dex_judgment")]
+    pending.sort(key=lambda item: str(item.get("completed_at", item.get("submitted_at", ""))))
+    return pending[-limit:]
