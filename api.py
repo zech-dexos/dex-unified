@@ -264,6 +264,9 @@ GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 from gemini_client import call_gemini
 
 FALLBACK_MODELS = [
+    # Let OpenRouter select from currently available free models instead of
+    # depending first on individual free endpoints that may be retired or throttled.
+    "openrouter/free",
     "google/gemma-4-31b-it:free",
     "google/gemma-4-26b-a4b-it:free",
     "deepseek/deepseek-v4-flash:free",
@@ -293,8 +296,8 @@ async def call_llm(client, messages, max_tokens=1000):
                 content = msg.get("content","") or msg.get("reasoning","")
                 if content:
                     return {"reply": content, "model": GROQ_MODEL}
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[call_llm] Groq exception for {GROQ_MODEL}: {exc}")
     if GROQ_KEY:
         pass  # groq already attempted above; this branch intentionally left as-is
     for model in FALLBACK_MODELS:
