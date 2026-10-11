@@ -222,22 +222,30 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         state = load_self_state()
         target = _select_target(state)
 
-        # Ambient cadence is a throttle, not a requirement to think.
-        # If nothing actually needs cognition, the pulse is maintenance-only.
+        # No target means Dex should rest, not invoke an LLM just to stay busy.
+        # Low-power maintenance runs on its own 15-minute cadence.
         if target is None:
+            from dex_lifecycle import run_rest_maintenance
+
+            lifecycle_result = run_rest_maintenance(state)
             pulse = {
                 "timestamp": _now_iso(),
-                "status": "maintenance",
+                "status": lifecycle_result.get("status", "resting"),
+                "mode": lifecycle_result.get("mode", "resting"),
                 "target": None,
                 "thought": None,
                 "salience": 0.0,
             }
             update_self_state({"last_ambient_pulse": pulse})
             return {
-                "status": "maintenance",
+                **lifecycle_result,
                 "reason": "no_cognitive_work_due",
                 "tick_count": gate.get("tick_count"),
             }
+
+        # Work has become due after a rest period; mark the wake/resume transition.
+        from dex_lifecycle import enter_active_mode
+        lifecycle_mode = enter_active_mode(state)
 
         # Autonomous recall: when Dex's own working process selects a target,
         # bring relevant prior experiences into the same workspace before the spark fires.
