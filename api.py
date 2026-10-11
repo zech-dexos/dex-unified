@@ -73,13 +73,9 @@ app = FastAPI(title="ReasonFlow API", version="1.0.0")
 from gemini_client import call_gemini, _get_client
 from self_state import load_self_state
 
-# Ambient cognition is deliberately isolated from Vertex/Gemini.
-# The ambient pulse uses a small Groq model; top-tier Gemini is never
-# invoked merely because the ambient scheduler fired.
-ambient_model = os.environ.get("AMBIENT_MODEL", "openai/gpt-oss-20b")
-if ambient_model.startswith(("gemini", "vertex")):
-    print(f"[Ambient Daemon] Refusing expensive ambient model: {ambient_model}")
-    ambient_model = "openai/gpt-oss-20b"
+# Ambient cognition uses the bundled local CPU model via local_llm.py.
+# Hosted model routing below is for interactive chat and is intentionally
+# separate from the scheduled ambient pulse. No provider API is called here.
 
 
 def _build_ambient_context() -> str:
