@@ -32,6 +32,38 @@ def _parse_time(value):
         return None
 
 
+def _load_lifecycle(state):
+    """Prefer the durable Firestore lifecycle record when available."""
+    local = state.get("runtime_lifecycle", {})
+    try:
+        from dex_memory import _get_db
+        db = _get_db()
+        if db:
+            snapshot = db.collection("dex_runtime").document("lifecycle").get()
+            durable = snapshot.to_dict() or {}
+            if durable:
+                return durable
+    except Exception as exc:
+        print(f"[Dex Lifecycle] durable lifecycle read unavailable: {exc}")
+    return local
+
+
+def _write_lifecycle(previous, delta):
+    """Write the merged lifecycle to local SelfState and Firestore best-effort."""
+    lifecycle = {**(previous or {}), **delta}
+    updated = update_self_state({"runtime_lifecycle": lifecycle})
+    lifecycle = updated.get("runtime_lifecycle", lifecycle)
+    try:
+        from dex_memory import _get_db
+        db = _get_db()
+        if db:
+            db.collection("dex_runtime").document("lifecycle").set(lifecycle)
+    except Exception as exc:
+        # Local atomic state remains available; report the missing durable copy.
+        print(f"[Dex Lifecycle] durable lifecycle write unavailable: {exc}")
+    return updated
+
+
 def _recent_experience_review():
     """Read a bounded sample; originals remain untouched in the experience ledger."""
     entries = []
@@ -67,24 +99,22 @@ def _recent_experience_review():
 
 def enter_active_mode(state):
     """Mark the transition from rest to active cognition in durable SelfState."""
-    previous = state.get("runtime_lifecycle", {})
+    previous = _load_lifecycle(state)
     previous_mode = previous.get("mode", "unknown")
     mode = "resuming" if previous_mode in {"resting", "consolidating"} else "active"
     now = _iso()
-    update_self_state({
-        "runtime_lifecycle": {
-            "mode": mode,
-            "previous_mode": previous_mode,
-            "last_transition_at": now,
-            "last_active_at": now,
-        }
+    _write_lifecycle(previous, {
+        "mode": mode,
+        "previous_mode": previous_mode,
+        "last_transition_at": now,
+        "last_active_at": now,
     })
     return mode
 
 
 def run_rest_maintenance(state):
     """Perform bounded, non-generative maintenance and otherwise remain idle."""
-    previous = state.get("runtime_lifecycle", {})
+    previous = _load_lifecycle(state)
     now = _now()
     last_maintenance = _parse_time(previous.get("last_maintenance_at"))
     due = (
@@ -94,23 +124,19 @@ def run_rest_maintenance(state):
 
     if due:
         # Record the maintenance transition first, so its intent is observable.
-        update_self_state({
-            "runtime_lifecycle": {
-                "mode": "consolidating",
-                "previous_mode": previous.get("mode", "unknown"),
-                "last_transition_at": _iso(now),
-            }
+        _write_lifecycle(previous, {
+            "mode": "consolidating",
+            "previous_mode": previous.get("mode", "unknown"),
+            "last_transition_at": _iso(now),
         })
         review = _recent_experience_review()
-        latest = update_self_state({
-            "runtime_lifecycle": {
-                "mode": "resting",
-                "previous_mode": "consolidating",
-                "last_transition_at": _iso(),
-                "last_maintenance_at": _iso(now),
-                "maintenance_cycle_count": int(previous.get("maintenance_cycle_count", 0)) + 1,
-                "last_memory_review": review,
-            }
+        latest = _write_lifecycle(previous, {
+            "mode": "resting",
+            "previous_mode": "consolidating",
+            "last_transition_at": _iso(),
+            "last_maintenance_at": _iso(now),
+            "maintenance_cycle_count": int(previous.get("maintenance_cycle_count", 0)) + 1,
+            "last_memory_review": review,
         })
         return {
             "status": "maintenance",
@@ -122,12 +148,10 @@ def run_rest_maintenance(state):
         }
 
     if previous.get("mode") != "resting":
-        update_self_state({
-            "runtime_lifecycle": {
-                "mode": "resting",
-                "previous_mode": previous.get("mode", "unknown"),
-                "last_transition_at": _iso(),
-            }
+        _write_lifecycle(previous, {
+            "mode": "resting",
+            "previous_mode": previous.get("mode", "unknown"),
+            "last_transition_at": _iso(),
         })
 
     return {
