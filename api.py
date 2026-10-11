@@ -116,43 +116,104 @@ def _build_ambient_context() -> str:
     return "\n".join(ctx) if len(ctx) > 1 else ""
 
 
+import time
+
+# Process-local backoff prevents repeated quota failures between scheduler pulses.
+_ambient_groq_cooldown_until = 0.0
+
+
 async def ambient_llm_callable(prompt: str) -> str:
-    """Cheap ambient cognition adapter. Never routes ambient work through Vertex/Gemini."""
+    """Run low-cost ambient cognition with Groq first and OpenRouter fallback."""
+    global _ambient_groq_cooldown_until
+
     context = _build_ambient_context()
     full_prompt = f"{context}\n\n{prompt}" if context else prompt
+    groq_error = None
 
-    if not GROQ_KEY:
-        raise ValueError("GROQ_KEY is not configured for ambient cognition")
+    if GROQ_KEY and time.monotonic() >= _ambient_groq_cooldown_until:
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(
+                    GROQ_URL,
+                    headers={
+                        "Authorization": f"Bearer {GROQ_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": ambient_model,
+                        "messages": [{"role": "user", "content": full_prompt}],
+                        "max_completion_tokens": 512,
+                        "temperature": 0.4,
+                        "reasoning_effort": "low",
+                        "include_reasoning": False,
+                        "response_format": {"type": "json_object"},
+                    },
+                )
+                try:
+                    data = response.json()
+                except ValueError:
+                    data = {"error": {"message": response.text[:500]}}
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post(
-            GROQ_URL,
-            headers={
-                "Authorization": f"Bearer {GROQ_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": ambient_model,
-                "messages": [{"role": "user", "content": full_prompt}],
-                "max_completion_tokens": 512,
-                "temperature": 0.4,
-                "reasoning_effort": "low",
-                "include_reasoning": False,
-                "response_format": {"type": "json_object"},
-            },
-        )
-        data = response.json()
-        if response.status_code >= 400 or data.get("error"):
-            raise RuntimeError(f"ambient Groq request failed: {data.get('error', data)}")
+                if response.status_code < 400 and not data.get("error"):
+                    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    if content:
+                        return content
 
-        content = (
-            data.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
-        )
-        if not content:
-            raise ValueError("ambient Groq returned an empty response")
-        return content
+                groq_error = data.get("error", data)
+                error_text = str(groq_error).lower()
+                if response.status_code == 429 or "rate_limit_exceeded" in error_text:
+                    _ambient_groq_cooldown_until = time.monotonic() + 900
+                    print("[Ambient Daemon] Groq rate limited; cooling down 15 minutes and trying OpenRouter")
+                else:
+                    print(f"[Ambient Daemon] Groq ambient request failed; trying OpenRouter: {groq_error}")
+        except Exception as exc:
+            groq_error = str(exc)
+            print(f"[Ambient Daemon] Groq unavailable; trying OpenRouter fallback: {exc}")
+    elif not GROQ_KEY:
+        groq_error = "GROQ_KEY is not configured"
+    else:
+        groq_error = "Groq cooldown active after a rate-limit response"
+
+    # Do not invoke Gemini/Vertex for ambient cognition; use the configured
+    # OpenRouter key and a free-model router instead.
+    if OPENROUTER_KEY:
+        async with httpx.AsyncClient(timeout=30) as client:
+            for model in ("openrouter/free", "google/gemma-4-31b-it:free"):
+                try:
+                    response = await client.post(
+                        OPENROUTER_URL,
+                        headers={
+                            "Authorization": f"Bearer {OPENROUTER_KEY}",
+                            "Content-Type": "application/json",
+                            "HTTP-Referer": "https://dexos.ai",
+                            "X-Title": "DexOS Ambient Cognition",
+                        },
+                        json={
+                            "model": model,
+                            "messages": [{"role": "user", "content": full_prompt}],
+                            "max_tokens": 512,
+                            "temperature": 0.4,
+                            "response_format": {"type": "json_object"},
+                        },
+                    )
+                    try:
+                        data = response.json()
+                    except ValueError:
+                        data = {"error": {"message": response.text[:500]}}
+
+                    if response.status_code < 400 and not data.get("error"):
+                        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        if content:
+                            print(f"[Ambient Daemon] Inference completed via OpenRouter fallback ({model})")
+                            return content
+                    print(f"[Ambient Daemon] OpenRouter ambient fallback {model} failed: {data.get('error', data)}")
+                except Exception as exc:
+                    print(f"[Ambient Daemon] OpenRouter ambient fallback {model} exception: {exc}")
+
+    raise RuntimeError(
+        "Ambient inference unavailable: Groq failed or is cooling down and "
+        f"OpenRouter fallback failed. Groq detail: {groq_error}"
+    )
 
 
 # Start Dex Discord bridge inside the Cloud Run container.
