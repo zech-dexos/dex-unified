@@ -401,6 +401,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                 })
                 return {
                     "status": "ok",
+                    "lifecycle_mode": lifecycle_mode,
                     "thought": thought_text,
                     "salience": salience,
                     "target": target,
