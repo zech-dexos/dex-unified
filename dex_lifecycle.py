@@ -42,6 +42,10 @@ def _load_lifecycle(state):
             snapshot = db.collection("dex_runtime").document("lifecycle").get()
             durable = snapshot.to_dict() or {}
             if durable:
+                local_time = _parse_time(local.get("last_transition_at"))
+                durable_time = _parse_time(durable.get("last_transition_at"))
+                if local_time and (durable_time is None or local_time > durable_time):
+                    return local
                 return durable
     except Exception as exc:
         print(f"[Dex Lifecycle] durable lifecycle read unavailable: {exc}")
