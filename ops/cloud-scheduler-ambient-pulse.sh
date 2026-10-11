@@ -21,7 +21,7 @@ REGION="${REGION:-us-central1}"
 SERVICE_URL="${SERVICE_URL:?set SERVICE_URL}"
 PULSE_SECRET="${PULSE_SECRET:?set PULSE_SECRET}"
 JOB_NAME="${JOB_NAME:-dex-pulse-6h}"
-SCHEDULE="${SCHEDULE:-* * * * *}"
+SCHEDULE="${SCHEDULE:-*/15 * * * *}"
 TIME_ZONE="${TIME_ZONE:-UTC}"
 
 gcloud scheduler jobs describe "$JOB_NAME" \
