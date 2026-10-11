@@ -56,7 +56,7 @@ def _now() -> str:
 # Ambient cognition cadence
 # ---------------------------------------------------------------------------
 
-def claim_ambient_tick(min_seconds: float = 900.0, max_seconds: float = 1800.0) -> dict:
+def claim_ambient_tick(min_seconds: float = 45.0, max_seconds: float = 90.0) -> dict:
     """
     Atomically claim the next ambient cognition tick.
 
