@@ -9,6 +9,7 @@ OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_MODEL = os.environ.get("DEX_MODEL", "vertex:gemini-3.6-flash")
+DEFAULT_AMBIENT_MODEL = os.environ.get("DEX_AMBIENT_MODEL", "local:default")
 GROQ_MODEL = os.environ.get("DEX_GROQ_MODEL", "openai/gpt-oss-20b")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 
@@ -22,11 +23,11 @@ DEFAULT_FALLBACK_MODELS = [
 ]
 
 def _parse_model_spec(spec):
-    """Return provider/model. Prefixes: vertex:, groq:, openrouter:."""
+    """Return provider/model for hosted, local, and OpenAI-compatible inference."""
     spec = (spec or DEFAULT_MODEL).strip()
     if ":" in spec:
         prefix, model_id = spec.split(":", 1)
-        if prefix.lower() in ("vertex", "gemini", "groq", "openrouter"):
+        if prefix.lower() in ("vertex", "gemini", "groq", "openrouter", "ollama", "openai-compatible", "local"):
             provider = "vertex" if prefix.lower() == "gemini" else prefix.lower()
             if not model_id.strip():
                 raise ValueError("Model ID cannot be empty")
@@ -35,6 +36,16 @@ def _parse_model_spec(spec):
         return "vertex", spec
     # Existing clients passing bare IDs keep OpenRouter semantics.
     return "openrouter", spec
+
+def _chat_completions_url(base_url):
+    """Accept a server root, /v1 base, or full chat-completions URL."""
+    base = (base_url or "").strip().rstrip("/")
+    if base.endswith("/chat/completions"):
+        return base
+    if base.endswith("/v1"):
+        return base + "/chat/completions"
+    return base + "/v1/chat/completions"
+
 
 def _completion_text(data):
     if not isinstance(data, dict) or data.get("error"):
@@ -45,12 +56,32 @@ def _completion_text(data):
     message = choices[0].get("message") or {}
     return message.get("content") or message.get("reasoning") or ""
 
-async def _call_selected_model(client, messages, model_spec, max_tokens):
+async def _call_selected_model(client, messages, model_spec, max_tokens, enable_tools=True):
     provider, model_id = _parse_model_spec(model_spec)
+    if provider == "local":
+        try:
+            import asyncio
+            from local_llm import local_slm_generate, MODEL_PATH
+            prompt = "\n\n".join(
+                f"{str(item.get('role', 'user')).upper()}: {item.get('content', '')}"
+                for item in messages
+            )
+            text = await asyncio.get_running_loop().run_in_executor(
+                None, local_slm_generate, prompt, max_tokens
+            )
+            if not text:
+                return None
+            return {
+                "reply": text, "model": os.path.basename(MODEL_PATH),
+                "provider": "local", "requested_model": model_spec, "tool_calls": [],
+            }
+        except Exception as exc:
+            print(f"[model-router] local inference failed: {exc}")
+            return None
     if provider == "vertex":
         from gemini_client import call_gemini
         result = await call_gemini(
-            client, messages, max_tokens, model_name=model_id, enable_tools=True
+            client, messages, max_tokens, model_name=model_id, enable_tools=enable_tools
         )
         if result:
             result.update({
@@ -63,13 +94,25 @@ async def _call_selected_model(client, messages, model_spec, max_tokens):
         key, url = os.environ.get("GROQ_KEY", ""), GROQ_URL
     elif provider == "openrouter":
         key, url = OPENROUTER_KEY, OPENROUTER_URL
+    elif provider == "ollama":
+        key = os.environ.get("DEX_OLLAMA_API_KEY", "")
+        url = _chat_completions_url(os.environ.get("DEX_OLLAMA_BASE_URL", "http://localhost:11434/v1"))
+    elif provider == "openai-compatible":
+        base_url = os.environ.get("DEX_OPENAI_COMPATIBLE_BASE_URL", "").strip()
+        if not base_url:
+            print("[model-router] DEX_OPENAI_COMPATIBLE_BASE_URL is not configured")
+            return None
+        key = os.environ.get("DEX_OPENAI_COMPATIBLE_API_KEY", "")
+        url = _chat_completions_url(base_url)
     else:
         raise ValueError(f"Unsupported inference provider: {provider}")
-    if not key:
+    if provider in ("groq", "openrouter") and not key:
         print(f"[model-router] {provider} selected but its API key is not configured")
         return None
 
-    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
     if provider == "openrouter":
         headers["HTTP-Referer"] = "https://dex-backend-production-2bbe.up.railway.app"
         headers["X-Title"] = "DexOS"
@@ -101,8 +144,7 @@ async def _call_selected_model(client, messages, model_spec, max_tokens):
                     "model": model_id,
                     "messages": working_messages,
                     "max_tokens": max_tokens,
-                    "tools": tool_specs,
-                    "tool_choice": "auto",
+                    **({"tools": tool_specs, "tool_choice": "auto"} if enable_tools else {}),
                 },
             )
             try:
@@ -163,12 +205,12 @@ async def _call_selected_model(client, messages, model_spec, max_tokens):
     return None
 
 async def call_llm(client, messages, max_tokens=1000, requested_model=None,
-                   allow_fallback=None):
+                   allow_fallback=None, enable_tools=True):
     """Route inference; implicit callers may fall back, explicit comparisons can be strict."""
     selected = requested_model or DEFAULT_MODEL
     if allow_fallback is None:
         allow_fallback = requested_model is None
-    result = await _call_selected_model(client, messages, selected, max_tokens)
+    result = await _call_selected_model(client, messages, selected, max_tokens, enable_tools=enable_tools)
     if result:
         result["fallback_used"] = False
         return result
@@ -188,7 +230,7 @@ async def call_llm(client, messages, max_tokens=1000, requested_model=None,
         if fallback in attempted:
             continue
         attempted.add(fallback)
-        result = await _call_selected_model(client, messages, fallback, max_tokens)
+        result = await _call_selected_model(client, messages, fallback, max_tokens, enable_tools=enable_tools)
         if result:
             result["requested_model"] = selected
             result["fallback_used"] = True
