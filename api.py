@@ -273,7 +273,7 @@ import httpx
 
 from inference_router import (
     OPENROUTER_KEY, OPENROUTER_URL, GROQ_URL, DEFAULT_MODEL, DEFAULT_AMBIENT_MODEL,
-    GROQ_MODEL, GEMINI_KEY, call_llm,
+    DEFAULT_VISION_MODEL, GROQ_MODEL, GEMINI_KEY, call_llm,
 )
 from participant import ParticipantSnapshot, format_participant_context, build_experience_from_pulse, record_interaction_experience
 from dex_experience_recall import recall_into_workspace, format_recalled_experiences
@@ -853,44 +853,39 @@ class VisionRequest(BaseModel):
 
 @app.post("/vision")
 async def vision(req: VisionRequest):
-    if not OPENROUTER_KEY:
-        return {"error": "no key configured"}
-
     messages = []
-
+    if req.system.strip():
+        messages.append({"role": "system", "content": req.system})
     messages.append({
         "role": "user",
         "content": [
             {"type": "text", "text": req.prompt},
-            {"type": "image_url", "image_url": {"url": req.image}}
-        ]
+            {"type": "image_url", "image_url": {"url": req.image}},
+        ],
     })
 
     async with httpx.AsyncClient(timeout=30) as client:
-        res = await client.post(
-            OPENROUTER_URL,
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_KEY}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://dex-backend-production-2bbe.up.railway.app",
-                "X-Title": "Haven by DexOS",
-            },
-            json={
-                "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-                "messages": messages,
-                "max_tokens": 800,
-            }
+        result = await call_llm(
+            client,
+            messages,
+            max_tokens=800,
+            requested_model=DEFAULT_VISION_MODEL,
+            allow_fallback=False,
+            enable_tools=False,
         )
-        data = res.json()
+    if result.get("provider") == "none":
+        return {
+            "error": result.get("reply", "vision inference failed"),
+            "provider": "none",
+            "requested_model": DEFAULT_VISION_MODEL,
+        }
+    return {
+        "reply": result.get("reply", "[no response]"),
+        "provider": result.get("provider"),
+        "model": result.get("model"),
+        "requested_model": result.get("requested_model", DEFAULT_VISION_MODEL),
+    }
 
-    if "error" in data:
-        reply = f"[vision error: {data['error'].get('message', str(data['error']))}]"
-    else:
-        reply = data.get("choices", [{}])[0].get("message", {}).get("content", "[no response]")
-
-    return {"reply": reply}
-
-    return {"response": result["reply"]}
 
 import json
 import time
