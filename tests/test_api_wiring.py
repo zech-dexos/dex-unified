@@ -33,6 +33,11 @@ class ApiWiringTests(unittest.TestCase):
         self.assertTrue(_awaits_call(_function("trigger_ambient_pulse"), "run_ambient_tick"))
         self.assertTrue(_awaits_call(_function("trigger_ambient_pulse"), "_persist_github_state"))
 
+    def test_pulse_failures_are_reported_as_http_errors(self):
+        for name in ("trigger_pulse", "trigger_ambient_pulse"):
+            source = ast.get_source_segment(API_SOURCE, _function(name))
+            self.assertIn("raise HTTPException(status_code=500", source)
+
     def test_both_pulse_routes_require_governance(self):
         for name in ("trigger_pulse", "trigger_ambient_pulse"):
             function = _function(name)
