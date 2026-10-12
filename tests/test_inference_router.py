@@ -53,6 +53,53 @@ class ModelFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(inference_router._model_is_cooling_down("openrouter", "provider/other"))
         inference_router._MODEL_COOLDOWNS.clear()
 
+    async def test_shared_cooldown_survives_local_cache_reset(self):
+        import dex_memory
+
+        store = {}
+
+        class Snapshot:
+            def __init__(self, data):
+                self.data = data
+
+            def to_dict(self):
+                return dict(self.data)
+
+        class Document:
+            def __init__(self, key):
+                self.key = key
+
+            def get(self):
+                return Snapshot(store.get(self.key, {}))
+
+            def set(self, data, merge=False):
+                if merge:
+                    store.setdefault(self.key, {}).update(data)
+                else:
+                    store[self.key] = dict(data)
+
+        class Collection:
+            def document(self, key):
+                return Document(key)
+
+        class FakeDb:
+            def collection(self, name):
+                return Collection()
+
+        inference_router._MODEL_COOLDOWNS.clear()
+        inference_router._SHARED_COOLDOWN_CACHE.clear()
+        with patch.object(dex_memory, "_get_db", return_value=FakeDb()):
+            inference_router._persist_shared_cooldown(
+                "provider:openrouter", "openrouter", "model", 60, "quota"
+            )
+            inference_router._MODEL_COOLDOWNS.clear()
+            inference_router._SHARED_COOLDOWN_CACHE.clear()
+            self.assertGreater(
+                inference_router._cooldown_remaining("provider:openrouter"), 0
+            )
+        inference_router._MODEL_COOLDOWNS.clear()
+        inference_router._SHARED_COOLDOWN_CACHE.clear()
+
     async def test_daily_quota_cools_down_entire_provider(self):
         inference_router._MODEL_COOLDOWNS.clear()
         inference_router._record_provider_failure(
