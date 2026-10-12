@@ -317,13 +317,23 @@ async def _call_selected_model(client, messages, model_spec, max_tokens, enable_
         print(f"[model-router] {provider}:{model_id} exception: {exc}")
     return None
 
+async def _safe_call_selected_model(client, messages, model_spec, max_tokens, enable_tools):
+    try:
+        return await _call_selected_model(
+            client, messages, model_spec, max_tokens, enable_tools=enable_tools
+        )
+    except Exception as exc:
+        print(f"[model-router] invalid/unavailable model spec {model_spec!r}: {exc}")
+        return None
+
+
 async def call_llm(client, messages, max_tokens=1000, requested_model=None,
                    allow_fallback=None, enable_tools=True):
     """Route inference; implicit callers may fall back, explicit comparisons can be strict."""
     selected = requested_model or DEFAULT_MODEL
     if allow_fallback is None:
         allow_fallback = requested_model is None
-    result = await _call_selected_model(client, messages, selected, max_tokens, enable_tools=enable_tools)
+    result = await _safe_call_selected_model(client, messages, selected, max_tokens, enable_tools)
     if result:
         result["fallback_used"] = False
         result["fallback_attempted"] = False
@@ -344,7 +354,7 @@ async def call_llm(client, messages, max_tokens=1000, requested_model=None,
         if fallback in attempted:
             continue
         attempted.add(fallback)
-        result = await _call_selected_model(client, messages, fallback, max_tokens, enable_tools=enable_tools)
+        result = await _safe_call_selected_model(client, messages, fallback, max_tokens, enable_tools)
         if result:
             result["requested_model"] = selected
             result["fallback_used"] = True
