@@ -35,13 +35,16 @@ class ApiWiringTests(unittest.TestCase):
 
     def test_startup_rehydrates_before_runtime_and_subscribers(self):
         function = _function("start_continuous_substrate")
-        calls = [
-            node.func.id
-            for node in ast.walk(function)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-        ]
-        self.assertLess(calls.index("pull_from_github"), calls.index("initialize_dex_runtime"))
-        self.assertLess(calls.index("initialize_dex_runtime"), calls.index("setup_continuity"))
+        def call_line(name):
+            return min(
+                node.lineno for node in ast.walk(function)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == name
+            )
+
+        self.assertLess(call_line("pull_from_github"), call_line("initialize_dex_runtime"))
+        self.assertLess(call_line("initialize_dex_runtime"), call_line("setup_continuity"))
 
 
 if __name__ == "__main__":
