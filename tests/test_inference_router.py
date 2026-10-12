@@ -63,7 +63,7 @@ class ModelFallbackTests(unittest.IsolatedAsyncioTestCase):
         original = os.environ.get("DEX_FALLBACK_MODELS")
         os.environ["DEX_FALLBACK_MODELS"] = "openrouter:provider/backup"
 
-        async def fake_selected(client, messages, model_spec, max_tokens):
+        async def fake_selected(client, messages, model_spec, max_tokens, enable_tools=True):
             if model_spec == "openrouter:provider/backup":
                 return {
                     "reply": "backup response",
