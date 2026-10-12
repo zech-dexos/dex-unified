@@ -30,7 +30,7 @@ jobs:
           for attrs, source in scripts:
               if not source.strip() or re.search(r"\\bsrc\\s*=", attrs, flags=re.I):
                   continue
-              extension = ".mjs" if re.search(r'type=["\\']module["\\']', attrs, flags=re.I) else ".js"
+              extension = ".mjs" if re.search(r"""type\\s*=\\s*["']module["']""", attrs, flags=re.I) else ".js"
               Path(f"/tmp/dex-inline-{count}{extension}").write_text(source, encoding="utf-8")
               count += 1
           if count == 0:
