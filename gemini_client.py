@@ -194,6 +194,14 @@ async def call_gemini(client, messages, max_tokens=4096, model_name=None, enable
         }
     except Exception as e:
         print(f"[call_gemini] exception: {e}")
+        try:
+            message = str(e)
+            lowered = message.lower()
+            status = 429 if ("429" in lowered or "resource_exhausted" in lowered or "rate limit" in lowered) else 0
+            from inference_router import _record_provider_failure
+            _record_provider_failure("vertex", model_name, status, message)
+        except Exception as cooldown_error:
+            print(f"[call_gemini] cooldown record failed: {cooldown_error}")
         return None
 
 
