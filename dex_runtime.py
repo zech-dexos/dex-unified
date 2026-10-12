@@ -16,12 +16,13 @@ _memory = None
 SIGIL_ACTIVE = False
 _dexos = None
 DEXOS_ACTIVE = False
+DEXOS_INITIALIZATION_ERROR = None
 _RUNTIME_INITIALIZED = False
 
 
 def initialize_dex_runtime() -> bool:
     """Initialize stateful subsystems only after durable state has been rehydrated."""
-    global _memory, SIGIL_ACTIVE, _dexos, DEXOS_ACTIVE, _RUNTIME_INITIALIZED
+    global _memory, SIGIL_ACTIVE, _dexos, DEXOS_ACTIVE, DEXOS_INITIALIZATION_ERROR, _RUNTIME_INITIALIZED
     if _RUNTIME_INITIALIZED:
         return DEXOS_ACTIVE
 
@@ -37,11 +38,15 @@ def initialize_dex_runtime() -> bool:
     try:
         from dexos import DexOS
         _dexos = DexOS()
-        _dexos.initialize()
-        DEXOS_ACTIVE = True
+        initialized = _dexos.initialize()
+        DEXOS_ACTIVE = bool(initialized)
+        if not DEXOS_ACTIVE:
+            DEXOS_INITIALIZATION_ERROR = "DexOS boot did not reach the online state"
+            print(f"[DexRuntime] {DEXOS_INITIALIZATION_ERROR}")
     except Exception as exc:
         _dexos = None
         DEXOS_ACTIVE = False
+        DEXOS_INITIALIZATION_ERROR = str(exc)
         print(f"[DexRuntime] DexOS initialization failed: {exc}")
 
     _RUNTIME_INITIALIZED = True
@@ -51,6 +56,25 @@ def initialize_dex_runtime() -> bool:
 def dex_runtime(user_input: str, user_id: str = "default") -> dict:
     if not _RUNTIME_INITIALIZED:
         initialize_dex_runtime()
+    if not DEXOS_ACTIVE or _dexos is None:
+        reason = DEXOS_INITIALIZATION_ERROR or "governance runtime is not initialized"
+        return {
+            "input": user_input,
+            "intent": "blocked",
+            "domain": "security",
+            "modifiers": [],
+            "tools": [],
+            "context": {},
+            "branches": [],
+            "sigil_ids": [],
+            "model": "dexos",
+            "route_reason": "governance_offline",
+            "governed": False,
+            "flagged": True,
+            "user_id": user_id,
+            "recall_ctx": "",
+            "response": f"DexOS governance is unavailable; inference held. Reason: {reason}",
+        }
     # User recognition + recall
     try:
         from dex_memory import recognize_user, build_recall_context, log_failure, log_recovery
@@ -77,7 +101,7 @@ def dex_runtime(user_input: str, user_id: str = "default") -> dict:
     routing = route_info(signal) if ROUTER_ACTIVE else {"model": "dex:latest", "reason": "router unavailable"}
     if DEXOS_ACTIVE and _dexos:
         governance = _dexos.process(user_input)
-        if governance.get("status") == "flagged":
+        if governance.get("status") != "clean":
             return {
                 "input":        user_input,
                 "intent":       "blocked",
@@ -88,7 +112,7 @@ def dex_runtime(user_input: str, user_id: str = "default") -> dict:
                 "branches":     [],
                 "sigil_ids":    [],
                 "model":        "dexos",
-                "route_reason": governance.get("drift_type", "flagged"),
+                "route_reason": governance.get("drift_type", governance.get("status", "flagged")),
                 "governed":     True,
                 "flagged":      True,
                 "response":     governance.get("response", "")
