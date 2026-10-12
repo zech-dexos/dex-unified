@@ -1744,19 +1744,20 @@ async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
 
     try:
         from dex_cron import run_background_pulse
-        result = run_background_pulse()
+        result = await run_background_pulse()
 
         github_status = "not_attempted"
         try:
             from github_persistence import push_to_github
-            push_to_github()
-            github_status = "success"
+            pushed = push_to_github()
+            github_status = "success" if pushed else "skipped_or_unchanged"
         except Exception as e:
             print(f"[pulse] github push failed: {e}")
             github_status = f"failed: {e}"
 
+        pulse_status = result.get("status", "error") if isinstance(result, dict) else "error"
         return {
-            "status": "success",
+            "status": "success" if pulse_status == "complete" else "error",
             "pulse_result": result,
             "github_push": github_status
         }
