@@ -825,7 +825,8 @@ the exchange as a newly started request/response transaction.
         print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")
 
     persist_files = [
-        "identity.json", "participant_state.json", "experiences.jsonl", "current_session.json"
+        "identity.json", "participant_state.json", "experiences.jsonl",
+        "current_session.json", "dex_lineage.jsonl", "open_loops.json", "reflections.jsonl",
     ]
     if governance_flag:
         persist_files.append("dex_lineage.jsonl")
