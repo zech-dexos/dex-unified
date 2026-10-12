@@ -265,7 +265,11 @@ import os
 import asyncio
 import httpx
 
-from inference_router import (\n    OPENROUTER_KEY, OPENROUTER_URL, GROQ_URL, DEFAULT_MODEL, GROQ_MODEL,\n    GEMINI_KEY, call_llm,\n)\nfrom participant import ParticipantSnapshot, format_participant_context, build_experience_from_pulse, record_interaction_experience
+from inference_router import (
+    OPENROUTER_KEY, OPENROUTER_URL, GROQ_URL, DEFAULT_MODEL, GROQ_MODEL,
+    GEMINI_KEY, call_llm,
+)
+from participant import ParticipantSnapshot, format_participant_context, build_experience_from_pulse, record_interaction_experience
 from dex_experience_recall import recall_into_workspace, format_recalled_experiences
 from dex_conversation import load_conversation, format_conversation_context, experience_contribution
 
