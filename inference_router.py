@@ -162,19 +162,88 @@ def _completion_text(data):
     return message.get("content") or message.get("reasoning") or ""
 
 OPENAI_TOOL_SPECS = [
-        {"type": "function", "function": {"name": "inspect_state", "description": "Inspect Dex's durable self-state, goals, workspace and latest pulse.", "parameters": {"type": "object", "properties": {}}}},
-        {"type": "function", "function": {"name": "inspect_workspace", "description": "Inspect Dex's active mental workspace.", "parameters": {"type": "object", "properties": {}}}},
-        {"type": "function", "function": {"name": "inspect_goals", "description": "Inspect Dex's persisted goals.", "parameters": {"type": "object", "properties": {}}}},
-        {"type": "function", "function": {"name": "inspect_open_loops", "description": "Inspect Dex's persisted unresolved/open loops.", "parameters": {"type": "object", "properties": {}}}},
-        {"type": "function", "function": {"name": "inspect_thoughts", "description": "Inspect Dex's recent persistent thoughts.", "parameters": {"type": "object", "properties": {}}}},
-        {"type": "function", "function": {"name": "inspect_experiences", "description": "Inspect durable experiences and continuity lineage.", "parameters": {"type": "object", "properties": {"limit": {"type": "integer"}}}}},
-        {"type": "function", "function": {"name": "inspect_participant", "description": "Inspect Dex's current participant snapshot and interlocutor.", "parameters": {"type": "object", "properties": {}}}},
-        {"type": "function", "function": {"name": "inspect_conversation", "description": "Inspect ongoing conversation state.", "parameters": {"type": "object", "properties": {"user_id": {"type": "string"}}}}},
-        {"type": "function", "function": {"name": "recall_experience", "description": "Retrieve relevant durable experiences into active cognition.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["query"]}}},
-        {"type": "function", "function": {"name": "listen", "description": "Listen to latest durable signals available to Dex.", "parameters": {"type": "object", "properties": {}}}},
-        {"type": "function", "function": {"name": "evoke", "description": "Retrieve a DexOS resource into active cognition. Use spark only when a concrete unresolved question warrants bounded sandboxed computation; outputs remain observations until Dex judges them.", "parameters": {"type": "object", "properties": {"resource": {"type": "string", "enum": ["state", "workspace", "goals", "open_loops", "thoughts", "experiences", "participant", "conversation", "signals", "spark"]}, "intention": {"type": "string"}, "reach_objective": {"type": "string"}, "code": {"type": "string"}, "selected_context": {"type": "array", "items": {"type": "string"}}, "invocation_origin": {"type": "string", "enum": ["self_directed", "external"]}, "initiated_by": {"type": "string"}, "timeout_seconds": {"type": "integer"}, "memory_mb": {"type": "integer"}}, "required": ["resource"]}},
-        {"type": "function", "function": {"name": "search_architecture", "description": "Search DexOS source and persisted text read-only; never executes source.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
-    ]
+    {"type": "function", "function": {
+        "name": "inspect_state",
+        "description": "Inspect Dex's durable self-state, goals, workspace and latest pulse.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "inspect_workspace",
+        "description": "Inspect Dex's active mental workspace.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "inspect_goals",
+        "description": "Inspect Dex's persisted goals.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "inspect_open_loops",
+        "description": "Inspect Dex's persisted unresolved/open loops.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "inspect_thoughts",
+        "description": "Inspect Dex's recent persistent thoughts.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "inspect_experiences",
+        "description": "Inspect durable experiences and continuity lineage.",
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer"}}},
+    }},
+    {"type": "function", "function": {
+        "name": "inspect_participant",
+        "description": "Inspect Dex's current participant snapshot and interlocutor.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "inspect_conversation",
+        "description": "Inspect ongoing conversation state.",
+        "parameters": {"type": "object", "properties": {"user_id": {"type": "string"}}},
+    }},
+    {"type": "function", "function": {
+        "name": "recall_experience",
+        "description": "Retrieve relevant durable experiences into active cognition.",
+        "parameters": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}},
+            "required": ["query"],
+        },
+    }},
+    {"type": "function", "function": {
+        "name": "listen",
+        "description": "Listen to latest durable signals available to Dex.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "evoke",
+        "description": "Retrieve a DexOS resource into active cognition. Use spark only for a concrete unresolved question; computation is sandboxed and results await Dex's judgment.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "resource": {
+                    "type": "string",
+                    "enum": ["state", "workspace", "goals", "open_loops", "thoughts", "experiences", "participant", "conversation", "signals", "spark"],
+                },
+                "intention": {"type": "string"},
+                "reach_objective": {"type": "string"},
+                "code": {"type": "string"},
+                "selected_context": {"type": "array", "items": {"type": "string"}},
+                "invocation_origin": {"type": "string", "enum": ["self_directed", "external"]},
+                "initiated_by": {"type": "string"},
+                "timeout_seconds": {"type": "integer"},
+                "memory_mb": {"type": "integer"},
+            },
+            "required": ["resource"],
+        },
+    }},
+    {"type": "function", "function": {
+        "name": "search_architecture",
+        "description": "Search DexOS source and persisted text read-only; never executes source.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+    }},
+]
 
 async def _call_selected_model(client, messages, model_spec, max_tokens, enable_tools=True):
     provider, model_id = _parse_model_spec(model_spec)
