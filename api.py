@@ -347,7 +347,7 @@ async def chat(req: ChatRequest):
         updated = await _run()
         save_intents(updated)
         active = [i for i in updated if i.status == "active"]
-        _schedule_github_persist(["intents.json", "identity.json"])
+        await _persist_github_state(["intents.json", "identity.json"])
 
         return {
             "reply": f"[REAL intent generation executed]\nActive intents ({len(active)}):\n" +
@@ -373,7 +373,7 @@ async def chat(req: ChatRequest):
     # If the kernel flagged this input, the LLM is never called.
     # This is the (B) requirement: fail-safe routing that bypasses AI entirely.
     if result.get("flagged"):
-        _schedule_github_persist(["identity.json", "dex_lineage.jsonl"])
+        await _persist_github_state(["identity.json", "dex_lineage.jsonl"])
         return {
             "reply": result.get("response", "VOW VIOLATION — this path is closed."),
             "intent": result.get("intent", "blocked"),
@@ -829,7 +829,7 @@ the exchange as a newly started request/response transaction.
     ]
     if governance_flag:
         persist_files.append("dex_lineage.jsonl")
-    _schedule_github_persist(persist_files)
+    await _persist_github_state(persist_files)
 
     return {
         "reply":        reply,
@@ -1781,7 +1781,7 @@ async def trigger_ambient_pulse(x_pulse_secret: Optional[str] = Header(None)):
                     persist_files.append("current_session.json")
                 if result.get("spark_reach") or result.get("spark_judgment"):
                     persist_files.extend(["open_loops.json", "dex_lineage.jsonl"])
-            _schedule_github_persist(persist_files)
+            await _persist_github_state(persist_files)
 
         return {
             "status": "success",
