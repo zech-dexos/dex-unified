@@ -25,12 +25,12 @@ jobs:
           from pathlib import Path
 
           html = Path("index.html").read_text(encoding="utf-8")
-          scripts = re.findall(r"<script([^>]*)>(.*?)</script\\s*>", html, flags=re.I | re.S)
+          scripts = re.findall(r"<script([^>]*)>(.*?)</script\s*>", html, flags=re.I | re.S)
           count = 0
           for attrs, source in scripts:
-              if not source.strip() or re.search(r"\\bsrc\\s*=", attrs, flags=re.I):
+              if not source.strip() or re.search(r"\bsrc\s*=", attrs, flags=re.I):
                   continue
-              extension = ".mjs" if re.search(r"""type\\s*=\\s*["']module["']""", attrs, flags=re.I) else ".js"
+              extension = ".mjs" if re.search(r"""type\s*=\s*["']module["']""", attrs, flags=re.I) else ".js"
               Path(f"/tmp/dex-inline-{count}{extension}").write_text(source, encoding="utf-8")
               count += 1
           if count == 0:
