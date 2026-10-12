@@ -1777,14 +1777,19 @@ async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
             github_status = f"failed: {e}"
 
         pulse_status = result.get("status", "error") if isinstance(result, dict) else "error"
-        return {
+        payload = {
             "status": "success" if pulse_status == "complete" else "error",
             "pulse_result": result,
             "github_push": github_status
         }
+        if pulse_status != "complete":
+            raise HTTPException(status_code=500, detail=payload)
+        return payload
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[pulse] error: {e}")
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail={"status": "error", "message": str(e)})
 
 
 @app.post("/ambient-pulse")
@@ -1817,11 +1822,16 @@ async def trigger_ambient_pulse(x_pulse_secret: Optional[str] = Header(None)):
                     persist_files.extend(["open_loops.json", "dex_lineage.jsonl"])
             await _persist_github_state(persist_files)
 
-        return {
-            "status": "success",
-            "ambient_result": result
+        payload = {
+            "status": "error" if ambient_status in {"error", "parse_error"} else "success",
+            "ambient_result": result,
         }
+        if ambient_status in {"error", "parse_error"}:
+            raise HTTPException(status_code=500, detail=payload)
+        return payload
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[ambient-pulse] error: {e}")
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail={"status": "error", "message": str(e)})
 
