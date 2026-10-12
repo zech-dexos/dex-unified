@@ -26,6 +26,22 @@ class ModelSpecTests(unittest.TestCase):
             ("groq", "openai/gpt-oss-20b"),
         )
 
+    def test_ollama_provider_is_supported(self):
+        self.assertEqual(
+            inference_router._parse_model_spec("ollama:qwen3:8b"),
+            ("ollama", "qwen3:8b"),
+        )
+
+    def test_openai_compatible_base_url_normalization(self):
+        self.assertEqual(
+            inference_router._chat_completions_url("http://gpu.example/v1/"),
+            "http://gpu.example/v1/chat/completions",
+        )
+        self.assertEqual(
+            inference_router._chat_completions_url("http://gpu.example/v1/chat/completions"),
+            "http://gpu.example/v1/chat/completions",
+        )
+
 
 class ModelFallbackTests(unittest.IsolatedAsyncioTestCase):
     async def test_strict_explicit_selection_does_not_fallback(self):
