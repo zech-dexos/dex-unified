@@ -130,6 +130,16 @@ class ModelFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["model"], "test-model.gguf")
         self.assertFalse(result["capability_execution_available"])
 
+    async def test_invalid_model_spec_returns_failure_instead_of_raising(self):
+        result = await inference_router.call_llm(
+            object(),
+            [{"role": "user", "content": "test"}],
+            requested_model="vertex:",
+            allow_fallback=False,
+        )
+        self.assertEqual(result["provider"], "none")
+        self.assertFalse(result["fallback_used"])
+
     async def test_strict_explicit_selection_does_not_fallback(self):
         with patch.object(
             inference_router, "_call_selected_model", new=AsyncMock(return_value=None)
