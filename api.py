@@ -35,6 +35,13 @@ def _get_firestore():
     global _fb_app, _firestore
     if _firestore is None:
         try:
+            # Reuse the default app if another DexOS subsystem initialized it
+            # first (e.g. the durable ambient cadence or model cooldown guard).
+            if firebase_admin._apps:
+                _fb_app = firebase_admin.get_app()
+                _firestore = fs.client(app=_fb_app)
+                return _firestore
+
             key_b64 = os.environ.get("FIREBASE_KEY_B64", "")
             key_path = os.path.join(os.path.dirname(__file__), "firebase-key.json")
             if key_b64:
