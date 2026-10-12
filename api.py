@@ -365,9 +365,8 @@ async def chat(req: ChatRequest):
         from ape_scheduler import run_cycle
         cycle_result = run_cycle()
         print(f"[ape_scheduler] {cycle_result}")
-        # Persist immediately -- don't wait for the 6-hour pulse. Cloud Run's
-        # /tmp state is ephemeral, so anything not pushed before a cold start
-        # is lost. Fire-and-forget in a thread so it doesn't block the reply.
+        # State is pushed after the interaction and conversation contribution
+        # have both been recorded, so the snapshot includes this turn.
     except Exception as e:
         print(f"[ape_scheduler] run_cycle failed: {e}")
 
