@@ -23,6 +23,10 @@ Supported model prefixes:
 
 The OpenAI-compatible URL may be the server root, a `/v1` base URL, or a full `/v1/chat/completions` endpoint. For example, an Ollama server on the same machine typically uses `DEX_OLLAMA_BASE_URL=http://localhost:11434/v1`. A deployed Cloud Run service cannot reach Ollama on Root's PC through its own `localhost`; the URL must be reachable from the service.
 
+## Talnir routing note
+
+`model_router.py` still computes an intent/domain-based Ollama suggestion for diagnostics. It does not override the explicit chat model or `DEX_MODEL`; the central inference router is authoritative. This is deliberate for controlled model comparisons. If intent-based provider selection is re-enabled later, it must be an explicit opt-in and must translate Ollama model IDs to `ollama:` specs.
+
 ## Separate chat and ambient models
 
 ```bash
