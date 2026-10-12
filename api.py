@@ -154,6 +154,26 @@ async def start_discord_bridge():
 
 @app.on_event("startup")
 async def start_continuous_substrate():
+    # Rehydrate first. No stateful runtime object or subscriber should load
+    # local files before the durable snapshot has had a chance to arrive.
+    try:
+        from github_persistence import pull_from_github
+        if pull_from_github():
+            print("[Continuity] Durable DexOS state rehydrated from GitHub")
+        else:
+            print("[Continuity] No GitHub state rehydrated; using existing local state")
+    except Exception as e:
+        print(f"[Continuity] GitHub state rehydration skipped: {e}")
+
+    # Initialize the governance/runtime object only after the pull attempt.
+    try:
+        from dex_runtime import initialize_dex_runtime
+        if not initialize_dex_runtime():
+            print("[DexRuntime] Governance is offline; chat inference will fail closed")
+    except Exception as e:
+        print(f"[DexRuntime] startup initialization skipped: {e}")
+
+    # Load and subscribe remaining subsystems after state hydration.
     try:
         from dex_substrate import run_substrate_loop
         from dex_continuity import setup_continuity
@@ -161,28 +181,6 @@ async def start_continuous_substrate():
         from dex_attention import setup_attention
         from dex_workspace import setup_workspace
 
-        # Rehydrate Dex's durable state before any continuity/workspace
-        # subscriber can read or mutate it. Cloud Run instances are ephemeral;
-        # GitHub is the durable ledger for DexOS state.
-        try:
-            from github_persistence import pull_from_github
-            if pull_from_github():
-                print("[Continuity] Durable DexOS state rehydrated from GitHub")
-            else:
-                print("[Continuity] No GitHub state rehydrated; using existing local state")
-        except Exception as e:
-            # A persistence outage must not prevent the API from serving.
-            # Firestore interaction memory remains independently available.
-            print(f"[Continuity] GitHub state rehydration skipped: {e}")
-
-        # Initialize stateful runtime objects only after durable state is present.
-        try:
-            from dex_runtime import initialize_dex_runtime
-            initialize_dex_runtime()
-        except Exception as e:
-            print(f"[DexRuntime] startup initialization skipped: {e}")
-
-        # Initialize event subscriptions only after durable state is present.
         setup_continuity()
         setup_autobiography()
         setup_attention()
