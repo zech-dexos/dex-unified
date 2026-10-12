@@ -285,6 +285,15 @@ from dex_experience_recall import recall_into_workspace, format_recalled_experie
 from dex_conversation import load_conversation, format_conversation_context, experience_contribution
 
 
+def _governance_status():
+    """Return the active governance state without initializing it implicitly."""
+    try:
+        from dex_runtime import DEXOS_ACTIVE, DEXOS_INITIALIZATION_ERROR
+        return bool(DEXOS_ACTIVE), DEXOS_INITIALIZATION_ERROR
+    except Exception as exc:
+        return False, str(exc)
+
+
 async def _persist_github_state(filenames):
     """Finish persisting changed state before the request returns."""
     try:
@@ -1742,6 +1751,13 @@ async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
     if not expected_secret or x_pulse_secret != expected_secret:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+    governance_ready, governance_error = _governance_status()
+    if not governance_ready:
+        raise HTTPException(
+            status_code=503,
+            detail=f"DexOS governance is offline; pulse held: {governance_error or 'not initialized'}",
+        )
+
     try:
         from dex_cron import run_background_pulse
         result = await run_background_pulse()
@@ -1777,6 +1793,13 @@ async def trigger_ambient_pulse(x_pulse_secret: Optional[str] = Header(None)):
     expected_secret = os.environ.get("PULSE_SECRET", "")
     if not expected_secret or x_pulse_secret != expected_secret:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    governance_ready, governance_error = _governance_status()
+    if not governance_ready:
+        raise HTTPException(
+            status_code=503,
+            detail=f"DexOS governance is offline; ambient inference held: {governance_error or 'not initialized'}",
+        )
 
     try:
         from dex_ambient_daemon import run_ambient_tick
