@@ -705,9 +705,9 @@ async function submit() {
     const data = await res.json();
     modelLabel.textContent = `${data.provider || 'provider'}:${data.model || 'unknown'}${data.fallback_used ? ' · fallback' : ''}${data.capability_execution_available === false ? ' · runtime capabilities unavailable' : ''}`;
 
-    fullText = (data.reply && !data.reply.startsWith('[')) 
-      ? data.reply 
-      : "The demo is currently at capacity. The system is fully functional — please try again in a few minutes or view the GitHub and DOI linked below.";
+    // Preserve real provider/model errors for strict comparisons and debugging.
+    // Do not disguise a failed inference call as a generic capacity message.
+    fullText = data.reply || "[No reply returned by the selected inference model.]";
     signal = {
       intent:       data.intent,
       domain:       data.domain,
