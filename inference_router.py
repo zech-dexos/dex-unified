@@ -3,6 +3,7 @@
 Provider/model selection is explicit; identity and persisted state live elsewhere.
 """
 import os
+import time
 
 OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
 
@@ -12,6 +13,52 @@ DEFAULT_MODEL = os.environ.get("DEX_MODEL", "vertex:gemini-3.6-flash")
 DEFAULT_AMBIENT_MODEL = os.environ.get("DEX_AMBIENT_MODEL", "local:default")
 GROQ_MODEL = os.environ.get("DEX_GROQ_MODEL", "openai/gpt-oss-20b")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+RATE_LIMIT_COOLDOWN_SECONDS = max(1, int(os.environ.get("DEX_RATE_LIMIT_COOLDOWN_SECONDS", "120")))
+QUOTA_COOLDOWN_SECONDS = max(1, int(os.environ.get("DEX_QUOTA_COOLDOWN_SECONDS", "1800")))
+_MODEL_COOLDOWNS = {}
+
+
+def _cooldown_remaining(key):
+    until = _MODEL_COOLDOWNS.get(key, 0.0)
+    remaining = until - time.monotonic()
+    if remaining <= 0:
+        _MODEL_COOLDOWNS.pop(key, None)
+        return 0.0
+    return remaining
+
+
+def _record_provider_failure(provider, model_id, status_code, error_text, retry_after=None):
+    text = str(error_text).lower()
+    quota_failure = (
+        status_code == 402
+        or "quota" in text
+        or "tokens per day" in text
+        or "daily limit" in text
+        or "tpd" in text
+    )
+    if status_code != 429 and not quota_failure:
+        return
+    try:
+        requested_wait = float(retry_after) if retry_after else 0.0
+    except (TypeError, ValueError):
+        requested_wait = 0.0
+    duration = max(
+        requested_wait,
+        QUOTA_COOLDOWN_SECONDS if quota_failure else RATE_LIMIT_COOLDOWN_SECONDS,
+    )
+    key = f"provider:{provider}" if quota_failure else f"{provider}:{model_id}"
+    _MODEL_COOLDOWNS[key] = time.monotonic() + duration
+    print(f"[model-router] cooldown set for {key} ({int(duration)}s)")
+
+
+def _model_is_cooling_down(provider, model_id):
+    provider_wait = _cooldown_remaining(f"provider:{provider}")
+    model_wait = _cooldown_remaining(f"{provider}:{model_id}")
+    remaining = max(provider_wait, model_wait)
+    if remaining > 0:
+        print(f"[model-router] skipping {provider}:{model_id}; cooldown {int(remaining)}s remains")
+        return True
+    return False
 
 # Identity, memory and governance remain independent of the replaceable spark.
 # Explicit per-request model choices are strict for meaningful comparisons.
@@ -78,6 +125,8 @@ async def _call_selected_model(client, messages, model_spec, max_tokens, enable_
         except Exception as exc:
             print(f"[model-router] local inference failed: {exc}")
             return None
+    if provider != "local" and _model_is_cooling_down(provider, model_id):
+        return None
     if provider == "vertex":
         from gemini_client import call_gemini
         result = await call_gemini(
@@ -152,8 +201,12 @@ async def _call_selected_model(client, messages, model_spec, max_tokens, enable_
             except Exception:
                 data = {}
             if not response.is_success or data.get("error"):
-                print(f"[model-router] {provider}:{model_id} failed HTTP {response.status_code}: "
-                      f"{str(data.get('error', data))[:400]}")
+                error_text = str(data.get("error", data))[:400]
+                print(f"[model-router] {provider}:{model_id} failed HTTP {response.status_code}: {error_text}")
+                _record_provider_failure(
+                    provider, model_id, response.status_code, error_text,
+                    response.headers.get("Retry-After"),
+                )
                 return None
             choices = data.get("choices") or []
             if not choices:
@@ -213,6 +266,7 @@ async def call_llm(client, messages, max_tokens=1000, requested_model=None,
     result = await _call_selected_model(client, messages, selected, max_tokens, enable_tools=enable_tools)
     if result:
         result["fallback_used"] = False
+        result["fallback_attempted"] = False
         return result
     if not allow_fallback:
         return {
@@ -234,8 +288,10 @@ async def call_llm(client, messages, max_tokens=1000, requested_model=None,
         if result:
             result["requested_model"] = selected
             result["fallback_used"] = True
+            result["fallback_attempted"] = True
             return result
     return {
         "reply": "[all configured models failed]", "model": "none",
-        "provider": "none", "requested_model": selected, "fallback_used": True,
+        "provider": "none", "requested_model": selected,
+        "fallback_used": False, "fallback_attempted": True,
     }
