@@ -98,6 +98,9 @@ def dex_runtime(user_input: str, user_id: str = "default") -> dict:
         active = _memory.activate_for_context(context)
         active = _memory.resolve_conflicts(active, context)
         sigil_ids = [s.id for s in active]
+    # Legacy Talnir routing is advisory metadata only. The actual inference
+    # substrate is selected centrally by ChatRequest.model / DEX_MODEL so it
+    # cannot silently override controlled cross-model comparisons.
     routing = route_info(signal) if ROUTER_ACTIVE else {"model": "dex:latest", "reason": "router unavailable"}
     if DEXOS_ACTIVE and _dexos:
         governance = _dexos.process(user_input)
