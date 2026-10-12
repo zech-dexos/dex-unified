@@ -35,6 +35,36 @@ class SelfStatePersistenceTests(unittest.TestCase):
             self.assertEqual(reloaded["version"], initial_version + 2)
 
 
+class ParticipantPersistenceTests(unittest.TestCase):
+    def test_snapshot_and_experience_records_survive_reload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            participant_path = Path(directory) / "participant_state.json"
+            experiences_path = Path(directory) / "experiences.jsonl"
+            with patch.object(participant, "PARTICIPANT_PATH", participant_path), patch.object(
+                participant, "EXPERIENCES_PATH", experiences_path
+            ):
+                snapshot = participant.ParticipantSnapshot(
+                    current_interlocutor={"participant_id": "root-identity", "name": "Root"}
+                )
+                snapshot.save()
+                loaded = participant.ParticipantSnapshot.load()
+                self.assertEqual(
+                    loaded.current_interlocutor["participant_id"], "root-identity"
+                )
+
+                participant.ExperiencePacket(experience="first experience").save()
+                participant.ExperiencePacket(experience="second experience").save()
+                records = [
+                    json.loads(line)
+                    for line in experiences_path.read_text(encoding="utf-8").splitlines()
+                ]
+
+            self.assertEqual(
+                [record["experience"] for record in records],
+                ["first experience", "second experience"],
+            )
+
+
 class ConversationPersistenceTests(unittest.TestCase):
     def test_root_and_default_alias_share_canonical_conversation(self):
         with tempfile.TemporaryDirectory() as directory:
