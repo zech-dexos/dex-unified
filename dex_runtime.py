@@ -1,29 +1,56 @@
 from talnir import translate, decompose
+
 try:
     from model_router import route, route_info
     ROUTER_ACTIVE = True
 except ImportError:
     ROUTER_ACTIVE = False
+
 try:
     from sigil import SigilMemory
-    _memory = SigilMemory()
-    SIGIL_ACTIVE = True
+    SIGIL_AVAILABLE = True
 except ImportError:
-    SIGIL_ACTIVE = False
-    _memory = None
-try:
-    from pathlib import Path
-    Path("/app/dexos_state").mkdir(exist_ok=True)
-    from github_persistence import pull_from_github, push_to_github
-    pull_from_github()
-    from dexos import DexOS
-    _dexos = DexOS()
-    _dexos.initialize()
-    DEXOS_ACTIVE = True
-except Exception as e:
-    DEXOS_ACTIVE = False
-    _dexos = None
+    SIGIL_AVAILABLE = False
+
+_memory = None
+SIGIL_ACTIVE = False
+_dexos = None
+DEXOS_ACTIVE = False
+_RUNTIME_INITIALIZED = False
+
+
+def initialize_dex_runtime() -> bool:
+    """Initialize stateful subsystems only after durable state has been rehydrated."""
+    global _memory, SIGIL_ACTIVE, _dexos, DEXOS_ACTIVE, _RUNTIME_INITIALIZED
+    if _RUNTIME_INITIALIZED:
+        return DEXOS_ACTIVE
+
+    if SIGIL_AVAILABLE:
+        try:
+            _memory = SigilMemory()
+            SIGIL_ACTIVE = True
+        except Exception as exc:
+            _memory = None
+            SIGIL_ACTIVE = False
+            print(f"[DexRuntime] Sigil memory initialization failed: {exc}")
+
+    try:
+        from dexos import DexOS
+        _dexos = DexOS()
+        _dexos.initialize()
+        DEXOS_ACTIVE = True
+    except Exception as exc:
+        _dexos = None
+        DEXOS_ACTIVE = False
+        print(f"[DexRuntime] DexOS initialization failed: {exc}")
+
+    _RUNTIME_INITIALIZED = True
+    return DEXOS_ACTIVE
+
+
 def dex_runtime(user_input: str, user_id: str = "default") -> dict:
+    if not _RUNTIME_INITIALIZED:
+        initialize_dex_runtime()
     # User recognition + recall
     try:
         from dex_memory import recognize_user, build_recall_context, log_failure, log_recovery
