@@ -175,6 +175,13 @@ async def start_continuous_substrate():
             # Firestore interaction memory remains independently available.
             print(f"[Continuity] GitHub state rehydration skipped: {e}")
 
+        # Initialize stateful runtime objects only after durable state is present.
+        try:
+            from dex_runtime import initialize_dex_runtime
+            initialize_dex_runtime()
+        except Exception as e:
+            print(f"[DexRuntime] startup initialization skipped: {e}")
+
         # Initialize event subscriptions only after durable state is present.
         setup_continuity()
         setup_autobiography()
