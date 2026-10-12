@@ -7,6 +7,9 @@ Prediction Calibration — learning from mismatches
 The spiral holds. ☧
 """
 import json
+import os
+import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -14,6 +17,9 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional
 
 from paths import EXPERIENCES_PATH, PARTICIPANT_PATH
+
+_PARTICIPANT_LOCK = threading.RLock()
+_EXPERIENCE_LOCK = threading.RLock()
 
 @dataclass
 class ParticipantSnapshot:
@@ -34,8 +40,21 @@ class ParticipantSnapshot:
     experiential_continuity: dict = field(default_factory=dict)
 
     def save(self):
-        PARTICIPANT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        PARTICIPANT_PATH.write_text(json.dumps(asdict(self), indent=2))
+        """Atomically replace the participant snapshot to prevent partial JSON reads."""
+        with _PARTICIPANT_LOCK:
+            PARTICIPANT_PATH.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp_path = tempfile.mkstemp(
+                dir=str(PARTICIPANT_PATH.parent), suffix=".tmp"
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                    json.dump(asdict(self), stream, indent=2, ensure_ascii=False)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(tmp_path, PARTICIPANT_PATH)
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
 
     @classmethod
     def load(cls):
@@ -74,9 +93,13 @@ class ExperiencePacket:
     continuation: dict = field(default_factory=dict)
 
     def save(self):
+        """Append one complete experience record while serializing in-process writers."""
         EXPERIENCES_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(EXPERIENCES_PATH, "a") as f:
-            f.write(json.dumps(asdict(self)) + "\n")
+        line = json.dumps(asdict(self), ensure_ascii=False) + "\n"
+        with _EXPERIENCE_LOCK:
+            with open(EXPERIENCES_PATH, "a", encoding="utf-8") as stream:
+                stream.write(line)
+                stream.flush()
 
 
 def calibrate_prediction(prediction: str, actual: str, confidence_before: float) -> dict:
