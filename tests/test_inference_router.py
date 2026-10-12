@@ -53,6 +53,14 @@ class ModelFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(inference_router._model_is_cooling_down("openrouter", "provider/other"))
         inference_router._MODEL_COOLDOWNS.clear()
 
+    async def test_daily_quota_cools_down_entire_provider(self):
+        inference_router._MODEL_COOLDOWNS.clear()
+        inference_router._record_provider_failure(
+            "groq", "openai/gpt-oss-20b", 429, "TPD quota exceeded"
+        )
+        self.assertTrue(inference_router._model_is_cooling_down("groq", "openai/other-model"))
+        inference_router._MODEL_COOLDOWNS.clear()
+
     async def test_strict_explicit_selection_does_not_fallback(self):
         with patch.object(
             inference_router, "_call_selected_model", new=AsyncMock(return_value=None)
