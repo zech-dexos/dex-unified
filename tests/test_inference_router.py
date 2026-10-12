@@ -128,6 +128,22 @@ class ModelFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(inference_router._model_is_cooling_down("groq", "openai/other-model"))
         inference_router._MODEL_COOLDOWNS.clear()
 
+    def test_local_prompt_is_capped_to_context_window(self):
+        from local_llm import _fit_local_prompt
+
+        class FakeLocalModel:
+            def n_ctx(self):
+                return 256
+
+            def tokenize(self, value):
+                return list(value)
+
+        prompt = "identity and continuity " * 300
+        fitted, output_tokens = _fit_local_prompt(FakeLocalModel(), prompt, 1200)
+        self.assertLessEqual(len(fitted), 256 * 3)
+        self.assertLessEqual(output_tokens, 64)
+        self.assertIn("older context truncated", fitted)
+
     async def test_local_adapter_runs_without_api_client_or_tools(self):
         import sys
         from types import SimpleNamespace
