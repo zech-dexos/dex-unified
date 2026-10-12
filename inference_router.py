@@ -196,4 +196,4 @@ async def call_llm(client, messages, max_tokens=1000, requested_model=None,
     return {
         "reply": "[all configured models failed]", "model": "none",
         "provider": "none", "requested_model": selected, "fallback_used": True,
-    }\n
+    }
