@@ -10,6 +10,7 @@ import os
 import json
 import base64
 import tempfile
+import threading
 import time
 import requests
 from pathlib import Path
@@ -83,7 +84,7 @@ def pull_from_github():
     
     return pulled > 0
 
-def push_to_github(filenames=None):
+def _push_to_github_locked(filenames=None):
     """Push selected state files to GitHub; retry optimistic-write conflicts."""
     if not GITHUB_TOKEN:
         print("No GITHUB_TOKEN — skipping push")
@@ -149,6 +150,14 @@ def push_to_github(filenames=None):
             print(f"Push error {filename}: {e}")
 
     return pushed > 0
+
+_PUSH_LOCK = threading.Lock()
+
+
+def push_to_github(filenames=None):
+    """Serialize GitHub state pushes within this process."""
+    with _PUSH_LOCK:
+        return _push_to_github_locked(filenames)
 
 if __name__ == "__main__":
     print("Testing GitHub persistence...")
