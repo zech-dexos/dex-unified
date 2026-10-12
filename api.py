@@ -119,20 +119,21 @@ _ambient_groq_cooldown_until = 0.0
 
 
 async def ambient_llm_callable(prompt: str) -> str:
-    """Run background cognition on Dex's tiny local CPU model, never a hosted API."""
+    """Run ambient inference through the same replaceable substrate interface as chat."""
     context = _build_ambient_context()
     full_prompt = f"{context}\n\n{prompt}" if context else prompt
-
-    # Local inference avoids Groq/OpenRouter/Gemini quotas entirely.
-    # Keep blocking CPU inference off the event loop.
-    from local_llm import local_slm_generate
-
-    result = await asyncio.get_running_loop().run_in_executor(
-        None, local_slm_generate, full_prompt
-    )
-    if not result:
-        raise ValueError("local_slm_generate returned empty response")
-    return result
+    async with httpx.AsyncClient(timeout=60) as client:
+        result = await call_llm(
+            client,
+            [{"role": "user", "content": full_prompt}],
+            max_tokens=200,
+            requested_model=DEFAULT_AMBIENT_MODEL,
+            allow_fallback=False,
+            enable_tools=False,
+        )
+    if result.get("provider") == "none" or not result.get("reply"):
+        raise ValueError(f"ambient inference failed: {result.get('reply', 'empty response')}")
+    return result["reply"]
 
 
 # Start Dex Discord bridge inside the Cloud Run container.
@@ -266,8 +267,8 @@ import asyncio
 import httpx
 
 from inference_router import (
-    OPENROUTER_KEY, OPENROUTER_URL, GROQ_URL, DEFAULT_MODEL, GROQ_MODEL,
-    GEMINI_KEY, call_llm,
+    OPENROUTER_KEY, OPENROUTER_URL, GROQ_URL, DEFAULT_MODEL, DEFAULT_AMBIENT_MODEL,
+    GROQ_MODEL, GEMINI_KEY, call_llm,
 )
 from participant import ParticipantSnapshot, format_participant_context, build_experience_from_pulse, record_interaction_experience
 from dex_experience_recall import recall_into_workspace, format_recalled_experiences
