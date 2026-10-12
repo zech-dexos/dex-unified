@@ -61,6 +61,28 @@ class ModelFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(inference_router._model_is_cooling_down("groq", "openai/other-model"))
         inference_router._MODEL_COOLDOWNS.clear()
 
+    async def test_local_adapter_runs_without_api_client_or_tools(self):
+        import sys
+        from types import SimpleNamespace
+
+        fake_local = SimpleNamespace(
+            local_slm_generate=lambda prompt, max_tokens: "local answer",
+            MODEL_PATH="/tmp/test-model.gguf",
+        )
+        with patch.dict(sys.modules, {"local_llm": fake_local}):
+            result = await inference_router._call_selected_model(
+                None,
+                [{"role": "user", "content": "test prompt"}],
+                "local:default",
+                80,
+                enable_tools=False,
+            )
+
+        self.assertEqual(result["reply"], "local answer")
+        self.assertEqual(result["provider"], "local")
+        self.assertEqual(result["model"], "test-model.gguf")
+        self.assertFalse(result["capability_execution_available"])
+
     async def test_strict_explicit_selection_does_not_fallback(self):
         with patch.object(
             inference_router, "_call_selected_model", new=AsyncMock(return_value=None)
