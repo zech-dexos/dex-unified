@@ -700,6 +700,7 @@ async function submit() {
       if (!res.ok) throw new Error(`proxy ${res.status}`);
     }
     const data = await res.json();
+    modelLabel.textContent = `${data.provider || 'provider'}:${data.model || 'unknown'}${data.fallback_used ? ' · fallback' : ''}`;
 
     fullText = (data.reply && !data.reply.startsWith('[')) 
       ? data.reply 
