@@ -279,6 +279,18 @@ from participant import ParticipantSnapshot, format_participant_context, build_e
 from dex_experience_recall import recall_into_workspace, format_recalled_experiences
 from dex_conversation import load_conversation, format_conversation_context, experience_contribution
 
+
+def _schedule_github_persist(filenames):
+    """Persist only the state files changed by this event, after the write."""
+    try:
+        from github_persistence import push_to_github
+        asyncio.get_running_loop().run_in_executor(
+            None, push_to_github, list(filenames)
+        )
+    except Exception as exc:
+        print(f"[persistence] scheduling state push failed: {exc}")
+
+
 class ChatRequest(BaseModel):
     message: str
     history: list = []
@@ -304,6 +316,9 @@ async def chat(req: ChatRequest):
     if msg_stripped in ("!reflect", "!reflection"):
         from reflection import run_reflection
         result = run_reflection(lookback=15)
+        _schedule_github_persist([
+            "identity.json", "reflections.jsonl", "open_loops.json", "dex_lineage.jsonl"
+        ])
         return {
             "reply": f"[REAL reflection cycle executed]\nStatus: {result.get('status')}\n"
                       f"Observations: {result.get('observations', [])}\n"
@@ -333,6 +348,7 @@ async def chat(req: ChatRequest):
         updated = await _run()
         save_intents(updated)
         active = [i for i in updated if i.status == "active"]
+        _schedule_github_persist(["intents.json", "identity.json"])
 
         return {
             "reply": f"[REAL intent generation executed]\nActive intents ({len(active)}):\n" +
@@ -352,9 +368,6 @@ async def chat(req: ChatRequest):
         # Persist immediately -- don't wait for the 6-hour pulse. Cloud Run's
         # /tmp state is ephemeral, so anything not pushed before a cold start
         # is lost. Fire-and-forget in a thread so it doesn't block the reply.
-        import asyncio as _asyncio
-        from github_persistence import push_to_github
-        _asyncio.get_event_loop().run_in_executor(None, push_to_github)
     except Exception as e:
         print(f"[ape_scheduler] run_cycle failed: {e}")
 
@@ -362,6 +375,7 @@ async def chat(req: ChatRequest):
     # If the kernel flagged this input, the LLM is never called.
     # This is the (B) requirement: fail-safe routing that bypasses AI entirely.
     if result.get("flagged"):
+        _schedule_github_persist(["identity.json", "dex_lineage.jsonl"])
         return {
             "reply": result.get("response", "VOW VIOLATION — this path is closed."),
             "intent": result.get("intent", "blocked"),
@@ -810,6 +824,13 @@ the exchange as a newly started request/response transaction.
         })
     except Exception as e:
         print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")
+
+    persist_files = [
+        "identity.json", "participant_state.json", "experiences.jsonl", "current_session.json"
+    ]
+    if governance_flag:
+        persist_files.append("dex_lineage.jsonl")
+    _schedule_github_persist(persist_files)
 
     return {
         "reply":        reply,
@@ -1751,6 +1772,17 @@ async def trigger_ambient_pulse(x_pulse_secret: Optional[str] = Header(None)):
         from dex_ambient_daemon import run_ambient_tick
 
         result = await run_ambient_tick(ambient_llm_callable)
+        ambient_status = result.get("status")
+        if ambient_status not in {"not_due", "error", "parse_error"}:
+            persist_files = ["identity.json"]
+            if ambient_status == "ok":
+                persist_files.extend(["participant_state.json", "experiences.jsonl"])
+                target = result.get("target") or {}
+                if target.get("kind") == "conversation":
+                    persist_files.append("current_session.json")
+                if result.get("spark_reach") or result.get("spark_judgment"):
+                    persist_files.extend(["open_loops.json", "dex_lineage.jsonl"])
+            _schedule_github_persist(persist_files)
 
         return {
             "status": "success",
