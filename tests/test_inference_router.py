@@ -166,6 +166,25 @@ class ModelFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["model"], "test-model.gguf")
         self.assertFalse(result["capability_execution_available"])
 
+    async def test_bare_model_id_is_not_retried_as_prefixed_fallback(self):
+        fake = AsyncMock(side_effect=[
+            None,
+            {"reply": "local answer", "model": "test.gguf", "provider": "local"},
+        ])
+        with patch.dict(os.environ, {
+            "DEX_FALLBACK_MODELS": "openrouter:google/gemma-4-26b-a4b-it:free,local:default"
+        }), patch.object(inference_router, "_safe_call_selected_model", fake):
+            result = await inference_router.call_llm(
+                object(),
+                [{"role": "user", "content": "test"}],
+                requested_model="google/gemma-4-26b-a4b-it:free",
+                allow_fallback=True,
+            )
+
+        self.assertEqual(result["provider"], "local")
+        self.assertEqual(fake.await_count, 2)
+        self.assertEqual(fake.await_args_list[1].args[2], "local:default")
+
     async def test_invalid_model_spec_returns_failure_instead_of_raising(self):
         result = await inference_router.call_llm(
             object(),
