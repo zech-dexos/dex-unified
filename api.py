@@ -1773,7 +1773,7 @@ async def trigger_ambient_pulse(x_pulse_secret: Optional[str] = Header(None)):
 
         result = await run_ambient_tick(ambient_llm_callable)
         ambient_status = result.get("status")
-        if ambient_status not in {"not_due", "error", "parse_error"}:
+        if ambient_status != "not_due":
             persist_files = ["identity.json"]
             if ambient_status == "ok":
                 persist_files.extend(["participant_state.json", "experiences.jsonl"])
