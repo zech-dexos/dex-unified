@@ -36,6 +36,8 @@ FILES_TO_PERSIST = [
 
 from paths import _STATE_BASE as STATE_DIR
 
+PERSIST_HTTP_TIMEOUT = max(1.0, float(os.environ.get("DEX_GITHUB_HTTP_TIMEOUT_SECONDS", "5")))
+
 
 def _atomic_write_text(path: Path, content: str):
     """Replace state files atomically so cold starts never read partial JSON."""
@@ -104,8 +106,8 @@ def _push_to_github_locked(filenames=None):
             encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
             url = f"{API}/repos/{REPO}/contents/{filename}"
 
-            for attempt in range(3):
-                current = requests.get(url, headers=_headers(), timeout=10)
+            for attempt in range(2):
+                current = requests.get(url, headers=_headers(), timeout=PERSIST_HTTP_TIMEOUT)
                 if current.status_code == 200:
                     remote = current.json()
                     sha = remote.get("sha")
