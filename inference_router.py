@@ -402,6 +402,14 @@ async def _safe_call_selected_model(client, messages, model_spec, max_tokens, en
         return None
 
 
+def _normalized_model_key(spec):
+    try:
+        provider, model_id = _parse_model_spec(spec)
+        return f"{provider}:{model_id}"
+    except Exception:
+        return str(spec).strip()
+
+
 async def call_llm(client, messages, max_tokens=1000, requested_model=None,
                    allow_fallback=None, enable_tools=True):
     """Route inference; implicit callers may fall back, explicit comparisons can be strict."""
@@ -424,11 +432,12 @@ async def call_llm(client, messages, max_tokens=1000, requested_model=None,
     fallbacks = [x.strip() for x in configured.split(",") if x.strip()]
     if not fallbacks:
         fallbacks = DEFAULT_FALLBACK_MODELS
-    attempted = {selected}
+    attempted = {_normalized_model_key(selected)}
     for fallback in fallbacks:
-        if fallback in attempted:
+        fallback_key = _normalized_model_key(fallback)
+        if fallback_key in attempted:
             continue
-        attempted.add(fallback)
+        attempted.add(fallback_key)
         result = await _safe_call_selected_model(client, messages, fallback, max_tokens, enable_tools)
         if result:
             result["requested_model"] = selected
