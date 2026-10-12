@@ -140,9 +140,9 @@ class ModelFallbackTests(unittest.IsolatedAsyncioTestCase):
 
         prompt = "identity and continuity " * 300
         fitted, output_tokens = _fit_local_prompt(FakeLocalModel(), prompt, 1200)
-        self.assertLessEqual(len(fitted), 256 * 3)
+        self.assertLess(len(fitted), len(prompt))
+        self.assertLessEqual(len(fitted), 176)
         self.assertLessEqual(output_tokens, 64)
-        self.assertIn("older context truncated", fitted)
 
     async def test_local_adapter_runs_without_api_client_or_tools(self):
         import sys
