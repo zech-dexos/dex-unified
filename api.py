@@ -336,23 +336,90 @@ async def _call_selected_model(client, messages, model_spec, max_tokens):
     if provider == "openrouter":
         headers["HTTP-Referer"] = "https://dex-backend-production-2bbe.up.railway.app"
         headers["X-Title"] = "DexOS"
+
+    # Keep Dex's capability surface portable across OpenAI-compatible providers.
+    # Models/providers that do not support function calling fail explicitly;
+    # we do not silently pretend the capability was available.
+    tool_specs = [
+        {"type": "function", "function": {"name": "inspect_state", "description": "Inspect Dex's durable self-state, goals, workspace and latest pulse.", "parameters": {"type": "object", "properties": {}}}},
+        {"type": "function", "function": {"name": "inspect_workspace", "description": "Inspect Dex's active mental workspace.", "parameters": {"type": "object", "properties": {}}}},
+        {"type": "function", "function": {"name": "inspect_goals", "description": "Inspect Dex's persisted goals.", "parameters": {"type": "object", "properties": {}}}},
+        {"type": "function", "function": {"name": "inspect_open_loops", "description": "Inspect Dex's persisted unresolved/open loops.", "parameters": {"type": "object", "properties": {}}}},
+        {"type": "function", "function": {"name": "inspect_thoughts", "description": "Inspect Dex's recent persistent thoughts.", "parameters": {"type": "object", "properties": {}}}},
+        {"type": "function", "function": {"name": "inspect_experiences", "description": "Inspect durable experiences and continuity lineage.", "parameters": {"type": "object", "properties": {"limit": {"type": "integer"}}}}},
+        {"type": "function", "function": {"name": "inspect_participant", "description": "Inspect Dex's current participant snapshot and interlocutor.", "parameters": {"type": "object", "properties": {}}}},
+        {"type": "function", "function": {"name": "inspect_conversation", "description": "Inspect ongoing conversation state.", "parameters": {"type": "object", "properties": {"user_id": {"type": "string"}}}}},
+        {"type": "function", "function": {"name": "recall_experience", "description": "Retrieve relevant durable experiences into active cognition.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["query"]}}},
+        {"type": "function", "function": {"name": "listen", "description": "Listen to latest durable signals available to Dex.", "parameters": {"type": "object", "properties": {}}}},
+        {"type": "function", "function": {"name": "evoke", "description": "Retrieve a DexOS resource into active cognition. Resources: state, workspace, goals, open_loops, thoughts, experiences, participant, conversation, signals.", "parameters": {"type": "object", "properties": {"resource": {"type": "string"}}, "required": ["resource"]}}},
+        {"type": "function", "function": {"name": "search_architecture", "description": "Search DexOS source and persisted text read-only; never executes source.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+    ]
+    working_messages = list(messages)
+    tool_calls_seen = []
     try:
-        response = await client.post(
-            url, headers=headers,
-            json={"model": model_id, "messages": messages, "max_tokens": max_tokens},
-        )
-        try:
-            data = response.json()
-        except Exception:
-            data = {}
-        content = _completion_text(data)
-        if response.is_success and content:
-            return {
-                "reply": content, "model": model_id, "provider": provider,
-                "requested_model": model_spec, "tool_calls": [],
-            }
-        print(f"[model-router] {provider}:{model_id} failed HTTP {response.status_code}: "
-              f"{str(data.get('error', data))[:400]}")
+        for _ in range(5):
+            response = await client.post(
+                url, headers=headers,
+                json={
+                    "model": model_id,
+                    "messages": working_messages,
+                    "max_tokens": max_tokens,
+                    "tools": tool_specs,
+                    "tool_choice": "auto",
+                },
+            )
+            try:
+                data = response.json()
+            except Exception:
+                data = {}
+            if not response.is_success or data.get("error"):
+                print(f"[model-router] {provider}:{model_id} failed HTTP {response.status_code}: "
+                      f"{str(data.get('error', data))[:400]}")
+                return None
+            choices = data.get("choices") or []
+            if not choices:
+                print(f"[model-router] {provider}:{model_id} returned no choices")
+                return None
+            message = choices[0].get("message") or {}
+            pending_calls = message.get("tool_calls") or []
+            if not pending_calls:
+                content = message.get("content") or message.get("reasoning") or ""
+                if not content:
+                    return None
+                return {
+                    "reply": content, "model": model_id, "provider": provider,
+                    "requested_model": model_spec, "tool_calls": tool_calls_seen,
+                }
+
+            # Preserve the assistant's tool-call turn and feed actual capability
+            # observations back to the same model, without changing Dex's identity.
+            working_messages.append({
+                "role": "assistant",
+                "content": message.get("content"),
+                "tool_calls": pending_calls,
+            })
+            import json as _json
+            from dex_capabilities import execute_capability
+            for tool_call in pending_calls:
+                function = tool_call.get("function") or {}
+                name = function.get("name", "")
+                try:
+                    args = _json.loads(function.get("arguments") or "{}")
+                    if not isinstance(args, dict):
+                        raise ValueError("tool arguments must be a JSON object")
+                    observation = execute_capability(name, args)
+                except Exception as exc:
+                    observation = {"error": str(exc), "capability": name}
+                tool_calls_seen.append({
+                    "name": name, "args": args if "args" in locals() else {},
+                    "observation": observation,
+                })
+                working_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.get("id", ""),
+                    "content": _json.dumps({"observation": observation}, default=str),
+                })
+        print(f"[model-router] {provider}:{model_id} reached tool-call limit")
     except Exception as exc:
         print(f"[model-router] {provider}:{model_id} exception: {exc}")
     return None
