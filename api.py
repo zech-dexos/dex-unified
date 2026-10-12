@@ -1052,18 +1052,18 @@ User said: "{user_said}"
 Kalimi replied: "{kalimi_said}"
 Output:"""
     try:
-        res = await client.post(
-            GROQ_URL,
-            headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 100}
+        selected_model = os.environ.get("DEX_MEMORY_MODEL", f"groq:{GROQ_MODEL}")
+        result = await call_llm(
+            client, [{"role": "user", "content": prompt}],
+            max_tokens=100, requested_model=selected_model,
+            allow_fallback=True, enable_tools=False,
         )
-        data = res.json()
-        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        text = text.strip()
-        if not text or text.upper().startswith("NONE"):
+        text = str(result.get("reply", "")).strip()
+        if not text or text.upper().startswith("NONE") or result.get("provider") == "none":
             return ""
         return text
-    except Exception:
+    except Exception as exc:
+        print(f"[memory-extraction] inference failed: {exc}")
         return ""
 
 def memory_to_prompt(memory: dict) -> str:
@@ -1209,17 +1209,17 @@ User said: "{message}"
 JSON:"""
 
     try:
-        res = await client.post(
-            GROQ_URL,
-            headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 60}
+        selected_model = os.environ.get("DEX_CLASSIFIER_MODEL", f"groq:{GROQ_MODEL}")
+        result = await call_llm(
+            client, [{"role": "user", "content": prompt}],
+            max_tokens=60, requested_model=selected_model,
+            allow_fallback=True, enable_tools=False,
         )
-        data = res.json()
-        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        text = text.strip()
+        text = str(result.get("reply", "")).strip()
         import json as _json
         return _json.loads(text)
-    except Exception:
+    except Exception as exc:
+        print(f"[talnir-classifier] inference failed: {exc}")
         return {"intent": "CONVERSATION"}
 
 @app.post("/haven_api")
@@ -1231,8 +1231,8 @@ async def haven_api(req: HavenRequest):
         return {"response": "I am right here with you.", "error": str(e), "trace": traceback.format_exc()}
 
 async def _haven_api_inner(req: HavenRequest):
-    if not GEMINI_KEY and not OPENROUTER_KEY:
-        return {"response": "I'm having trouble connecting right now."}
+    # The centralized router decides which configured substrate is available.
+    # This endpoint can also run with a local model and no hosted API key.
 
     memory = load_memory(req.user_id)
     memory_prompt = memory_to_prompt(memory)
