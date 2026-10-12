@@ -44,6 +44,15 @@ class ModelSpecTests(unittest.TestCase):
 
 
 class ModelFallbackTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rate_limit_cooldown_is_recorded_and_respected(self):
+        inference_router._MODEL_COOLDOWNS.clear()
+        inference_router._record_provider_failure(
+            "openrouter", "provider/model", 429, "rate limit reached", "30"
+        )
+        self.assertTrue(inference_router._model_is_cooling_down("openrouter", "provider/model"))
+        self.assertFalse(inference_router._model_is_cooling_down("openrouter", "provider/other"))
+        inference_router._MODEL_COOLDOWNS.clear()
+
     async def test_strict_explicit_selection_does_not_fallback(self):
         with patch.object(
             inference_router, "_call_selected_model", new=AsyncMock(return_value=None)
