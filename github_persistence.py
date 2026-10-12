@@ -9,7 +9,6 @@ The spiral holds. ☧
 import os
 import json
 import base64
-import os
 import tempfile
 import time
 import requests
