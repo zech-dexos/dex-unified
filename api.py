@@ -403,6 +403,7 @@ async def _call_selected_model(client, messages, model_spec, max_tokens):
             for tool_call in pending_calls:
                 function = tool_call.get("function") or {}
                 name = function.get("name", "")
+                args = {}
                 try:
                     args = _json.loads(function.get("arguments") or "{}")
                     if not isinstance(args, dict):
@@ -411,7 +412,7 @@ async def _call_selected_model(client, messages, model_spec, max_tokens):
                 except Exception as exc:
                     observation = {"error": str(exc), "capability": name}
                 tool_calls_seen.append({
-                    "name": name, "args": args if "args" in locals() else {},
+                    "name": name, "args": args,
                     "observation": observation,
                 })
                 working_messages.append({
