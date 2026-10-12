@@ -30,6 +30,7 @@ DEX_MODEL=vertex:gemini-3.6-flash
 DEX_AMBIENT_MODEL=local:default
 DEX_MEMORY_MODEL=groq:openai/gpt-oss-20b
 DEX_CLASSIFIER_MODEL=groq:openai/gpt-oss-20b
+DEX_VISION_MODEL=openrouter:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
 ```
 
 Ambient cognition defaults to the bundled local CPU model so scheduled pulses do not consume hosted API quota. Memory extraction and intent classification use the configured router and can fall back when a provider is unavailable. Choose auxiliary models deliberately: each hosted call can consume that provider's quota.
@@ -40,7 +41,7 @@ Ambient cognition defaults to the bundled local CPU model so scheduled pulses do
 
 `strict_model: true` disables fallback for controlled comparisons. Use it when measuring whether two different models behave differently under the same Dex architecture.
 
-Transient model rate limits trigger a short model cooldown. Daily/provider quota errors trigger a longer provider cooldown. Cooldowns are persisted in Firestore when available and cached in-process; if Firestore is unavailable, only the local cooldown remains.
+Transient model rate limits trigger a short model cooldown (120 seconds by default). Daily/provider quota errors trigger a longer provider cooldown (12 hours by default). Cooldowns are persisted in the Firestore collection `dex_model_cooldowns` when available and cached in-process; if Firestore is unavailable, only the local cooldown remains. Configure these defaults with `DEX_RATE_LIMIT_COOLDOWN_SECONDS` and `DEX_QUOTA_COOLDOWN_SECONDS`.
 
 The `/chat` response reports `provider`, `model`, `requested_model`, `fallback_used`, and `capability_execution_available`. Compare the actual provider/model and capability results, not just the prose response.
 
