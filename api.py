@@ -114,8 +114,6 @@ def _build_ambient_context() -> str:
 
 import time
 
-# Process-local backoff prevents repeated quota failures between scheduler pulses.
-_ambient_groq_cooldown_until = 0.0
 
 
 async def ambient_llm_callable(prompt: str) -> str:
