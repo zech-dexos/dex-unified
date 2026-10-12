@@ -457,6 +457,8 @@
       <option value="openrouter:liquid/lfm-2.5-1.2b-instruct:free">OpenRouter · LFM 1.2B</option>
       <option value="openrouter:openrouter/free">OpenRouter · Auto (free)</option>
     </select>
+    <label for="custom-model">Custom model</label>
+    <input id="custom-model" type="text" placeholder="ollama:qwen3:8b or openai-compatible:MODEL_ID" style="min-width:240px;max-width:100%;padding:7px 9px;border-radius:6px;border:1px solid #555;background:#111;color:#eee" />
     <label style="display:flex;gap:5px;align-items:center">
       <input type="checkbox" id="strict-model-toggle" />
       strict model test (no fallback)
@@ -597,6 +599,7 @@ let streaming = false;
 const keyInput    = document.getElementById('api-key-input');
 const keyStatus   = document.getElementById('key-status');
 const modelSelect = document.getElementById('model-select');
+const customModelInput = document.getElementById('custom-model');
 const strictModelToggle = document.getElementById('strict-model-toggle');
 const modelLabel  = document.getElementById('model-label');
 const messages    = document.getElementById('messages');
@@ -645,7 +648,7 @@ async function submit() {
   if (!text || streaming) return;
 
   const key   = keyInput.value.trim();
-  const model = modelSelect.value;
+  const model = customModelInput.value.trim() || modelSelect.value;
 
   // clear input
   promptInput.value = '';
@@ -677,7 +680,7 @@ async function submit() {
     const payload = {
       message: text,
       history: history.slice(-10),
-      model: modelSelect.value,
+      model,
       strict_model: strictModelToggle.checked,
     };
 
