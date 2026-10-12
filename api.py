@@ -280,15 +280,14 @@ from dex_experience_recall import recall_into_workspace, format_recalled_experie
 from dex_conversation import load_conversation, format_conversation_context, experience_contribution
 
 
-def _schedule_github_persist(filenames):
-    """Persist only the state files changed by this event, after the write."""
+async def _persist_github_state(filenames):
+    """Finish persisting changed state before the request returns."""
     try:
         from github_persistence import push_to_github
-        asyncio.get_running_loop().run_in_executor(
-            None, push_to_github, list(filenames)
-        )
+        return await asyncio.to_thread(push_to_github, list(filenames))
     except Exception as exc:
-        print(f"[persistence] scheduling state push failed: {exc}")
+        print(f"[persistence] state push failed: {exc}")
+        return False
 
 
 class ChatRequest(BaseModel):
@@ -316,7 +315,7 @@ async def chat(req: ChatRequest):
     if msg_stripped in ("!reflect", "!reflection"):
         from reflection import run_reflection
         result = run_reflection(lookback=15)
-        _schedule_github_persist([
+        await _persist_github_state([
             "identity.json", "reflections.jsonl", "open_loops.json", "dex_lineage.jsonl"
         ])
         return {
