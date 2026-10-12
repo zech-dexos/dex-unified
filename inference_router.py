@@ -124,6 +124,7 @@ async def _call_selected_model(client, messages, model_spec, max_tokens, enable_
             return {
                 "reply": text, "model": os.path.basename(MODEL_PATH),
                 "provider": "local", "requested_model": model_spec, "tool_calls": [],
+                "capability_execution_available": False,
             }
         except Exception as exc:
             print(f"[model-router] local inference failed: {exc}")
@@ -139,6 +140,7 @@ async def _call_selected_model(client, messages, model_spec, max_tokens, enable_
             result.update({
                 "model": model_id, "provider": provider,
                 "requested_model": model_spec,
+                "capability_execution_available": bool(enable_tools),
             })
         return result
 
@@ -224,6 +226,7 @@ async def _call_selected_model(client, messages, model_spec, max_tokens, enable_
                 return {
                     "reply": content, "model": model_id, "provider": provider,
                     "requested_model": model_spec, "tool_calls": tool_calls_seen,
+                    "capability_execution_available": bool(enable_tools),
                 }
 
             # Preserve the assistant's tool-call turn and feed actual capability
