@@ -4,6 +4,7 @@ Provider/model selection is explicit; identity and persisted state live elsewher
 """
 import os
 import time
+import hashlib
 
 OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
 
@@ -14,17 +15,68 @@ DEFAULT_AMBIENT_MODEL = os.environ.get("DEX_AMBIENT_MODEL", "local:default")
 GROQ_MODEL = os.environ.get("DEX_GROQ_MODEL", "openai/gpt-oss-20b")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 RATE_LIMIT_COOLDOWN_SECONDS = max(1, int(os.environ.get("DEX_RATE_LIMIT_COOLDOWN_SECONDS", "120")))
-QUOTA_COOLDOWN_SECONDS = max(1, int(os.environ.get("DEX_QUOTA_COOLDOWN_SECONDS", "1800")))
+QUOTA_COOLDOWN_SECONDS = max(1, int(os.environ.get("DEX_QUOTA_COOLDOWN_SECONDS", "43200")))
 _MODEL_COOLDOWNS = {}
+_SHARED_COOLDOWN_CACHE = {}
+_SHARED_COOLDOWN_CACHE_SECONDS = 10.0
+
+
+def _shared_cooldown_doc(db, key):
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    return db.collection("dex_model_cooldowns").document(digest)
 
 
 def _cooldown_remaining(key):
+    now = time.monotonic()
     until = _MODEL_COOLDOWNS.get(key, 0.0)
-    remaining = until - time.monotonic()
-    if remaining <= 0:
-        _MODEL_COOLDOWNS.pop(key, None)
+    remaining = until - now
+    if remaining > 0:
+        return remaining
+    _MODEL_COOLDOWNS.pop(key, None)
+
+    cached = _SHARED_COOLDOWN_CACHE.get(key)
+    if cached and now - cached[0] < _SHARED_COOLDOWN_CACHE_SECONDS:
+        return max(0.0, cached[1] - (now - cached[0]))
+
+    try:
+        from dex_memory import _get_db
+        db = _get_db()
+        if db is None:
+            _SHARED_COOLDOWN_CACHE[key] = (now, 0.0)
+            return 0.0
+        snapshot = _shared_cooldown_doc(db, key).get()
+        data = snapshot.to_dict() or {}
+        shared_until = float(data.get("cooldown_until_epoch", 0.0))
+        remaining = max(0.0, shared_until - time.time())
+        _SHARED_COOLDOWN_CACHE[key] = (now, remaining)
+        if remaining > 0:
+            _MODEL_COOLDOWNS[key] = now + remaining
+        return remaining
+    except Exception as exc:
+        # Firestore is an optional shared guard; local backoff still works without it.
+        print(f"[model-router] shared cooldown read unavailable: {exc}")
+        _SHARED_COOLDOWN_CACHE[key] = (now, 0.0)
         return 0.0
-    return remaining
+
+
+def _persist_shared_cooldown(key, provider, model_id, duration, reason):
+    try:
+        from dex_memory import _get_db
+        db = _get_db()
+        if db is None:
+            return
+        _shared_cooldown_doc(db, key).set({
+            "key": key,
+            "provider": provider,
+            "model": model_id,
+            "cooldown_until_epoch": time.time() + duration,
+            "duration_seconds": duration,
+            "reason": str(reason)[:300],
+            "updated_at_epoch": time.time(),
+        }, merge=True)
+        _SHARED_COOLDOWN_CACHE[key] = (time.monotonic(), duration)
+    except Exception as exc:
+        print(f"[model-router] shared cooldown write unavailable: {exc}")
 
 
 def _record_provider_failure(provider, model_id, status_code, error_text, retry_after=None):
@@ -50,6 +102,8 @@ def _record_provider_failure(provider, model_id, status_code, error_text, retry_
     )
     key = f"provider:{provider}" if quota_failure else f"{provider}:{model_id}"
     _MODEL_COOLDOWNS[key] = time.monotonic() + duration
+    _SHARED_COOLDOWN_CACHE[key] = (time.monotonic(), duration)
+    _persist_shared_cooldown(key, provider, model_id, duration, text)
     print(f"[model-router] cooldown set for {key} ({int(duration)}s)")
 
 
