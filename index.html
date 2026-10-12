@@ -445,12 +445,12 @@
     />
     <div id="key-status" title="Key status"></div>
     <select id="model-select" title="Model">
-      <option value="deepseek/deepseek-chat-v3-0324:free">deepseek-v3 (free · recommended)</option>
-      <option value="meta-llama/llama-3.3-70b-instruct:free">llama-3.3-70b (free)</option>
-      <option value="deepseek/deepseek-r1:free">deepseek-r1 (free)</option>
-      <option value="qwen/qwen3-235b-a22b:free">qwen3-235b (free)</option>
-      <option value="openrouter/free">auto (free)</option>
-      <option value="anthropic/claude-3-haiku">claude-3-haiku</option>
+      <option value="vertex:gemini-3.6-flash">Vertex · Gemini Flash</option>
+      <option value="openrouter:google/gemma-4-31b-it:free">OpenRouter · Gemma 4 31B</option>
+      <option value="openrouter:google/gemma-4-26b-a4b-it:free">OpenRouter · Gemma 4 26B</option>
+      <option value="openrouter:nvidia/nemotron-3-nano-30b-a3b:free">OpenRouter · Nemotron Nano</option>
+      <option value="openrouter:liquid/lfm-2.5-1.2b-instruct:free">OpenRouter · LFM 1.2B</option>
+      <option value="openrouter:free">OpenRouter · Auto (free)</option>
     </select>
   </div>
 
@@ -667,7 +667,8 @@ async function submit() {
     const payload = {
       message: text,
       history: history.slice(-10),
-      model: "meta-llama/llama-3.3-70b-instruct:free",
+      model: modelSelect.value,
+      strict_model: false,
     };
 
     let res;
