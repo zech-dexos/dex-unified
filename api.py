@@ -271,72 +271,128 @@ from dex_experience_recall import recall_into_workspace, format_recalled_experie
 from dex_conversation import load_conversation, format_conversation_context, experience_contribution
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL   = "google/gemma-4-31b-it:free"
-GROQ_KEY = os.environ.get("GROQ_KEY", "")
-GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "openai/gpt-oss-20b"
-
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+DEFAULT_MODEL = os.environ.get("DEX_MODEL", "vertex:gemini-3.6-flash")
+GROQ_MODEL = os.environ.get("DEX_GROQ_MODEL", "openai/gpt-oss-20b")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-from gemini_client import call_gemini
 
-FALLBACK_MODELS = [
-    "google/gemma-4-31b-it:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "deepseek/deepseek-v4-flash:free",
-    "nvidia/nemotron-3-nano-30b-a3b:free",
-    "qwen/qwen3-next-80b-a3b-instruct:free",
-    "liquid/lfm-2.5-1.2b-instruct:free",
+# Identity, memory and governance remain independent of the replaceable spark.
+# Explicit per-request model choices are strict for meaningful comparisons.
+DEFAULT_FALLBACK_MODELS = [
+    "groq:openai/gpt-oss-20b",
+    "openrouter:google/gemma-4-31b-it:free",
+    "openrouter:google/gemma-4-26b-a4b-it:free",
+    "openrouter:deepseek/deepseek-v4-flash:free",
+    "openrouter:nvidia/nemotron-3-nano-30b-a3b:free",
+    "openrouter:qwen/qwen3-next-80b-a3b-instruct:free",
+    "openrouter:liquid/lfm-2.5-1.2b-instruct:free",
 ]
 
-async def call_llm(client, messages, max_tokens=1000):
-    gemini_result = await call_gemini(client, messages, max_tokens, enable_tools=True)
-    if gemini_result:
-        return gemini_result
+def _parse_model_spec(spec):
+    """Return provider/model. Prefixes: vertex:, groq:, openrouter:."""
+    spec = (spec or DEFAULT_MODEL).strip()
+    if ":" in spec:
+        prefix, model_id = spec.split(":", 1)
+        if prefix.lower() in ("vertex", "gemini", "groq", "openrouter"):
+            provider = "vertex" if prefix.lower() == "gemini" else prefix.lower()
+            if not model_id.strip():
+                raise ValueError("Model ID cannot be empty")
+            return provider, model_id.strip()
+    if spec.startswith("gemini-"):
+        return "vertex", spec
+    # Existing clients passing bare IDs keep OpenRouter semantics.
+    return "openrouter", spec
 
-    if GROQ_KEY:
+def _completion_text(data):
+    if not isinstance(data, dict) or data.get("error"):
+        return ""
+    choices = data.get("choices") or []
+    if not choices:
+        return ""
+    message = choices[0].get("message") or {}
+    return message.get("content") or message.get("reasoning") or ""
+
+async def _call_selected_model(client, messages, model_spec, max_tokens):
+    provider, model_id = _parse_model_spec(model_spec)
+    if provider == "vertex":
+        result = await call_gemini(
+            client, messages, max_tokens, model_name=model_id, enable_tools=True
+        )
+        if result:
+            result.update({
+                "model": model_id, "provider": provider,
+                "requested_model": model_spec,
+            })
+        return result
+
+    if provider == "groq":
+        key, url = os.environ.get("GROQ_KEY", ""), GROQ_URL
+    elif provider == "openrouter":
+        key, url = OPENROUTER_KEY, OPENROUTER_URL
+    else:
+        raise ValueError(f"Unsupported inference provider: {provider}")
+    if not key:
+        print(f"[model-router] {provider} selected but its API key is not configured")
+        return None
+
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    if provider == "openrouter":
+        headers["HTTP-Referer"] = "https://dex-backend-production-2bbe.up.railway.app"
+        headers["X-Title"] = "DexOS"
+    try:
+        response = await client.post(
+            url, headers=headers,
+            json={"model": model_id, "messages": messages, "max_tokens": max_tokens},
+        )
         try:
-            res = await client.post(
-                GROQ_URL,
-                headers={
-                    "Authorization": f"Bearer {GROQ_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={"model": GROQ_MODEL, "messages": messages, "max_tokens": max_tokens}
-            )
-            data = res.json()
-            if "error" not in data:
-                msg = data.get("choices",[{}])[0].get("message",{})
-                content = msg.get("content","") or msg.get("reasoning","")
-                if content:
-                    return {"reply": content, "model": GROQ_MODEL}
+            data = response.json()
         except Exception:
-            pass
-    if GROQ_KEY:
-        pass  # groq already attempted above; this branch intentionally left as-is
-    for model in FALLBACK_MODELS:
-        try:
-            res = await client.post(
-                OPENROUTER_URL,
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://dex-backend-production-2bbe.up.railway.app",
-                    "X-Title": "Dex ReasonFlow",
-                },
-                json={"model": model, "messages": messages, "max_tokens": max_tokens}
-            )
-            data = res.json()
-            if "error" not in data:
-                msg = data.get("choices",[{}])[0].get("message",{})
-                content = msg.get("content","") or msg.get("reasoning","")
-                if content:
-                    return {"reply": content, "model": model}
-            else:
-                print(f"[call_llm] {model} returned error: {data.get('error')}")
-        except Exception as e:
-            print(f"[call_llm] {model} exception: {e}")
-        await asyncio.sleep(1)
-    return {"reply": "[all models failed]", "model": "none"}
+            data = {}
+        content = _completion_text(data)
+        if response.is_success and content:
+            return {
+                "reply": content, "model": model_id, "provider": provider,
+                "requested_model": model_spec, "tool_calls": [],
+            }
+        print(f"[model-router] {provider}:{model_id} failed HTTP {response.status_code}: "
+              f"{str(data.get('error', data))[:400]}")
+    except Exception as exc:
+        print(f"[model-router] {provider}:{model_id} exception: {exc}")
+    return None
+
+async def call_llm(client, messages, max_tokens=1000, requested_model=None,
+                   allow_fallback=False):
+    """Use the requested model; fallback only for implicit/default selections."""
+    selected = requested_model or DEFAULT_MODEL
+    result = await _call_selected_model(client, messages, selected, max_tokens)
+    if result:
+        result["fallback_used"] = False
+        return result
+    if not allow_fallback:
+        return {
+            "reply": "[selected model failed; fallback disabled]",
+            "model": "none", "provider": "none",
+            "requested_model": selected, "fallback_used": False,
+        }
+
+    configured = os.environ.get("DEX_FALLBACK_MODELS", "")
+    fallbacks = [x.strip() for x in configured.split(",") if x.strip()]
+    if not fallbacks:
+        fallbacks = DEFAULT_FALLBACK_MODELS
+    attempted = {selected}
+    for fallback in fallbacks:
+        if fallback in attempted:
+            continue
+        attempted.add(fallback)
+        result = await _call_selected_model(client, messages, fallback, max_tokens)
+        if result:
+            result["requested_model"] = selected
+            result["fallback_used"] = True
+            return result
+    return {
+        "reply": "[all configured models failed]", "model": "none",
+        "provider": "none", "requested_model": selected, "fallback_used": True,
+    }
 
 class ChatRequest(BaseModel):
     message: str
@@ -398,9 +454,6 @@ async def chat(req: ChatRequest):
             "governed": True,
             "command_executed": "intents",
         }
-
-    if not OPENROUTER_KEY:
-        return {"error": "no key configured"}
 
     result = dex_runtime(req.message, user_id=getattr(req, "user_id", "default"))
 
@@ -809,7 +862,11 @@ the exchange as a newly started request/response transaction.
     messages.append({"role": "user", "content": user_content})
 
     async with httpx.AsyncClient(timeout=60) as client:
-        result_llm = await call_llm(client, messages, max_tokens=1200)
+        explicit_model = "model" in getattr(req, "model_fields_set", getattr(req, "__fields_set__", set()))
+        result_llm = await call_llm(
+            client, messages, max_tokens=1200, requested_model=req.model,
+            allow_fallback=not explicit_model,
+        )
     reply = result_llm["reply"]
     used_model = result_llm["model"]
 
@@ -875,6 +932,9 @@ the exchange as a newly started request/response transaction.
         "route_reason": result["route_reason"],
         "sigil_ids":    result["sigil_ids"],
         "model":        used_model,
+        "provider":     result_llm.get("provider", "unknown"),
+        "requested_model": result_llm.get("requested_model", req.model),
+        "fallback_used": result_llm.get("fallback_used", False),
         "response_flag": governance_flag,
     }
 
