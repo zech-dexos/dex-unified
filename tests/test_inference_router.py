@@ -26,6 +26,26 @@ class ModelSpecTests(unittest.TestCase):
             ("groq", "openai/gpt-oss-20b"),
         )
 
+    def test_openai_tool_schema_matches_capability_registry(self):
+        from dex_capabilities import CAPABILITY_FUNCTIONS
+
+        names = {
+            item["function"]["name"]
+            for item in inference_router.OPENAI_TOOL_SPECS
+        }
+        self.assertEqual(names, set(CAPABILITY_FUNCTIONS))
+
+    def test_evoke_schema_exposes_sandboxed_spark_parameters(self):
+        evoke = next(
+            item["function"] for item in inference_router.OPENAI_TOOL_SPECS
+            if item["function"]["name"] == "evoke"
+        )
+        properties = evoke["parameters"]["properties"]
+        self.assertIn("spark", properties["resource"]["enum"])
+        self.assertIn("reach_objective", properties)
+        self.assertIn("code", properties)
+        self.assertIn("timeout_seconds", properties)
+
     def test_ollama_provider_is_supported(self):
         self.assertEqual(
             inference_router._parse_model_spec("ollama:qwen3:8b"),
