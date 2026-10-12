@@ -700,7 +700,7 @@ async function submit() {
       if (!res.ok) throw new Error(`proxy ${res.status}`);
     }
     const data = await res.json();
-    modelLabel.textContent = `${data.provider || 'provider'}:${data.model || 'unknown'}${data.fallback_used ? ' · fallback' : ''}`;
+    modelLabel.textContent = `${data.provider || 'provider'}:${data.model || 'unknown'}${data.fallback_used ? ' · fallback' : ''}${data.capability_execution_available === false ? ' · runtime capabilities unavailable' : ''}`;
 
     fullText = (data.reply && !data.reply.startsWith('[')) 
       ? data.reply 
