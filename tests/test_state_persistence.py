@@ -11,6 +11,27 @@ from self_state import load_self_state, update_self_state
 
 
 class SelfStatePersistenceTests(unittest.TestCase):
+    def test_concurrent_updates_do_not_drop_distinct_fields(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "identity.json"
+            load_self_state(path)
+
+            def write_one(index):
+                update_self_state(
+                    {"concurrent_updates": {f"key-{index}": index}},
+                    path=path,
+                )
+
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                list(pool.map(write_one, range(24)))
+
+            state = load_self_state(path)
+            values = state["concurrent_updates"]
+            self.assertEqual(len(values), 24)
+            self.assertEqual(values["key-23"], 23)
+
     def test_state_survives_reload_and_nested_updates(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "identity.json"
