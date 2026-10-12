@@ -37,8 +37,6 @@ def _record_provider_failure(provider, model_id, status_code, error_text, retry_
         or "tpd" in text
         or "resource_exhausted" in text
         or "resource exhausted" in text
-        or "rate limit" in text
-        or "too many requests" in text
     )
     if status_code != 429 and not quota_failure:
         return
