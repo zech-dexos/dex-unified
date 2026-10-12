@@ -444,14 +444,23 @@
       spellcheck="false"
     />
     <div id="key-status" title="Key status"></div>
+
+  </div>
+
+  <div id="model-controls" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px">
+    <label for="model-select">Inference model</label>
     <select id="model-select" title="Model">
       <option value="vertex:gemini-3.6-flash">Vertex · Gemini Flash</option>
       <option value="openrouter:google/gemma-4-31b-it:free">OpenRouter · Gemma 4 31B</option>
       <option value="openrouter:google/gemma-4-26b-a4b-it:free">OpenRouter · Gemma 4 26B</option>
       <option value="openrouter:nvidia/nemotron-3-nano-30b-a3b:free">OpenRouter · Nemotron Nano</option>
       <option value="openrouter:liquid/lfm-2.5-1.2b-instruct:free">OpenRouter · LFM 1.2B</option>
-      <option value="openrouter:free">OpenRouter · Auto (free)</option>
+      <option value="openrouter:openrouter/free">OpenRouter · Auto (free)</option>
     </select>
+    <label style="display:flex;gap:5px;align-items:center">
+      <input type="checkbox" id="strict-model-toggle" />
+      strict model test (no fallback)
+    </label>
   </div>
 
   <div id="messages">
@@ -588,6 +597,7 @@ let streaming = false;
 const keyInput    = document.getElementById('api-key-input');
 const keyStatus   = document.getElementById('key-status');
 const modelSelect = document.getElementById('model-select');
+const strictModelToggle = document.getElementById('strict-model-toggle');
 const modelLabel  = document.getElementById('model-label');
 const messages    = document.getElementById('messages');
 const emptyState  = document.getElementById('empty-state');
@@ -668,7 +678,7 @@ async function submit() {
       message: text,
       history: history.slice(-10),
       model: modelSelect.value,
-      strict_model: false,
+      strict_model: strictModelToggle.checked,
     };
 
     let res;
