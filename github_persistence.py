@@ -106,7 +106,15 @@ def push_to_github(filenames=None):
             for attempt in range(3):
                 current = requests.get(url, headers=_headers(), timeout=10)
                 if current.status_code == 200:
-                    sha = current.json().get("sha")
+                    remote = current.json()
+                    sha = remote.get("sha")
+                    try:
+                        remote_content = base64.b64decode(remote.get("content", "")).decode("utf-8")
+                    except Exception:
+                        remote_content = None
+                    if remote_content == content:
+                        print(f"→ {filename} unchanged; skipping GitHub write")
+                        break
                 elif current.status_code == 404:
                     sha = None
                 else:
