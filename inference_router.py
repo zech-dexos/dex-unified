@@ -35,6 +35,10 @@ def _record_provider_failure(provider, model_id, status_code, error_text, retry_
         or "tokens per day" in text
         or "daily limit" in text
         or "tpd" in text
+        or "resource_exhausted" in text
+        or "resource exhausted" in text
+        or "rate limit" in text
+        or "too many requests" in text
     )
     if status_code != 429 and not quota_failure:
         return
@@ -67,6 +71,7 @@ DEFAULT_FALLBACK_MODELS = [
     "openrouter:google/gemma-4-26b-a4b-it:free",
     "openrouter:nvidia/nemotron-3-nano-30b-a3b:free",
     "openrouter:liquid/lfm-2.5-1.2b-instruct:free",
+    "local:default",
 ]
 
 def _parse_model_spec(spec):
