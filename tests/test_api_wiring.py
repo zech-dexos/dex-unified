@@ -33,6 +33,15 @@ class ApiWiringTests(unittest.TestCase):
         self.assertTrue(_awaits_call(_function("trigger_ambient_pulse"), "run_ambient_tick"))
         self.assertTrue(_awaits_call(_function("trigger_ambient_pulse"), "_persist_github_state"))
 
+    def test_both_pulse_routes_require_governance(self):
+        for name in ("trigger_pulse", "trigger_ambient_pulse"):
+            function = _function(name)
+            calls = {
+                node.func.id for node in ast.walk(function)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            }
+            self.assertIn("_governance_status", calls)
+
     def test_startup_rehydrates_before_runtime_and_subscribers(self):
         function = _function("start_continuous_substrate")
         def call_line(name):
