@@ -279,12 +279,9 @@ GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 # Identity, memory and governance remain independent of the replaceable spark.
 # Explicit per-request model choices are strict for meaningful comparisons.
 DEFAULT_FALLBACK_MODELS = [
-    "groq:openai/gpt-oss-20b",
     "openrouter:google/gemma-4-31b-it:free",
     "openrouter:google/gemma-4-26b-a4b-it:free",
-    "openrouter:deepseek/deepseek-v4-flash:free",
     "openrouter:nvidia/nemotron-3-nano-30b-a3b:free",
-    "openrouter:qwen/qwen3-next-80b-a3b-instruct:free",
     "openrouter:liquid/lfm-2.5-1.2b-instruct:free",
 ]
 
