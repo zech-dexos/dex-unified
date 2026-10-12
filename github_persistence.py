@@ -122,7 +122,7 @@ def _push_to_github_locked(filenames=None):
                     sha = None
                 else:
                     print(f"Push preflight failed {filename}: {current.status_code}")
-                    if attempt < 2:
+                    if attempt < 1:
                         time.sleep(0.25 * (attempt + 1))
                         continue
                     break
@@ -142,7 +142,7 @@ def _push_to_github_locked(filenames=None):
 
                 # A competing writer may have updated/created the file after
                 # our GET. Re-fetch the SHA and retry rather than silently stop.
-                if response.status_code in (409, 422) and attempt < 2:
+                if response.status_code in (409, 422) and attempt < 1:
                     time.sleep(0.25 * (attempt + 1))
                     continue
 
