@@ -463,6 +463,8 @@ class ChatRequest(BaseModel):
     message: str
     history: list = []
     model: str = DEFAULT_MODEL
+    # Set true for controlled model comparisons; otherwise fallback is allowed.
+    strict_model: bool = False
     system: str = ""
     user_id: str = "default"
 
@@ -927,10 +929,9 @@ the exchange as a newly started request/response transaction.
     messages.append({"role": "user", "content": user_content})
 
     async with httpx.AsyncClient(timeout=60) as client:
-        explicit_model = "model" in getattr(req, "model_fields_set", getattr(req, "__fields_set__", set()))
         result_llm = await call_llm(
             client, messages, max_tokens=1200, requested_model=req.model,
-            allow_fallback=not explicit_model,
+            allow_fallback=not req.strict_model,
         )
     reply = result_llm["reply"]
     used_model = result_llm["model"]
