@@ -816,6 +816,7 @@ the exchange as a newly started request/response transaction.
         "provider":     result_llm.get("provider", "unknown"),
         "requested_model": result_llm.get("requested_model", req.model),
         "fallback_used": result_llm.get("fallback_used", False),
+        "capability_execution_available": result_llm.get("capability_execution_available", False),
         "response_flag": governance_flag,
     }
 
