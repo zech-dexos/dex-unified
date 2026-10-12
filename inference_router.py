@@ -1,4 +1,10 @@
-"""Central inference router for DexOS chat and model experiments.\n\nProvider/model selection is explicit; identity and persisted state live elsewhere.\n"""\nimport os\n\nOPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
+"""Central inference router for DexOS chat and model experiments.
+
+Provider/model selection is explicit; identity and persisted state live elsewhere.
+"""
+import os
+
+OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
