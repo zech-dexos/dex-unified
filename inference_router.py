@@ -12,6 +12,7 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_MODEL = os.environ.get("DEX_MODEL", "vertex:gemini-3.6-flash")
 DEFAULT_AMBIENT_MODEL = os.environ.get("DEX_AMBIENT_MODEL", "local:default")
+DEFAULT_VISION_MODEL = os.environ.get("DEX_VISION_MODEL", "openrouter:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free")
 GROQ_MODEL = os.environ.get("DEX_GROQ_MODEL", "openai/gpt-oss-20b")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 RATE_LIMIT_COOLDOWN_SECONDS = max(1, int(os.environ.get("DEX_RATE_LIMIT_COOLDOWN_SECONDS", "120")))
@@ -162,6 +163,9 @@ def _completion_text(data):
 
 async def _call_selected_model(client, messages, model_spec, max_tokens, enable_tools=True):
     provider, model_id = _parse_model_spec(model_spec)
+    if provider in ("local", "vertex") and any(not isinstance(item.get("content"), str) for item in messages):
+        print(f"[model-router] {provider} adapter does not accept this multimodal message shape")
+        return None
     if provider == "local":
         try:
             import asyncio
