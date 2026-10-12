@@ -1748,9 +1748,14 @@ async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
 
         github_status = "not_attempted"
         try:
-            from github_persistence import push_to_github
-            pushed = push_to_github()
-            github_status = "success" if pushed else "skipped_or_unchanged"
+            from github_persistence import GITHUB_TOKEN, push_to_github
+            pushed = await asyncio.to_thread(push_to_github)
+            if not GITHUB_TOKEN:
+                github_status = "skipped_no_token"
+            elif pushed:
+                github_status = "success"
+            else:
+                github_status = "no_changes_or_failed"
         except Exception as e:
             print(f"[pulse] github push failed: {e}")
             github_status = f"failed: {e}"
