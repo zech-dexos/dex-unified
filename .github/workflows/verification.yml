@@ -15,5 +15,29 @@ jobs:
           python-version: "3.11"
       - name: Compile Python sources
         run: python -m compileall -q .
-      - name: Test inference routing
+      - name: Test DexOS regressions
         run: python -m unittest discover -s tests -v
+      - name: Syntax-check inline JavaScript
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          html = Path("index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script([^>]*)>(.*?)</script\\s*>", html, flags=re.I | re.S)
+          count = 0
+          for attrs, source in scripts:
+              if not source.strip() or re.search(r"\\bsrc\\s*=", attrs, flags=re.I):
+                  continue
+              extension = ".mjs" if re.search(r'type=["\\']module["\\']', attrs, flags=re.I) else ".js"
+              Path(f"/tmp/dex-inline-{count}{extension}").write_text(source, encoding="utf-8")
+              count += 1
+          if count == 0:
+              raise SystemExit("No inline JavaScript found to check")
+          print(f"Extracted {count} inline script(s)")
+          PY
+          for script in /tmp/dex-inline-*.js /tmp/dex-inline-*.mjs; do
+            [ -e "$script" ] || continue
+            node --check "$script"
+          done
