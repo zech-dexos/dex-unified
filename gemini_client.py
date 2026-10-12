@@ -88,11 +88,22 @@ def _capability_tools():
             ),
             types.FunctionDeclaration(
                 name="evoke",
-                description="Deliberately retrieve one DexOS resource into active cognition. Resources: state, workspace, goals, open_loops, thoughts, experiences, participant, conversation, signals.",
+                description="Retrieve a DexOS resource into active cognition. Use spark only for a concrete unresolved question; computation is sandboxed and results await Dex's judgment.",
                 parameters=types.Schema(
                     type="OBJECT",
                     properties={
-                        "resource": types.Schema(type="STRING"),
+                        "resource": types.Schema(
+                            type="STRING",
+                            enum=["state", "workspace", "goals", "open_loops", "thoughts", "experiences", "participant", "conversation", "signals", "spark"],
+                        ),
+                        "intention": types.Schema(type="STRING"),
+                        "reach_objective": types.Schema(type="STRING"),
+                        "code": types.Schema(type="STRING"),
+                        "selected_context": types.Schema(type="ARRAY", items=types.Schema(type="STRING")),
+                        "invocation_origin": types.Schema(type="STRING", enum=["self_directed", "external"]),
+                        "initiated_by": types.Schema(type="STRING"),
+                        "timeout_seconds": types.Schema(type="INTEGER"),
+                        "memory_mb": types.Schema(type="INTEGER"),
                     },
                     required=["resource"],
                 ),
