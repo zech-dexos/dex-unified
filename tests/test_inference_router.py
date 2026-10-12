@@ -176,6 +176,56 @@ class ModelFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["provider"], "none")
         self.assertFalse(result["fallback_used"])
 
+    async def test_openai_compatible_capability_call_returns_real_observation(self):
+        from types import SimpleNamespace
+
+        import dex_capabilities
+
+        first = SimpleNamespace(
+            is_success=True,
+            status_code=200,
+            headers={},
+            json=lambda: {"choices": [{"message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "inspect_state", "arguments": "{}"},
+                }],
+            }}]},
+        )
+        second = SimpleNamespace(
+            is_success=True,
+            status_code=200,
+            headers={},
+            json=lambda: {"choices": [{"message": {
+                "role": "assistant", "content": "Observed the actual state."
+            }}]},
+        )
+        client = SimpleNamespace(post=AsyncMock(side_effect=[first, second]))
+
+        with patch.dict(os.environ, {
+            "DEX_OPENAI_COMPATIBLE_BASE_URL": "http://gpu.example/v1",
+            "DEX_OPENAI_COMPATIBLE_API_KEY": "",
+        }), patch.object(
+            dex_capabilities, "execute_capability",
+            return_value={"status": "ok", "observed": True},
+        ) as execute:
+            result = await inference_router._call_selected_model(
+                client,
+                [{"role": "user", "content": "Inspect your state"}],
+                "openai-compatible:test-model",
+                200,
+                enable_tools=True,
+            )
+
+        self.assertEqual(result["reply"], "Observed the actual state.")
+        self.assertTrue(result["capability_execution_available"])
+        self.assertEqual(result["tool_calls"][0]["observation"], {"status": "ok", "observed": True})
+        execute.assert_called_once_with("inspect_state", {})
+        self.assertEqual(client.post.await_count, 2)
+
     async def test_strict_explicit_selection_does_not_fallback(self):
         with patch.object(
             inference_router, "_call_selected_model", new=AsyncMock(return_value=None)
