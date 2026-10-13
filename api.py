@@ -342,6 +342,31 @@ async def call_llm(client, messages, max_tokens=1000):
         except Exception as e:
             print(f"[call_llm] {model} exception: {e}")
         await asyncio.sleep(1)
+
+    # Last-resort chat inference: the image bundles a tiny CPU GGUF model.
+    # This fallback keeps basic conversation available during hosted-provider
+    # outages. It cannot execute declared runtime capabilities, so identify it
+    # explicitly rather than presenting it as a hosted/tool-capable spark.
+    try:
+        from local_llm import local_slm_generate
+
+        local_prompt = "\n\n".join(
+            f"{str(message.get('role', 'user')).upper()}:\n{message.get('content', '')}"
+            for message in messages
+        )
+        local_reply = await asyncio.get_running_loop().run_in_executor(
+            None, local_slm_generate, local_prompt, min(max_tokens, 200)
+        )
+        if local_reply and local_reply.strip():
+            print("[call_llm] hosted providers unavailable; using local CPU fallback (capabilities unavailable)")
+            return {
+                "reply": local_reply.strip(),
+                "model": "local:qwen2.5-0.5b-instruct",
+                "capability_execution_available": False,
+            }
+    except Exception as e:
+        print(f"[call_llm] local CPU fallback failed: {e}")
+
     return {"reply": "[all models failed]", "model": "none"}
 
 class ChatRequest(BaseModel):
