@@ -280,6 +280,9 @@ GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 from gemini_client import call_gemini
 
 FALLBACK_MODELS = [
+    # Let OpenRouter choose an available free model when individual endpoints
+    # are throttled or retired; retain explicit models as secondary fallbacks.
+    "openrouter/free",
     "google/gemma-4-31b-it:free",
     "google/gemma-4-26b-a4b-it:free",
     "deepseek/deepseek-v4-flash:free",
