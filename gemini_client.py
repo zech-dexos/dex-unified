@@ -9,6 +9,7 @@ from google.genai import types
 PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "seraphic-disk-506702-d2")
 LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
 MODEL_NAME = "gemini-3.6-flash"
+API_KEY_MODEL_NAME = os.environ.get("GEMINI_API_MODEL", "gemini-3.5-flash-lite")
 
 _client = None
 
@@ -110,14 +111,33 @@ def _capability_tools():
     ]
 
 
-async def call_gemini(client, messages, max_tokens=4096, model_name=None, enable_tools=False):
+async def call_gemini(client, messages, max_tokens=4096, model_name=None, enable_tools=False, _use_api_key=False):
     if model_name is None:
         model_name = MODEL_NAME
-    try:
-        vertex_client = _get_client()
-    except Exception as e:
-        print(f"[call_gemini] client init exception: {e}")
-        return None
+
+    if _use_api_key:
+        api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        if not api_key:
+            print("[call_gemini] Developer API fallback skipped: GEMINI_API_KEY is not set")
+            return None
+        try:
+            vertex_client = genai.Client(api_key=api_key)
+            model_name = API_KEY_MODEL_NAME
+        except Exception as e:
+            print(f"[call_gemini] Developer API client init exception: {e}")
+            return None
+    else:
+        try:
+            vertex_client = _get_client()
+        except Exception as e:
+            print(f"[call_gemini] Vertex client init exception: {e}")
+            if os.environ.get("GEMINI_API_KEY", "").strip():
+                return await call_gemini(
+                    client, messages, max_tokens=max_tokens,
+                    model_name=API_KEY_MODEL_NAME, enable_tools=enable_tools,
+                    _use_api_key=True,
+                )
+            return None
 
     contents = []
     system_text = ""
@@ -159,7 +179,7 @@ async def call_gemini(client, messages, max_tokens=4096, model_name=None, enable
                 if text:
                     return {
                         "reply": text,
-                        "model": MODEL_NAME,
+                        "model": model_name,
                         "tool_calls": tool_calls,
                     }
                 print(f"[call_gemini] empty response text: {response}")
@@ -189,11 +209,19 @@ async def call_gemini(client, messages, max_tokens=4096, model_name=None, enable
 
         return {
             "reply": "[capability loop limit reached]",
-            "model": MODEL_NAME,
+            "model": model_name,
             "tool_calls": tool_calls,
         }
     except Exception as e:
-        print(f"[call_gemini] exception: {e}")
+        print(f"[call_gemini] {'Developer API' if _use_api_key else 'Vertex AI'} exception: {e}")
+        # Retry with the key-based Gemini Developer API only when Vertex failed
+        # before executing any capability. Never replay a turn after side effects.
+        if not _use_api_key and not tool_calls and os.environ.get("GEMINI_API_KEY", "").strip():
+            return await call_gemini(
+                client, messages, max_tokens=max_tokens,
+                model_name=API_KEY_MODEL_NAME, enable_tools=enable_tools,
+                _use_api_key=True,
+            )
         return None
 
 
