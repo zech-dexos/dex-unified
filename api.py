@@ -313,7 +313,10 @@ async def call_llm(client, messages, max_tokens=1000):
             pass
     if GROQ_KEY:
         pass  # groq already attempted above; this branch intentionally left as-is
-    for model in FALLBACK_MODELS:
+# OpenRouter is optional: Vertex/Gemini and Groq must still be tried
+    # when OPENROUTER_KEY is absent. Do not let one provider's configuration
+    # disable the other inference paths.
+    for model in (FALLBACK_MODELS if OPENROUTER_KEY else []):
         try:
             res = await client.post(
                 OPENROUTER_URL,
@@ -398,9 +401,6 @@ async def chat(req: ChatRequest):
             "governed": True,
             "command_executed": "intents",
         }
-
-    if not OPENROUTER_KEY:
-        return {"error": "no key configured"}
 
     result = dex_runtime(req.message, user_id=getattr(req, "user_id", "default"))
 
