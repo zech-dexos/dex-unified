@@ -292,9 +292,65 @@ FALLBACK_MODELS = [
 ]
 
 async def call_llm(client, messages, max_tokens=1000):
+    # Explicit sovereign mode: DEX_LOCAL_ONLY=1 bypasses all hosted inference.
+    if os.environ.get("DEX_LOCAL_ONLY", "").strip().lower() in ("1", "true", "yes", "on"):
+        try:
+            from local_llm import local_slm_generate
+            prompt = "\\n\\n".join(
+                f"{str(m.get('role', 'user')).upper()}:\\n{m.get('content', '')}"
+                for m in messages
+            )
+            answer = await asyncio.get_running_loop().run_in_executor(
+                None, local_slm_generate, prompt, min(max_tokens, 200)
+            )
+            if answer and answer.strip():
+                return {"reply": answer.strip(), "model": "local:qwen2.5-0.5b-instruct", "capability_execution_available": False}
+            raise RuntimeError("local model returned empty text")
+        except Exception as exc:
+            print(f"[call_llm] DEX_LOCAL_ONLY failed: {type(exc).__name__}: {exc}")
+            return {"reply": "[local inference failed; inspect service logs]", "model": "none"}
     gemini_result = await call_gemini(client, messages, max_tokens, enable_tools=True)
     if gemini_result:
         return gemini_result
+
+    # Independent OpenAI-compatible providers. Each is opt-in via Secret Manager
+    # environment variables; missing keys are skipped and no credentials are embedded.
+    providers = []
+    if os.environ.get("CF_ACCOUNT_ID", "").strip() and os.environ.get("CF_API_TOKEN", "").strip():
+        providers.append(("cloudflare-workers-ai",
+            "https://api.cloudflare.com/client/v4/accounts/" + os.environ["CF_ACCOUNT_ID"].strip() + "/ai/v1/chat/completions",
+            os.environ["CF_API_TOKEN"].strip(),
+            os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast").strip()))
+    if os.environ.get("NVIDIA_API_KEY", "").strip():
+        providers.append(("nvidia-nim", os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1/chat/completions").strip(),
+            os.environ["NVIDIA_API_KEY"].strip(), os.environ.get("NVIDIA_MODEL", "openai/gpt-oss-120b").strip()))
+    hf_token = os.environ.get("HF_TOKEN", "").strip() or os.environ.get("HUGGINGFACEHUB_API_TOKEN", "").strip()
+    if hf_token:
+        providers.append(("huggingface-router", os.environ.get("HF_BASE_URL", "https://router.huggingface.co/v1/chat/completions").strip(),
+            hf_token, os.environ.get("HF_MODEL", "Qwen/Qwen3.5-397B-A17B").strip()))
+    if os.environ.get("OPENCODE_ZEN_API_KEY", "").strip():
+        providers.append(("opencode-zen", os.environ.get("OPENCODE_ZEN_BASE_URL", "https://opencode.ai/zen/v1").rstrip("/") + "/chat/completions",
+            os.environ["OPENCODE_ZEN_API_KEY"].strip(), os.environ.get("OPENCODE_ZEN_MODEL", "big-pickle").strip()))
+
+    for provider_name, provider_url, provider_key, provider_model in providers:
+        try:
+            response = await client.post(provider_url,
+                headers={"Authorization": "Bearer " + provider_key, "Content-Type": "application/json"},
+                json={"model": provider_model, "messages": messages, "max_tokens": max_tokens})
+            try:
+                data = response.json()
+            except Exception:
+                data = {}
+            if response.status_code < 400 and not data.get("error"):
+                choices = data.get("choices", [])
+                message = choices[0].get("message", {}) if choices else {}
+                answer = (message.get("content") or message.get("reasoning") or "").strip()
+                if answer:
+                    print(f"[call_llm] provider={provider_name} model={provider_model} succeeded")
+                    return {"reply": answer, "model": provider_name + ":" + provider_model}
+            print(f"[call_llm] provider={provider_name} status={response.status_code} error={str(data.get('error', data))[:500]}")
+        except Exception as exc:
+            print(f"[call_llm] provider={provider_name} exception={type(exc).__name__}: {exc}")
 
     if GROQ_KEY:
         try:
