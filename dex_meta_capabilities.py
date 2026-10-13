@@ -6,7 +6,7 @@ signals. They are read-only: they never mutate Dex state or execute code.
 import re
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 def _text(value: Any) -> str:
@@ -119,7 +119,13 @@ def audit_cognition(
     workspace = state.get("active_mental_workspace_state") or {}
     focus = _fingerprint(workspace.get("concept_identifier", ""))
     if focus and contents:
-        matching = sum(1 for item in contents if item == focus or (len(focus) >= 24 and focus in item))
+        # Match meaningful focus phrases within longer thoughts too. The prior
+        # exact-match rule missed ordinary cases such as "SparkReach report"
+        # appearing inside "Investigate SparkReach report".
+        matching = sum(
+            1 for item in contents
+            if item == focus or (len(focus) >= 12 and focus in item)
+        )
         if matching >= 3:
             findings.append({
                 "id": "workspace_fixation", "severity": "medium",
