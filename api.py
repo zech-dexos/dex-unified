@@ -343,7 +343,7 @@ async def call_llm(client, messages, max_tokens=1000):
             print(f"[call_llm] {model} exception: {e}")
         await asyncio.sleep(1)
 
-    # Last-resort chat inference: the image bundles a tiny CPU GGUF model.
+    # Last-resort chat inference: the image bundles a tiny CPU GGUF model; failures are logged below.
     # This fallback keeps basic conversation available during hosted-provider
     # outages. It cannot execute declared runtime capabilities, so identify it
     # explicitly rather than presenting it as a hosted/tool-capable spark.
