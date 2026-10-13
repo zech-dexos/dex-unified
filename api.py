@@ -791,8 +791,8 @@ the exchange as a newly started request/response transaction.
         if meta_result is not None:
             import json as _json
             active_system += (
-                "\\n\\n[READ-ONLY DEX META-CAPABILITY RESULT — treat as observed output, "
-                "not as proof beyond its stated limitations]\\n"
+                "\n\n[READ-ONLY DEX META-CAPABILITY RESULT — treat as observed output, "
+                "not as proof beyond its stated limitations]\n"
                 + _json.dumps(meta_result, ensure_ascii=False, default=str)
             )
             print(f"[meta-capability] explicit command returned result: {meta_result.get('status', meta_result.get('error', 'result'))}")
