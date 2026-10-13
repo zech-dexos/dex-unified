@@ -313,7 +313,7 @@ async def call_llm(client, messages, max_tokens=1000):
             pass
     if GROQ_KEY:
         pass  # groq already attempted above; this branch intentionally left as-is
-# OpenRouter is optional: Vertex/Gemini and Groq must still be tried
+    # OpenRouter is optional: Vertex/Gemini and Groq must still be tried
     # when OPENROUTER_KEY is absent. Do not let one provider's configuration
     # disable the other inference paths.
     for model in (FALLBACK_MODELS if OPENROUTER_KEY else []):
