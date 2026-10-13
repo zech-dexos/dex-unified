@@ -690,9 +690,15 @@ async function submit() {
     }
     const data = await res.json();
 
-    fullText = (data.reply && !data.reply.startsWith('[')) 
-      ? data.reply 
-      : "The demo is currently at capacity. The system is fully functional — please try again in a few minutes or view the GitHub and DOI linked below.";
+    if (typeof data.reply === 'string' && data.reply.trim() && !data.reply.startsWith('[')) {
+      fullText = data.reply;
+    } else if (data.error) {
+      fullText = `Dex could not respond: ${data.error}`;
+    } else if (data.reply === '[all models failed]') {
+      fullText = 'Dex could not get a response from any configured inference provider. The service may be reachable while model providers are unavailable; please try again shortly.';
+    } else {
+      fullText = 'Dex returned no usable response. The service may be reachable while inference is unavailable. Please try again shortly.';
+    }
     signal = {
       intent:       data.intent,
       domain:       data.domain,
