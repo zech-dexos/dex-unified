@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from dex_meta_capabilities import audit_cognition, build_investigation_plan
+from dex_meta_capabilities import audit_cognition, build_investigation_plan, evaluate_investigation
 
 
 class CognitiveAuditTests(unittest.TestCase):
@@ -47,6 +47,27 @@ class CognitiveAuditTests(unittest.TestCase):
         self.assertEqual(plan["status"], "planned")
         self.assertTrue(plan["evidence_assessment"]["missing_primary_evidence"])
         self.assertEqual(len(plan["steps"]), 6)
+
+
+    def test_evaluator_reports_mixed_evidence_without_claiming_verification(self):
+        result = evaluate_investigation("Is the pulse running?", [
+            {"source": "scheduler log", "observation": "job succeeded", "relation": "supports"},
+            {"source": "runtime state", "observation": "pulse timestamp is stale", "relation": "contradicts"},
+            {"source": "bad item", "observation": "", "relation": "supports"},
+        ])
+        self.assertEqual(result["verdict"], "mixed")
+        self.assertEqual(result["counts"]["supports"], 1)
+        self.assertEqual(result["counts"]["contradicts"], 1)
+        self.assertEqual(result["invalid_evidence_count"], 1)
+        self.assertTrue(result["read_only"])
+        self.assertIn("not independently verified", " ".join(result["limitations"]))
+
+    def test_evaluator_requires_directional_evidence(self):
+        result = evaluate_investigation("Did the fix work?", [
+            {"source": "test output", "observation": "test ran", "relation": "neutral"},
+        ])
+        self.assertEqual(result["verdict"], "inconclusive")
+        self.assertEqual(evaluate_investigation("")["error"], "question is required")
 
 
 if __name__ == "__main__":
