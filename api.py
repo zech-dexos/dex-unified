@@ -296,8 +296,8 @@ async def call_llm(client, messages, max_tokens=1000):
     if os.environ.get("DEX_LOCAL_ONLY", "").strip().lower() in ("1", "true", "yes", "on"):
         try:
             from local_llm import local_slm_generate
-            prompt = "\\n\\n".join(
-                f"{str(m.get('role', 'user')).upper()}:\\n{m.get('content', '')}"
+            prompt = " ".join(
+                f"{str(m.get('role', 'user')).upper()}: {m.get('content', '')}"
                 for m in messages
             )
             answer = await asyncio.get_running_loop().run_in_executor(
