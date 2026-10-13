@@ -423,7 +423,7 @@ async def call_llm(client, messages, max_tokens=1000):
     except Exception as e:
         print(f"[call_llm] local CPU fallback failed: {e}")
 
-    return {"reply": "[all models failed]", "model": "none"}
+    return {"reply": "[inference unavailable: all configured providers and local CPU inference failed; inspect service logs]", "model": "none"}
 
 class ChatRequest(BaseModel):
     message: str
