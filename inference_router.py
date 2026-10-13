@@ -10,7 +10,7 @@ OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-DEFAULT_MODEL = os.environ.get("DEX_MODEL", "vertex:gemini-3.6-flash")
+DEFAULT_MODEL = os.environ.get("DEX_MODEL", "groq:openai/gpt-oss-20b")
 DEFAULT_AMBIENT_MODEL = os.environ.get("DEX_AMBIENT_MODEL", "local:default")
 DEFAULT_VISION_MODEL = os.environ.get("DEX_VISION_MODEL", "openrouter:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free")
 GROQ_MODEL = os.environ.get("DEX_GROQ_MODEL", "openai/gpt-oss-20b")
@@ -120,6 +120,8 @@ def _model_is_cooling_down(provider, model_id):
 # Identity, memory and governance remain independent of the replaceable spark.
 # Explicit per-request model choices are strict for meaningful comparisons.
 DEFAULT_FALLBACK_MODELS = [
+    # Groq is the first recovery path when any configured primary provider fails.
+    f"groq:{GROQ_MODEL}",
     "openrouter:google/gemma-4-31b-it:free",
     "openrouter:google/gemma-4-26b-a4b-it:free",
     "openrouter:nvidia/nemotron-3-nano-30b-a3b:free",
@@ -429,9 +431,11 @@ async def call_llm(client, messages, max_tokens=1000, requested_model=None,
         }
 
     configured = os.environ.get("DEX_FALLBACK_MODELS", "")
-    fallbacks = [x.strip() for x in configured.split(",") if x.strip()]
-    if not fallbacks:
-        fallbacks = DEFAULT_FALLBACK_MODELS
+    configured_fallbacks = [x.strip() for x in configured.split(",") if x.strip()]
+    # Always retain a known hosted recovery path even when the deployment has
+    # a custom fallback list. Duplicate removal below handles a Groq primary.
+    fallbacks = [f"groq:{GROQ_MODEL}"]
+    fallbacks.extend(configured_fallbacks or DEFAULT_FALLBACK_MODELS)
     attempted = {_normalized_model_key(selected)}
     for fallback in fallbacks:
         fallback_key = _normalized_model_key(fallback)
