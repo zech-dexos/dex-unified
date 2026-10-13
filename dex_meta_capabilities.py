@@ -217,3 +217,75 @@ def build_investigation_plan(question: str, evidence: Optional[List[Dict[str, An
             "rule": "Do not report a step as completed until its output is observed.",
         },
     }
+
+
+def evaluate_investigation(question: str, evidence: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """Summarize explicitly classified evidence without pretending to verify it.
+
+    Each evidence item must contain source, observation, and relation, where
+    relation is one of supports, contradicts, or neutral. The caller supplies
+    those classifications; this function checks structure and tallies them.
+    """
+    question = str(question or "").strip()
+    if not question:
+        return {"error": "question is required", "read_only": True}
+
+    valid_relations = {"supports", "contradicts", "neutral"}
+    accepted: List[Dict[str, str]] = []
+    invalid_count = 0
+    for item in evidence or []:
+        if not isinstance(item, dict):
+            invalid_count += 1
+            continue
+        source = str(item.get("source") or "").strip()
+        observation = str(item.get("observation") or "").strip()
+        relation = str(item.get("relation") or "").strip().lower()
+        if not source or not observation or relation not in valid_relations:
+            invalid_count += 1
+            continue
+        accepted.append({
+            "source": source[:240],
+            "observation": observation[:1000],
+            "relation": relation,
+        })
+
+    supports = [item for item in accepted if item["relation"] == "supports"]
+    contradicts = [item for item in accepted if item["relation"] == "contradicts"]
+    neutral = [item for item in accepted if item["relation"] == "neutral"]
+    if supports and contradicts:
+        verdict = "mixed"
+    elif supports:
+        verdict = "supported_by_supplied_classifications"
+    elif contradicts:
+        verdict = "contradicted_by_supplied_classifications"
+    elif neutral:
+        verdict = "inconclusive"
+    else:
+        verdict = "insufficient_evidence"
+
+    return {
+        "question": question,
+        "status": "evaluated",
+        "verdict": verdict,
+        "read_only": True,
+        "evidence_count": len(accepted),
+        "invalid_evidence_count": invalid_count,
+        "counts": {
+            "supports": len(supports),
+            "contradicts": len(contradicts),
+            "neutral": len(neutral),
+        },
+        "evidence": accepted,
+        "limitations": [
+            "Relations are caller-supplied classifications, not independently verified facts.",
+            "A source label does not establish source authenticity or independence.",
+            "The verdict summarizes supplied evidence only; it is not a probability or proof.",
+        ],
+        "next_step": (
+            "Investigate the conflict and seek an independent discriminating test."
+            if verdict == "mixed" else
+            "Gather primary evidence and document how it could disconfirm the current interpretation."
+            if verdict in {"supported_by_supplied_classifications", "contradicted_by_supplied_classifications"} else
+            "Collect relevant primary evidence before drawing a conclusion."
+        ),
+    }
