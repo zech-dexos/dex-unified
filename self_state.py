@@ -24,11 +24,15 @@ identity files already live (e.g. ~/dexos-core/self_state.json).
 import json
 import os
 import tempfile
+import threading
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+_SELF_STATE_LOCK = threading.RLock()
+
 
 try:
     from paths import IDENTITY_PATH as SELF_STATE_PATH
@@ -111,6 +115,16 @@ def save_self_state(
     path: Path = SELF_STATE_PATH,
     _expected_version: Optional[int] = "__unset__",
 ) -> Dict[str, Any]:
+    """Serialize in-process writers before the atomic version-checked save."""
+    with _SELF_STATE_LOCK:
+        return _save_self_state_locked(state, path, _expected_version)
+
+
+def _save_self_state_locked(
+    state: Dict[str, Any],
+    path: Path = SELF_STATE_PATH,
+    _expected_version: Optional[int] = "__unset__",
+) -> Dict[str, Any]:
     """
     Atomically persist `state` to disk.
 
@@ -146,6 +160,14 @@ def save_self_state(
 
 
 def update_self_state(
+    delta: Dict[str, Any], path: Path = SELF_STATE_PATH, _max_retries: int = 5
+) -> Dict[str, Any]:
+    """Serialize read/merge/write transactions within this process."""
+    with _SELF_STATE_LOCK:
+        return _update_self_state_locked(delta, path, _max_retries)
+
+
+def _update_self_state_locked(
     delta: Dict[str, Any], path: Path = SELF_STATE_PATH, _max_retries: int = 5
 ) -> Dict[str, Any]:
     """

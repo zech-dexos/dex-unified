@@ -88,11 +88,22 @@ def _capability_tools():
             ),
             types.FunctionDeclaration(
                 name="evoke",
-                description="Deliberately retrieve one DexOS resource into active cognition. Resources: state, workspace, goals, open_loops, thoughts, experiences, participant, conversation, signals.",
+                description="Retrieve a DexOS resource into active cognition. Use spark only for a concrete unresolved question; computation is sandboxed and results await Dex's judgment.",
                 parameters=types.Schema(
                     type="OBJECT",
                     properties={
-                        "resource": types.Schema(type="STRING"),
+                        "resource": types.Schema(
+                            type="STRING",
+                            enum=["state", "workspace", "goals", "open_loops", "thoughts", "experiences", "participant", "conversation", "signals", "spark"],
+                        ),
+                        "intention": types.Schema(type="STRING"),
+                        "reach_objective": types.Schema(type="STRING"),
+                        "code": types.Schema(type="STRING"),
+                        "selected_context": types.Schema(type="ARRAY", items=types.Schema(type="STRING")),
+                        "invocation_origin": types.Schema(type="STRING", enum=["self_directed", "external"]),
+                        "initiated_by": types.Schema(type="STRING"),
+                        "timeout_seconds": types.Schema(type="INTEGER"),
+                        "memory_mb": types.Schema(type="INTEGER"),
                     },
                     required=["resource"],
                 ),
@@ -159,7 +170,7 @@ async def call_gemini(client, messages, max_tokens=4096, model_name=None, enable
                 if text:
                     return {
                         "reply": text,
-                        "model": MODEL_NAME,
+                        "model": model_name,
                         "tool_calls": tool_calls,
                     }
                 print(f"[call_gemini] empty response text: {response}")
@@ -189,11 +200,19 @@ async def call_gemini(client, messages, max_tokens=4096, model_name=None, enable
 
         return {
             "reply": "[capability loop limit reached]",
-            "model": MODEL_NAME,
+            "model": model_name,
             "tool_calls": tool_calls,
         }
     except Exception as e:
         print(f"[call_gemini] exception: {e}")
+        try:
+            message = str(e)
+            lowered = message.lower()
+            status = 429 if ("429" in lowered or "resource_exhausted" in lowered or "rate limit" in lowered) else 0
+            from inference_router import _record_provider_failure
+            _record_provider_failure("vertex", model_name, status, message)
+        except Exception as cooldown_error:
+            print(f"[call_gemini] cooldown record failed: {cooldown_error}")
         return None
 
 

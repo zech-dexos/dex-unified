@@ -7,11 +7,16 @@ forward without implying that the conversation ended.
 """
 
 import json
+import os
+import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 
 from paths import SESSION_PATH
+
+_SESSION_LOCK = threading.RLock()
 
 
 def _now_iso() -> str:
@@ -76,20 +81,83 @@ def load_conversation(user_id: str = "default") -> Dict[str, Any]:
     return _default_state(canonical_id)
 
 
+def _merge_conversation_states(existing: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge stale concurrent writes without dropping recent contributions."""
+    merged = dict(existing)
+    merged.update(incoming)
+
+    existing_at = str(existing.get("last_contribution_at") or "")
+    incoming_at = str(incoming.get("last_contribution_at") or "")
+    if existing_at > incoming_at:
+        for key in (
+            "interaction_state", "current_attention", "shared_thread",
+            "last_contribution_at", "last_experience_id", "first_person_experience",
+        ):
+            if key in existing:
+                merged[key] = existing[key]
+
+    contributions = []
+    seen = set()
+    for item in list(existing.get("recent_contributions", [])) + list(incoming.get("recent_contributions", [])):
+        if not isinstance(item, dict):
+            continue
+        key = (
+            str(item.get("timestamp", "")),
+            str(item.get("message", "")),
+            str(item.get("experience", "")),
+        )
+        if key not in seen:
+            seen.add(key)
+            contributions.append(item)
+    contributions.sort(key=lambda item: str(item.get("timestamp", "")))
+    merged["recent_contributions"] = contributions[-12:]
+
+    ambient_times = [
+        str(value) for value in (
+            existing.get("last_ambient_at"), incoming.get("last_ambient_at")
+        ) if value
+    ]
+    if ambient_times:
+        merged["last_ambient_at"] = max(ambient_times)
+
+    merged["version"] = max(
+        int(existing.get("version", 0) or 0),
+        int(incoming.get("version", 0) or 0),
+    ) + 1
+    return merged
+
+
 def save_conversation(state: Dict[str, Any]) -> Dict[str, Any]:
-    """Persist conversational state without declaring the interaction complete."""
+    """Atomically persist conversational state and merge concurrent local writes."""
     try:
-        data = {}
-        if SESSION_PATH.exists():
-            loaded = json.loads(SESSION_PATH.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                data = loaded
-        conversations = data.setdefault("conversations", {})
-        conversations[state["conversation_id"]] = state
-        state["version"] = int(state.get("version", 0)) + 1
-        state["last_contribution_at"] = state.get("last_contribution_at") or _now_iso()
-        SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
-        SESSION_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        with _SESSION_LOCK:
+            data = {}
+            if SESSION_PATH.exists():
+                loaded = json.loads(SESSION_PATH.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    data = loaded
+            conversations = data.setdefault("conversations", {})
+            conversation_id = str(state.get("conversation_id") or state.get("participant_id") or "default")
+            existing = conversations.get(conversation_id, {})
+            saved = _merge_conversation_states(existing, dict(state))
+            saved["conversation_id"] = conversation_id
+            saved["participant_id"] = str(saved.get("participant_id") or conversation_id)
+            saved["last_contribution_at"] = saved.get("last_contribution_at") or _now_iso()
+            conversations[conversation_id] = saved
+
+            SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp_path = tempfile.mkstemp(dir=str(SESSION_PATH.parent), suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                    json.dump(data, stream, indent=2, ensure_ascii=False)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(tmp_path, SESSION_PATH)
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+
+            state.update(saved)
     except Exception as e:
         print(f"[conversation] save failed: {e}")
     return state

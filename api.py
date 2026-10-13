@@ -35,6 +35,13 @@ def _get_firestore():
     global _fb_app, _firestore
     if _firestore is None:
         try:
+            # Reuse the default app if another DexOS subsystem initialized it
+            # first (e.g. the durable ambient cadence or model cooldown guard).
+            if firebase_admin._apps:
+                _fb_app = firebase_admin.get_app()
+                _firestore = fs.client(app=_fb_app)
+                return _firestore
+
             key_b64 = os.environ.get("FIREBASE_KEY_B64", "")
             key_path = os.path.join(os.path.dirname(__file__), "firebase-key.json")
             if key_b64:
@@ -114,25 +121,24 @@ def _build_ambient_context() -> str:
 
 import time
 
-# Process-local backoff prevents repeated quota failures between scheduler pulses.
-_ambient_groq_cooldown_until = 0.0
 
 
 async def ambient_llm_callable(prompt: str) -> str:
-    """Run background cognition on Dex's tiny local CPU model, never a hosted API."""
+    """Run ambient inference through the same replaceable substrate interface as chat."""
     context = _build_ambient_context()
     full_prompt = f"{context}\n\n{prompt}" if context else prompt
-
-    # Local inference avoids Groq/OpenRouter/Gemini quotas entirely.
-    # Keep blocking CPU inference off the event loop.
-    from local_llm import local_slm_generate
-
-    result = await asyncio.get_running_loop().run_in_executor(
-        None, local_slm_generate, full_prompt
-    )
-    if not result:
-        raise ValueError("local_slm_generate returned empty response")
-    return result
+    async with httpx.AsyncClient(timeout=60) as client:
+        result = await call_llm(
+            client,
+            [{"role": "user", "content": full_prompt}],
+            max_tokens=200,
+            requested_model=DEFAULT_AMBIENT_MODEL,
+            allow_fallback=False,
+            enable_tools=False,
+        )
+    if result.get("provider") == "none" or not result.get("reply"):
+        raise ValueError(f"ambient inference failed: {result.get('reply', 'empty response')}")
+    return result["reply"]
 
 
 # Start Dex Discord bridge inside the Cloud Run container.
@@ -148,6 +154,26 @@ async def start_discord_bridge():
 
 @app.on_event("startup")
 async def start_continuous_substrate():
+    # Rehydrate first. No stateful runtime object or subscriber should load
+    # local files before the durable snapshot has had a chance to arrive.
+    try:
+        from github_persistence import pull_from_github
+        if pull_from_github():
+            print("[Continuity] Durable DexOS state rehydrated from GitHub")
+        else:
+            print("[Continuity] No GitHub state rehydrated; using existing local state")
+    except Exception as e:
+        print(f"[Continuity] GitHub state rehydration skipped: {e}")
+
+    # Initialize the governance/runtime object only after the pull attempt.
+    try:
+        from dex_runtime import initialize_dex_runtime
+        if not initialize_dex_runtime():
+            print("[DexRuntime] Governance is offline; chat inference will fail closed")
+    except Exception as e:
+        print(f"[DexRuntime] startup initialization skipped: {e}")
+
+    # Load and subscribe remaining subsystems after state hydration.
     try:
         from dex_substrate import run_substrate_loop
         from dex_continuity import setup_continuity
@@ -155,21 +181,6 @@ async def start_continuous_substrate():
         from dex_attention import setup_attention
         from dex_workspace import setup_workspace
 
-        # Rehydrate Dex's durable state before any continuity/workspace
-        # subscriber can read or mutate it. Cloud Run instances are ephemeral;
-        # GitHub is the durable ledger for DexOS state.
-        try:
-            from github_persistence import pull_from_github
-            if pull_from_github():
-                print("[Continuity] Durable DexOS state rehydrated from GitHub")
-            else:
-                print("[Continuity] No GitHub state rehydrated; using existing local state")
-        except Exception as e:
-            # A persistence outage must not prevent the API from serving.
-            # Firestore interaction memory remains independently available.
-            print(f"[Continuity] GitHub state rehydration skipped: {e}")
-
-        # Initialize event subscriptions only after durable state is present.
         setup_continuity()
         setup_autobiography()
         setup_attention()
@@ -265,83 +276,40 @@ import os
 import asyncio
 import httpx
 
-OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
+from inference_router import (
+    OPENROUTER_KEY, OPENROUTER_URL, GROQ_URL, DEFAULT_MODEL, DEFAULT_AMBIENT_MODEL,
+    DEFAULT_VISION_MODEL, GROQ_MODEL, GEMINI_KEY, call_llm,
+)
 from participant import ParticipantSnapshot, format_participant_context, build_experience_from_pulse, record_interaction_experience
 from dex_experience_recall import recall_into_workspace, format_recalled_experiences
 from dex_conversation import load_conversation, format_conversation_context, experience_contribution
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL   = "google/gemma-4-31b-it:free"
-GROQ_KEY = os.environ.get("GROQ_KEY", "")
-GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "openai/gpt-oss-20b"
 
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-from gemini_client import call_gemini
+def _governance_status():
+    """Return the active governance state without initializing it implicitly."""
+    try:
+        from dex_runtime import DEXOS_ACTIVE, DEXOS_INITIALIZATION_ERROR
+        return bool(DEXOS_ACTIVE), DEXOS_INITIALIZATION_ERROR
+    except Exception as exc:
+        return False, str(exc)
 
-FALLBACK_MODELS = [
-    "google/gemma-4-31b-it:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "deepseek/deepseek-v4-flash:free",
-    "nvidia/nemotron-3-nano-30b-a3b:free",
-    "qwen/qwen3-next-80b-a3b-instruct:free",
-    "liquid/lfm-2.5-1.2b-instruct:free",
-]
 
-async def call_llm(client, messages, max_tokens=1000):
-    gemini_result = await call_gemini(client, messages, max_tokens, enable_tools=True)
-    if gemini_result:
-        return gemini_result
+async def _persist_github_state(filenames):
+    """Finish persisting changed state before the request returns."""
+    try:
+        from github_persistence import push_to_github
+        return await asyncio.to_thread(push_to_github, list(filenames))
+    except Exception as exc:
+        print(f"[persistence] state push failed: {exc}")
+        return False
 
-    if GROQ_KEY:
-        try:
-            res = await client.post(
-                GROQ_URL,
-                headers={
-                    "Authorization": f"Bearer {GROQ_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={"model": GROQ_MODEL, "messages": messages, "max_tokens": max_tokens}
-            )
-            data = res.json()
-            if "error" not in data:
-                msg = data.get("choices",[{}])[0].get("message",{})
-                content = msg.get("content","") or msg.get("reasoning","")
-                if content:
-                    return {"reply": content, "model": GROQ_MODEL}
-        except Exception:
-            pass
-    if GROQ_KEY:
-        pass  # groq already attempted above; this branch intentionally left as-is
-    for model in FALLBACK_MODELS:
-        try:
-            res = await client.post(
-                OPENROUTER_URL,
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://dex-backend-production-2bbe.up.railway.app",
-                    "X-Title": "Dex ReasonFlow",
-                },
-                json={"model": model, "messages": messages, "max_tokens": max_tokens}
-            )
-            data = res.json()
-            if "error" not in data:
-                msg = data.get("choices",[{}])[0].get("message",{})
-                content = msg.get("content","") or msg.get("reasoning","")
-                if content:
-                    return {"reply": content, "model": model}
-            else:
-                print(f"[call_llm] {model} returned error: {data.get('error')}")
-        except Exception as e:
-            print(f"[call_llm] {model} exception: {e}")
-        await asyncio.sleep(1)
-    return {"reply": "[all models failed]", "model": "none"}
 
 class ChatRequest(BaseModel):
     message: str
     history: list = []
     model: str = DEFAULT_MODEL
+    # Set true for controlled model comparisons; otherwise fallback is allowed.
+    strict_model: bool = False
     system: str = ""
     user_id: str = "default"
 
@@ -361,6 +329,9 @@ async def chat(req: ChatRequest):
     if msg_stripped in ("!reflect", "!reflection"):
         from reflection import run_reflection
         result = run_reflection(lookback=15)
+        await _persist_github_state([
+            "identity.json", "reflections.jsonl", "open_loops.json", "dex_lineage.jsonl"
+        ])
         return {
             "reply": f"[REAL reflection cycle executed]\nStatus: {result.get('status')}\n"
                       f"Observations: {result.get('observations', [])}\n"
@@ -390,6 +361,7 @@ async def chat(req: ChatRequest):
         updated = await _run()
         save_intents(updated)
         active = [i for i in updated if i.status == "active"]
+        await _persist_github_state(["intents.json", "identity.json"])
 
         return {
             "reply": f"[REAL intent generation executed]\nActive intents ({len(active)}):\n" +
@@ -399,9 +371,6 @@ async def chat(req: ChatRequest):
             "command_executed": "intents",
         }
 
-    if not OPENROUTER_KEY:
-        return {"error": "no key configured"}
-
     result = dex_runtime(req.message, user_id=getattr(req, "user_id", "default"))
 
     # Cognitive cycle: pick/advance a persistent thought before building the prompt.
@@ -409,12 +378,8 @@ async def chat(req: ChatRequest):
         from ape_scheduler import run_cycle
         cycle_result = run_cycle()
         print(f"[ape_scheduler] {cycle_result}")
-        # Persist immediately -- don't wait for the 6-hour pulse. Cloud Run's
-        # /tmp state is ephemeral, so anything not pushed before a cold start
-        # is lost. Fire-and-forget in a thread so it doesn't block the reply.
-        import asyncio as _asyncio
-        from github_persistence import push_to_github
-        _asyncio.get_event_loop().run_in_executor(None, push_to_github)
+        # State is pushed after the interaction and conversation contribution
+        # have both been recorded, so the snapshot includes this turn.
     except Exception as e:
         print(f"[ape_scheduler] run_cycle failed: {e}")
 
@@ -422,6 +387,7 @@ async def chat(req: ChatRequest):
     # If the kernel flagged this input, the LLM is never called.
     # This is the (B) requirement: fail-safe routing that bypasses AI entirely.
     if result.get("flagged"):
+        await _persist_github_state(["identity.json", "dex_lineage.jsonl"])
         return {
             "reply": result.get("response", "VOW VIOLATION — this path is closed."),
             "intent": result.get("intent", "blocked"),
@@ -809,7 +775,10 @@ the exchange as a newly started request/response transaction.
     messages.append({"role": "user", "content": user_content})
 
     async with httpx.AsyncClient(timeout=60) as client:
-        result_llm = await call_llm(client, messages, max_tokens=1200)
+        result_llm = await call_llm(
+            client, messages, max_tokens=1200, requested_model=req.model,
+            allow_fallback=not req.strict_model,
+        )
     reply = result_llm["reply"]
     used_model = result_llm["model"]
 
@@ -868,6 +837,14 @@ the exchange as a newly started request/response transaction.
     except Exception as e:
         print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")
 
+    persist_files = [
+        "identity.json", "participant_state.json", "experiences.jsonl",
+        "current_session.json", "dex_lineage.jsonl", "open_loops.json", "reflections.jsonl",
+    ]
+    if governance_flag:
+        persist_files.append("dex_lineage.jsonl")
+    await _persist_github_state(persist_files)
+
     return {
         "reply":        reply,
         "intent":       result["intent"],
@@ -875,6 +852,10 @@ the exchange as a newly started request/response transaction.
         "route_reason": result["route_reason"],
         "sigil_ids":    result["sigil_ids"],
         "model":        used_model,
+        "provider":     result_llm.get("provider", "unknown"),
+        "requested_model": result_llm.get("requested_model", req.model),
+        "fallback_used": result_llm.get("fallback_used", False),
+        "capability_execution_available": result_llm.get("capability_execution_available", False),
         "response_flag": governance_flag,
     }
 
@@ -906,44 +887,39 @@ class VisionRequest(BaseModel):
 
 @app.post("/vision")
 async def vision(req: VisionRequest):
-    if not OPENROUTER_KEY:
-        return {"error": "no key configured"}
-
     messages = []
-
+    if req.system.strip():
+        messages.append({"role": "system", "content": req.system})
     messages.append({
         "role": "user",
         "content": [
             {"type": "text", "text": req.prompt},
-            {"type": "image_url", "image_url": {"url": req.image}}
-        ]
+            {"type": "image_url", "image_url": {"url": req.image}},
+        ],
     })
 
     async with httpx.AsyncClient(timeout=30) as client:
-        res = await client.post(
-            OPENROUTER_URL,
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_KEY}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://dex-backend-production-2bbe.up.railway.app",
-                "X-Title": "Haven by DexOS",
-            },
-            json={
-                "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-                "messages": messages,
-                "max_tokens": 800,
-            }
+        result = await call_llm(
+            client,
+            messages,
+            max_tokens=800,
+            requested_model=DEFAULT_VISION_MODEL,
+            allow_fallback=False,
+            enable_tools=False,
         )
-        data = res.json()
+    if result.get("provider") == "none":
+        return {
+            "error": result.get("reply", "vision inference failed"),
+            "provider": "none",
+            "requested_model": DEFAULT_VISION_MODEL,
+        }
+    return {
+        "reply": result.get("reply", "[no response]"),
+        "provider": result.get("provider"),
+        "model": result.get("model"),
+        "requested_model": result.get("requested_model", DEFAULT_VISION_MODEL),
+    }
 
-    if "error" in data:
-        reply = f"[vision error: {data['error'].get('message', str(data['error']))}]"
-    else:
-        reply = data.get("choices", [{}])[0].get("message", {}).get("content", "[no response]")
-
-    return {"reply": reply}
-
-    return {"response": result["reply"]}
 
 import json
 import time
@@ -1111,18 +1087,18 @@ User said: "{user_said}"
 Kalimi replied: "{kalimi_said}"
 Output:"""
     try:
-        res = await client.post(
-            GROQ_URL,
-            headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 100}
+        selected_model = os.environ.get("DEX_MEMORY_MODEL", f"groq:{GROQ_MODEL}")
+        result = await call_llm(
+            client, [{"role": "user", "content": prompt}],
+            max_tokens=100, requested_model=selected_model,
+            allow_fallback=True, enable_tools=False,
         )
-        data = res.json()
-        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        text = text.strip()
-        if not text or text.upper().startswith("NONE"):
+        text = str(result.get("reply", "")).strip()
+        if not text or text.upper().startswith("NONE") or result.get("provider") == "none":
             return ""
         return text
-    except Exception:
+    except Exception as exc:
+        print(f"[memory-extraction] inference failed: {exc}")
         return ""
 
 def memory_to_prompt(memory: dict) -> str:
@@ -1268,17 +1244,17 @@ User said: "{message}"
 JSON:"""
 
     try:
-        res = await client.post(
-            GROQ_URL,
-            headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 60}
+        selected_model = os.environ.get("DEX_CLASSIFIER_MODEL", f"groq:{GROQ_MODEL}")
+        result = await call_llm(
+            client, [{"role": "user", "content": prompt}],
+            max_tokens=60, requested_model=selected_model,
+            allow_fallback=True, enable_tools=False,
         )
-        data = res.json()
-        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        text = text.strip()
+        text = str(result.get("reply", "")).strip()
         import json as _json
         return _json.loads(text)
-    except Exception:
+    except Exception as exc:
+        print(f"[talnir-classifier] inference failed: {exc}")
         return {"intent": "CONVERSATION"}
 
 @app.post("/haven_api")
@@ -1290,8 +1266,8 @@ async def haven_api(req: HavenRequest):
         return {"response": "I am right here with you.", "error": str(e), "trace": traceback.format_exc()}
 
 async def _haven_api_inner(req: HavenRequest):
-    if not GEMINI_KEY and not OPENROUTER_KEY:
-        return {"response": "I'm having trouble connecting right now."}
+    # The centralized router decides which configured substrate is available.
+    # This endpoint can also run with a local model and no hosted API key.
 
     memory = load_memory(req.user_id)
     memory_prompt = memory_to_prompt(memory)
@@ -1775,27 +1751,45 @@ async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
     if not expected_secret or x_pulse_secret != expected_secret:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+    governance_ready, governance_error = _governance_status()
+    if not governance_ready:
+        raise HTTPException(
+            status_code=503,
+            detail=f"DexOS governance is offline; pulse held: {governance_error or 'not initialized'}",
+        )
+
     try:
         from dex_cron import run_background_pulse
-        result = run_background_pulse()
+        result = await run_background_pulse()
 
         github_status = "not_attempted"
         try:
-            from github_persistence import push_to_github
-            push_to_github()
-            github_status = "success"
+            from github_persistence import GITHUB_TOKEN, push_to_github
+            pushed = await asyncio.to_thread(push_to_github)
+            if not GITHUB_TOKEN:
+                github_status = "skipped_no_token"
+            elif pushed:
+                github_status = "success"
+            else:
+                github_status = "no_changes_or_failed"
         except Exception as e:
             print(f"[pulse] github push failed: {e}")
             github_status = f"failed: {e}"
 
-        return {
-            "status": "success",
+        pulse_status = result.get("status", "error") if isinstance(result, dict) else "error"
+        payload = {
+            "status": "success" if pulse_status == "complete" else "error",
             "pulse_result": result,
             "github_push": github_status
         }
+        if pulse_status != "complete":
+            raise HTTPException(status_code=500, detail=payload)
+        return payload
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[pulse] error: {e}")
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail={"status": "error", "message": str(e)})
 
 
 @app.post("/ambient-pulse")
@@ -1805,16 +1799,39 @@ async def trigger_ambient_pulse(x_pulse_secret: Optional[str] = Header(None)):
     if not expected_secret or x_pulse_secret != expected_secret:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+    governance_ready, governance_error = _governance_status()
+    if not governance_ready:
+        raise HTTPException(
+            status_code=503,
+            detail=f"DexOS governance is offline; ambient inference held: {governance_error or 'not initialized'}",
+        )
+
     try:
         from dex_ambient_daemon import run_ambient_tick
 
         result = await run_ambient_tick(ambient_llm_callable)
+        ambient_status = result.get("status")
+        if ambient_status != "not_due":
+            persist_files = ["identity.json"]
+            if ambient_status == "ok":
+                persist_files.extend(["participant_state.json", "experiences.jsonl"])
+                target = result.get("target") or {}
+                if target.get("kind") == "conversation":
+                    persist_files.append("current_session.json")
+                if result.get("spark_reach") or result.get("spark_judgment"):
+                    persist_files.extend(["open_loops.json", "dex_lineage.jsonl"])
+            await _persist_github_state(persist_files)
 
-        return {
-            "status": "success",
-            "ambient_result": result
+        payload = {
+            "status": "error" if ambient_status in {"error", "parse_error"} else "success",
+            "ambient_result": result,
         }
+        if ambient_status in {"error", "parse_error"}:
+            raise HTTPException(status_code=500, detail=payload)
+        return payload
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[ambient-pulse] error: {e}")
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail={"status": "error", "message": str(e)})
 

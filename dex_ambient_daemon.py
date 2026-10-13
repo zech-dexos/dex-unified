@@ -426,11 +426,26 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         except json.JSONDecodeError as e:
             print(f"[Ambient Daemon] Failed to parse LLM output as JSON: {e}")
             print(f"[Ambient Daemon] Raw output: {response_text}")
+            try:
+                _persist_pulse_state(target, None, 0.0, "parse_error")
+            except Exception as persist_error:
+                print(f"[Ambient Daemon] parse-error state persistence failed: {persist_error}")
             return {"status": "parse_error", "error": str(e), "raw": response_text}
 
     except Exception as e:
         print(f"[Ambient Daemon] Unexpected error in tick: {e}")
         traceback.print_exc()
+        try:
+            if "target" in locals():
+                _persist_pulse_state(target, None, 0.0, "error")
+            else:
+                update_self_state({"last_ambient_pulse": {
+                    "timestamp": _now_iso(), "status": "error",
+                    "target": None, "thought": None, "salience": 0.0,
+                    "error": str(e)[:500],
+                }})
+        except Exception as persist_error:
+            print(f"[Ambient Daemon] error state persistence failed: {persist_error}")
         return {"status": "error", "error": str(e)}
 
 
