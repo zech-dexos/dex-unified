@@ -75,7 +75,8 @@ def audit_cognition(
     Optional arguments make the audit deterministic and straightforward to test.
     Missing arguments are loaded from the current DexOS runtime.
     """
-    if state is None or participant is None or loops is None or experiences is None:
+    loaded_from_runtime = state is None or participant is None or loops is None or experiences is None
+    if loaded_from_runtime:
         snapshot = _runtime_snapshot()
         state = state if state is not None else snapshot["state"]
         participant = participant if participant is not None else snapshot["participant"]
@@ -177,7 +178,7 @@ def audit_cognition(
         "read_only": True,
         "finding_count": len(findings),
         "findings": findings,
-        "source_scope": "runtime state loaded by this process" if state is not None else "unknown",
+        "source_scope": "runtime state loaded by this process" if loaded_from_runtime else "caller-supplied snapshot",
         "limitations": [
             "This is a deterministic heuristic audit, not a proof of system health or consciousness.",
             "A finding is a testable signal; its interpretation should be checked against logs and source behavior.",
