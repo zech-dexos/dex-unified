@@ -192,7 +192,7 @@ def audit_cognition(
     }
 
 
-def build_investigation_plan(question: str, evidence: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def build_investigation_plan(question: str = "", evidence: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     """Turn an unresolved question into a bounded, evidence-first work plan."""
     question = str(question or "").strip()
     if not question:
@@ -219,7 +219,7 @@ def build_investigation_plan(question: str, evidence: Optional[List[Dict[str, An
     }
 
 
-def evaluate_investigation(question: str, evidence: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def evaluate_investigation(question: str = "", evidence: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     """Summarize explicitly classified evidence without pretending to verify it.
 
     Each evidence item must contain source, observation, and relation, where
