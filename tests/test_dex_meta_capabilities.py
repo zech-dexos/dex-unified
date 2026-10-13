@@ -70,5 +70,44 @@ class CognitiveAuditTests(unittest.TestCase):
         self.assertEqual(evaluate_investigation("")["error"], "question is required")
 
 
+    def test_capability_dispatch_reaches_audit_with_supplied_snapshot(self):
+        from dex_capabilities import execute_capability
+
+        result = execute_capability("audit_cognition", {
+            "state": {
+                "active_goals_state": [],
+                "persistent_thoughts": [],
+                "active_mental_workspace_state": {},
+                "last_ambient_pulse": "2026-10-12T00:00:00Z",
+            },
+            "participant": {},
+            "loops": [{"id": "still-open"}],
+            "experiences": [],
+            "now": datetime(2026, 10, 12, 1, tzinfo=timezone.utc),
+        })
+        self.assertEqual(result["status"], "clear")
+        self.assertTrue(result["read_only"])
+
+    def test_capability_dispatch_returns_structured_evaluation_and_handles_bad_args(self):
+        from dex_capabilities import execute_capability
+
+        result = execute_capability("evaluate_investigation", {
+            "question": "Did the change work?",
+            "evidence": [{
+                "source": "unit test",
+                "observation": "five focused tests passed",
+                "relation": "supports",
+            }],
+        })
+        self.assertEqual(result["verdict"], "supported_by_supplied_classifications")
+        self.assertEqual(result["evidence_count"], 1)
+
+        bad_args = execute_capability("evaluate_investigation", {})
+        self.assertEqual(bad_args["error"], "question is required")
+
+        unknown = execute_capability("capability_that_does_not_exist", {})
+        self.assertIn("error", unknown)
+
+
 if __name__ == "__main__":
     unittest.main()
