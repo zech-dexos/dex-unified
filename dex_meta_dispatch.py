@@ -20,6 +20,8 @@ def dispatch_meta_command(message: str) -> Optional[Dict[str, Any]]:
 
     if lowered == "!audit":
         return execute_capability("audit_cognition", {})
+    if lowered == "!investigate":
+        return {"error": "question is required", "read_only": True}
 
     prefix = "!investigate "
     if lowered.startswith(prefix):
