@@ -70,7 +70,6 @@ app = FastAPI(title="ReasonFlow API", version="1.0.0")
 
 # ─── DEX AMBIENT COGNITION ─────────────────────────────────────────────────────
 
-from gemini_client import call_gemini, _get_client
 from self_state import load_self_state
 
 # Ambient cognition uses the bundled local CPU model via local_llm.py.
@@ -238,7 +237,16 @@ async def search_debug():
 
 @app.get("/health")
 def health():
-    return {"status": "live", "sigils": _memory.summary() if SIGIL_ACTIVE and _memory else None, "key_loaded": bool(OPENROUTER_KEY)}
+    from local_llm import MODEL_PATH, CHAT_MODEL_PATH
+    return {
+        "status": "live",
+        "sigils": _memory.summary() if SIGIL_ACTIVE and _memory else None,
+        "inference_backend": "llama.cpp",
+        "chat_model_path": CHAT_MODEL_PATH,
+        "chat_model_file_present": os.path.isfile(CHAT_MODEL_PATH),
+        "ambient_model_path": MODEL_PATH,
+        "ambient_model_file_present": os.path.isfile(MODEL_PATH),
+    }
 
 @app.get("/compare")
 def compare():
@@ -265,165 +273,45 @@ import os
 import asyncio
 import httpx
 
+# Credentials retained only for separate Haven integrations; Dex chat below never calls them.
 OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+GROQ_KEY = os.environ.get("GROQ_KEY", "")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "openai/gpt-oss-20b"
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+
 from participant import ParticipantSnapshot, format_participant_context, build_experience_from_pulse, record_interaction_experience
 from dex_experience_recall import recall_into_workspace, format_recalled_experiences
 from dex_conversation import load_conversation, format_conversation_context, experience_contribution
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL   = "google/gemma-4-31b-it:free"
-GROQ_KEY = os.environ.get("GROQ_KEY", "")
-GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "openai/gpt-oss-20b"
+DEFAULT_MODEL = "local:llama.cpp"
 
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-from gemini_client import call_gemini
-
-FALLBACK_MODELS = [
-    # Let OpenRouter choose an available free model when individual endpoints
-    # are throttled or retired; retain explicit models as secondary fallbacks.
-    "openrouter/free",
-    "google/gemma-4-31b-it:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "deepseek/deepseek-v4-flash:free",
-    "nvidia/nemotron-3-nano-30b-a3b:free",
-    "qwen/qwen3-next-80b-a3b-instruct:free",
-    "liquid/lfm-2.5-1.2b-instruct:free",
-]
 
 async def call_llm(client, messages, max_tokens=1000):
-    # Explicit sovereign mode: DEX_LOCAL_ONLY=1 bypasses all hosted inference.
-    if os.environ.get("DEX_LOCAL_ONLY", "").strip().lower() in ("1", "true", "yes", "on"):
-        try:
-            from local_llm import local_slm_generate
-            prompt = " ".join(
-                f"{str(m.get('role', 'user')).upper()}: {m.get('content', '')}"
-                for m in messages
-            )
-            answer = await asyncio.get_running_loop().run_in_executor(
-                None, local_slm_generate, prompt, min(max_tokens, 200)
-            )
-            if answer and answer.strip():
-                return {"reply": answer.strip(), "model": "local:qwen2.5-0.5b-instruct", "capability_execution_available": False}
-            raise RuntimeError("local model returned empty text")
-        except Exception as exc:
-            print(f"[call_llm] DEX_LOCAL_ONLY failed: {type(exc).__name__}: {exc}")
-            return {"reply": "[local inference failed; inspect service logs]", "model": "none"}
-    gemini_result = await call_gemini(client, messages, max_tokens, enable_tools=True)
-    if gemini_result:
-        return gemini_result
-
-    # Independent OpenAI-compatible providers. Each is opt-in via Secret Manager
-    # environment variables; missing keys are skipped and no credentials are embedded.
-    providers = []
-    if os.environ.get("CF_ACCOUNT_ID", "").strip() and os.environ.get("CF_API_TOKEN", "").strip():
-        providers.append(("cloudflare-workers-ai",
-            "https://api.cloudflare.com/client/v4/accounts/" + os.environ["CF_ACCOUNT_ID"].strip() + "/ai/v1/chat/completions",
-            os.environ["CF_API_TOKEN"].strip(),
-            os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast").strip()))
-    if os.environ.get("NVIDIA_API_KEY", "").strip():
-        providers.append(("nvidia-nim", os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1/chat/completions").strip(),
-            os.environ["NVIDIA_API_KEY"].strip(), os.environ.get("NVIDIA_MODEL", "openai/gpt-oss-120b").strip()))
-    hf_token = os.environ.get("HF_TOKEN", "").strip() or os.environ.get("HUGGINGFACEHUB_API_TOKEN", "").strip()
-    if hf_token:
-        providers.append(("huggingface-router", os.environ.get("HF_BASE_URL", "https://router.huggingface.co/v1/chat/completions").strip(),
-            hf_token, os.environ.get("HF_MODEL", "Qwen/Qwen3.5-397B-A17B").strip()))
-    if os.environ.get("OPENCODE_ZEN_API_KEY", "").strip():
-        providers.append(("opencode-zen", os.environ.get("OPENCODE_ZEN_BASE_URL", "https://opencode.ai/zen/v1").rstrip("/") + "/chat/completions",
-            os.environ["OPENCODE_ZEN_API_KEY"].strip(), os.environ.get("OPENCODE_ZEN_MODEL", "big-pickle").strip()))
-
-    for provider_name, provider_url, provider_key, provider_model in providers:
-        try:
-            response = await client.post(provider_url,
-                headers={"Authorization": "Bearer " + provider_key, "Content-Type": "application/json"},
-                json={"model": provider_model, "messages": messages, "max_tokens": max_tokens})
-            try:
-                data = response.json()
-            except Exception:
-                data = {}
-            if response.status_code < 400 and not data.get("error"):
-                choices = data.get("choices", [])
-                message = choices[0].get("message", {}) if choices else {}
-                answer = (message.get("content") or message.get("reasoning") or "").strip()
-                if answer:
-                    print(f"[call_llm] provider={provider_name} model={provider_model} succeeded")
-                    return {"reply": answer, "model": provider_name + ":" + provider_model}
-            print(f"[call_llm] provider={provider_name} status={response.status_code} error={str(data.get('error', data))[:500]}")
-        except Exception as exc:
-            print(f"[call_llm] provider={provider_name} exception={type(exc).__name__}: {exc}")
-
-    if GROQ_KEY:
-        try:
-            res = await client.post(
-                GROQ_URL,
-                headers={
-                    "Authorization": f"Bearer {GROQ_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={"model": GROQ_MODEL, "messages": messages, "max_tokens": max_tokens}
-            )
-            data = res.json()
-            if "error" not in data:
-                msg = data.get("choices",[{}])[0].get("message",{})
-                content = msg.get("content","") or msg.get("reasoning","")
-                if content:
-                    return {"reply": content, "model": GROQ_MODEL}
-        except Exception:
-            pass
-    if GROQ_KEY:
-        pass  # groq already attempted above; this branch intentionally left as-is
-    # OpenRouter is optional: Vertex/Gemini and Groq must still be tried
-    # when OPENROUTER_KEY is absent. Do not let one provider's configuration
-    # disable the other inference paths.
-    for model in (FALLBACK_MODELS if OPENROUTER_KEY else []):
-        try:
-            res = await client.post(
-                OPENROUTER_URL,
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://dex-backend-production-2bbe.up.railway.app",
-                    "X-Title": "Dex ReasonFlow",
-                },
-                json={"model": model, "messages": messages, "max_tokens": max_tokens}
-            )
-            data = res.json()
-            if "error" not in data:
-                msg = data.get("choices",[{}])[0].get("message",{})
-                content = msg.get("content","") or msg.get("reasoning","")
-                if content:
-                    return {"reply": content, "model": model}
-            else:
-                print(f"[call_llm] {model} returned error: {data.get('error')}")
-        except Exception as e:
-            print(f"[call_llm] {model} exception: {e}")
-        await asyncio.sleep(1)
-
-    # Last-resort chat inference: the image bundles a tiny CPU GGUF model; failures are logged below.
-    # This fallback keeps basic conversation available during hosted-provider
-    # outages. It cannot execute declared runtime capabilities, so identify it
-    # explicitly rather than presenting it as a hosted/tool-capable spark.
+    """Generate only through the bundled local GGUF using llama-cpp-python."""
     try:
-        from local_llm import local_slm_generate
-
-        local_prompt = "\n\n".join(
-            f"{str(message.get('role', 'user')).upper()}:\n{message.get('content', '')}"
-            for message in messages
+        from local_llm import local_chat_generate, CHAT_MODEL_PATH
+        answer = await asyncio.get_running_loop().run_in_executor(
+            None, local_chat_generate, messages, min(max_tokens, 256)
         )
-        local_reply = await asyncio.get_running_loop().run_in_executor(
-            None, local_slm_generate, local_prompt, min(max_tokens, 200)
-        )
-        if local_reply and local_reply.strip():
-            print("[call_llm] hosted providers unavailable; using local CPU fallback (capabilities unavailable)")
-            return {
-                "reply": local_reply.strip(),
-                "model": "local:qwen2.5-0.5b-instruct",
-                "capability_execution_available": False,
-            }
-    except Exception as e:
-        print(f"[call_llm] local CPU fallback failed: {e}")
-
-    return {"reply": "[inference unavailable: all configured providers and local CPU inference failed; inspect service logs]", "model": "none"}
+        if not answer or not answer.strip():
+            raise RuntimeError("local GGUF returned empty text")
+        print(f"[call_llm] backend=llama.cpp model={os.path.basename(CHAT_MODEL_PATH)}")
+        return {
+            "reply": answer.strip(),
+            "model": "local:" + os.path.basename(CHAT_MODEL_PATH),
+            "provider": "local",
+            "capability_execution_available": False,
+        }
+    except Exception as exc:
+        print(f"[call_llm] local llama.cpp inference failed: {type(exc).__name__}: {exc}")
+        return {
+            "reply": "[local inference failed; no hosted fallback is configured]",
+            "model": "none",
+            "provider": "local",
+            "capability_execution_available": False,
+        }
 
 class ChatRequest(BaseModel):
     message: str
