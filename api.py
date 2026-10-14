@@ -292,23 +292,27 @@ FALLBACK_MODELS = [
 ]
 
 async def call_llm(client, messages, max_tokens=1000):
-    # Explicit sovereign mode: DEX_LOCAL_ONLY=1 bypasses all hosted inference.
-    if os.environ.get("DEX_LOCAL_ONLY", "").strip().lower() in ("1", "true", "yes", "on"):
+    # Sovereign conversational mode uses its own Heretic GGUF. It is deliberately
+    # separate from local_llm.py, which remains the small ambient-cognition model.
+    # Fail closed in local mode: never silently send a local conversation to a host.
+    local_chat_only = any(
+        os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+        for name in ("DEX_LOCAL_CHAT_ONLY", "DEX_LOCAL_ONLY")
+    )
+    if local_chat_only:
         try:
-            from local_llm import local_slm_generate
-            prompt = " ".join(
-                f"{str(m.get('role', 'user')).upper()}: {m.get('content', '')}"
-                for m in messages
+            from local_chat_llm import local_chat_generate
+            return await asyncio.get_running_loop().run_in_executor(
+                None, local_chat_generate, messages, max_tokens
             )
-            answer = await asyncio.get_running_loop().run_in_executor(
-                None, local_slm_generate, prompt, min(max_tokens, 200)
-            )
-            if answer and answer.strip():
-                return {"reply": answer.strip(), "model": "local:qwen2.5-0.5b-instruct", "capability_execution_available": False}
-            raise RuntimeError("local model returned empty text")
         except Exception as exc:
-            print(f"[call_llm] DEX_LOCAL_ONLY failed: {type(exc).__name__}: {exc}")
-            return {"reply": "[local inference failed; inspect service logs]", "model": "none"}
+            print(f"[call_llm] local Heretic inference failed: {type(exc).__name__}: {exc}")
+            return {
+                "reply": "[local Heretic inference failed; no hosted fallback was attempted]",
+                "model": "none",
+                "capability_execution_available": False,
+            }
+
     gemini_result = await call_gemini(client, messages, max_tokens, enable_tools=True)
     if gemini_result:
         return gemini_result
