@@ -7,9 +7,12 @@ implemented by dex_capabilities.py and are invoked only through this bridge.
 """
 import json
 import os
+import threading
 from pathlib import Path
 
 _llm = None
+_model_init_lock = threading.Lock()
+_inference_lock = threading.Lock()
 MODEL_PATH = os.path.expanduser(os.environ.get(
     "LOCAL_CHAT_MODEL_PATH",
     "~/dev/llm/models/llama-3.2-3b-heretic/model_q4_k_m.gguf",
@@ -19,18 +22,22 @@ MODEL_PATH = os.path.expanduser(os.environ.get(
 def _get_llm():
     global _llm
     if _llm is None:
-        if not Path(MODEL_PATH).is_file():
-            raise FileNotFoundError(
-                f"Local chat model not found at {MODEL_PATH}. "
-                "Set LOCAL_CHAT_MODEL_PATH to the Heretic GGUF path."
-            )
-        from llama_cpp import Llama
-        _llm = Llama(
-            model_path=MODEL_PATH,
-            n_ctx=int(os.environ.get("LOCAL_CHAT_N_CTX", "4096")),
-            n_threads=int(os.environ.get("LOCAL_CHAT_THREADS", str(os.cpu_count() or 2))),
-            verbose=False,
-        )
+        with _model_init_lock:
+            if _llm is None:
+                if not Path(MODEL_PATH).is_file():
+                    raise FileNotFoundError(
+                        f"Local chat model not found at {MODEL_PATH}. "
+                        "Set LOCAL_CHAT_MODEL_PATH to the Heretic GGUF path."
+                    )
+                from llama_cpp import Llama
+                _llm = Llama(
+                    model_path=MODEL_PATH,
+                    n_ctx=int(os.environ.get("LOCAL_CHAT_N_CTX", "4096")),
+                    n_threads=int(os.environ.get(
+                        "LOCAL_CHAT_THREADS", str(min(8, os.cpu_count() or 2))
+                    )),
+                    verbose=False,
+                )
     return _llm
 
 
@@ -97,6 +104,12 @@ def _parse_tool_request(text):
 
 
 def local_chat_generate(messages, max_tokens=1200, max_tool_rounds=5):
+    """Serialize access to the resident model; llama.cpp inference is not concurrent-safe."""
+    with _inference_lock:
+        return _local_chat_generate_locked(messages, max_tokens, max_tool_rounds)
+
+
+def _local_chat_generate_locked(messages, max_tokens=1200, max_tool_rounds=5):
     """Generate a chat reply and, when requested, run DexOS runtime capabilities."""
     llm = _get_llm()
     conversation = [dict(m) for m in messages]
