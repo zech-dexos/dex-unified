@@ -1,0 +1,15 @@
+.git/
+.gcloudignore
+.gitignore
+__pycache__/
+*.py[cod]
+*.bak
+.env
+.env.*
+firebase-key.json
+state/
+dexos_state/
+dexos_state_*/
+haven_memory/
+models/
+*.gguf
