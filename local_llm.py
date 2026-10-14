@@ -6,23 +6,42 @@ kept resident in memory for the life of the instance.
 import os
 
 _llm = None
+_chat_llm = None
 MODEL_PATH = os.environ.get(
     "LOCAL_SLM_PATH",
     "/app/models/qwen2.5-0.5b-instruct-q4_k_m.gguf",
 )
+CHAT_MODEL_PATH = os.environ.get(
+    "DEX_CHAT_MODEL_PATH",
+    "/app/models/heretic/model_q4_k_m.gguf",
+)
+
+
+def _load_model(path: str, context_size: int):
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"GGUF model file does not exist: {path}")
+    from llama_cpp import Llama
+    print(f"[llama.cpp] loading model={path} context={context_size}")
+    return Llama(
+        model_path=path,
+        n_ctx=context_size,
+        n_threads=os.cpu_count() or 2,
+        verbose=False,
+    )
 
 
 def _get_llm():
     global _llm
     if _llm is None:
-        from llama_cpp import Llama
-        _llm = Llama(
-            model_path=MODEL_PATH,
-            n_ctx=2048,
-            n_threads=os.cpu_count() or 2,
-            verbose=False,
-        )
+        _llm = _load_model(MODEL_PATH, 2048)
     return _llm
+
+
+def _get_chat_llm():
+    global _chat_llm
+    if _chat_llm is None:
+        _chat_llm = _load_model(CHAT_MODEL_PATH, 4096)
+    return _chat_llm
 
 
 def local_slm_generate(prompt: str, max_tokens: int = 200) -> str:
@@ -43,8 +62,8 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
     conversation into one user prompt. Older context is trimmed only when the
     message list exceeds the model's context window.
     """
-    llm = _get_llm()
-    context_size = 2048
+    llm = _get_chat_llm()
+    context_size = 4096
     try:
         context_size = int(llm.n_ctx())
     except Exception:
