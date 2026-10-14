@@ -237,13 +237,15 @@ async def search_debug():
 
 @app.get("/health")
 def health():
-    from local_llm import MODEL_PATH
+    from local_llm import MODEL_PATH, CHAT_MODEL_PATH
     return {
         "status": "live",
         "sigils": _memory.summary() if SIGIL_ACTIVE and _memory else None,
         "inference_backend": "llama.cpp",
-        "model_path": MODEL_PATH,
-        "model_file_present": os.path.isfile(MODEL_PATH),
+        "chat_model_path": CHAT_MODEL_PATH,
+        "chat_model_file_present": os.path.isfile(CHAT_MODEL_PATH),
+        "ambient_model_path": MODEL_PATH,
+        "ambient_model_file_present": os.path.isfile(MODEL_PATH),
     }
 
 @app.get("/compare")
@@ -289,13 +291,13 @@ DEFAULT_MODEL = "local:llama.cpp"
 async def call_llm(client, messages, max_tokens=1000):
     """Generate only through the bundled local GGUF using llama-cpp-python."""
     try:
-        from local_llm import local_chat_generate, MODEL_PATH
+        from local_llm import local_chat_generate, CHAT_MODEL_PATH
         answer = await asyncio.get_running_loop().run_in_executor(
             None, local_chat_generate, messages, min(max_tokens, 256)
         )
         if not answer or not answer.strip():
             raise RuntimeError("local GGUF returned empty text")
-        print(f"[call_llm] backend=llama.cpp model={os.path.basename(MODEL_PATH)}")
+        print(f"[call_llm] backend=llama.cpp model={os.path.basename(CHAT_MODEL_PATH)}")
         return {
             "reply": answer.strip(),
             "model": "local:" + os.path.basename(MODEL_PATH),
