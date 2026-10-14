@@ -300,7 +300,7 @@ async def call_llm(client, messages, max_tokens=1000):
         print(f"[call_llm] backend=llama.cpp model={os.path.basename(CHAT_MODEL_PATH)}")
         return {
             "reply": answer.strip(),
-            "model": "local:" + os.path.basename(MODEL_PATH),
+            "model": "local:" + os.path.basename(CHAT_MODEL_PATH),
             "provider": "local",
             "capability_execution_available": False,
         }
