@@ -1,7 +1,6 @@
 """
-local_llm.py — CPU-only tiny local model for cheap/frequent calls (ambient
-pulse ticks) that don't warrant a paid API call. Loaded once per container,
-kept resident in memory for the life of the instance.
+local_llm.py — local GGUF inference for ambient and interactive chat.
+Models are loaded lazily and kept resident for the life of the container.
 """
 import os
 
@@ -11,21 +10,33 @@ MODEL_PATH = os.environ.get(
     "LOCAL_SLM_PATH",
     "/app/models/qwen2.5-0.5b-instruct-q4_k_m.gguf",
 )
+# Honor the Cloud Run configuration first; retain the older variable as a
+# compatibility fallback for deployments that still use it.
 CHAT_MODEL_PATH = os.environ.get(
-    "DEX_CHAT_MODEL_PATH",
-    "/app/models/heretic/model_q4_k_m.gguf",
+    "LOCAL_CHAT_MODEL_PATH",
+    os.environ.get(
+        "DEX_CHAT_MODEL_PATH",
+        "/app/models/heretic/model_q4_k_m.gguf",
+    ),
 )
+CHAT_CONTEXT_SIZE = max(512, int(os.environ.get("LOCAL_CHAT_N_CTX", "2048")))
+CHAT_THREADS = max(1, int(os.environ.get("LOCAL_CHAT_THREADS", "2")))
 
 
-def _load_model(path: str, context_size: int):
+def _load_model(path: str, context_size: int, threads: int | None = None):
     if not os.path.isfile(path):
         raise FileNotFoundError(f"GGUF model file does not exist: {path}")
     from llama_cpp import Llama
-    print(f"[llama.cpp] loading model={path} context={context_size}")
+    thread_count = threads if threads is not None else (os.cpu_count() or 2)
+    print(
+        f"[llama.cpp] loading model={path} context={context_size} "
+        f"threads={thread_count}",
+        flush=True,
+    )
     return Llama(
         model_path=path,
         n_ctx=context_size,
-        n_threads=os.cpu_count() or 2,
+        n_threads=thread_count,
         verbose=False,
     )
 
@@ -40,7 +51,7 @@ def _get_llm():
 def _get_chat_llm():
     global _chat_llm
     if _chat_llm is None:
-        _chat_llm = _load_model(CHAT_MODEL_PATH, 4096)
+        _chat_llm = _load_model(CHAT_MODEL_PATH, CHAT_CONTEXT_SIZE, CHAT_THREADS)
     return _chat_llm
 
 
@@ -60,10 +71,10 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
 
     This preserves system/user/assistant roles instead of flattening the whole
     conversation into one user prompt. Older context is trimmed only when the
-    message list exceeds the model's context window.
+    message list exceeds the model's configured context window.
     """
     llm = _get_chat_llm()
-    context_size = 4096
+    context_size = CHAT_CONTEXT_SIZE
     try:
         context_size = int(llm.n_ctx())
     except Exception:
