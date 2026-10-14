@@ -292,22 +292,34 @@ FALLBACK_MODELS = [
 ]
 
 async def call_llm(client, messages, max_tokens=1000):
-    # Explicit sovereign mode: DEX_LOCAL_ONLY=1 bypasses all hosted inference.
-    if os.environ.get("DEX_LOCAL_ONLY", "").strip().lower() in ("1", "true", "yes", "on"):
+    # Sovereign mode: explicit DEX_LOCAL_ONLY=1 or presence of Root's local
+    # Heretic GGUF bypasses all hosted inference providers.
+    heretic_path = os.path.expanduser(
+        "~/dev/llm/models/llama-3.2-3b-heretic/model_q4_k_m.gguf"
+    )
+    local_only = (
+        os.environ.get("DEX_LOCAL_ONLY", "").strip().lower() in ("1", "true", "yes", "on")
+        or os.path.isfile(heretic_path)
+    )
+    if local_only:
         try:
-            from local_llm import local_slm_generate
-            prompt = " ".join(
-                f"{str(m.get('role', 'user')).upper()}: {m.get('content', '')}"
+            from local_llm import local_slm_generate, MODEL_PATH
+            prompt = "\n\n".join(
+                f"{str(m.get('role', 'user')).upper()}:\n{m.get('content', '')}"
                 for m in messages
             )
             answer = await asyncio.get_running_loop().run_in_executor(
-                None, local_slm_generate, prompt, min(max_tokens, 200)
+                None, local_slm_generate, prompt, min(max_tokens, 512)
             )
             if answer and answer.strip():
-                return {"reply": answer.strip(), "model": "local:qwen2.5-0.5b-instruct", "capability_execution_available": False}
-            raise RuntimeError("local model returned empty text")
+                return {
+                    "reply": answer.strip(),
+                    "model": "local:" + os.path.basename(MODEL_PATH),
+                    "capability_execution_available": False,
+                }
+            raise RuntimeError("local model returned empty response")
         except Exception as exc:
-            print(f"[call_llm] DEX_LOCAL_ONLY failed: {type(exc).__name__}: {exc}")
+            print(f"[call_llm] local-only inference failed: {type(exc).__name__}: {exc}")
             return {"reply": "[local inference failed; inspect service logs]", "model": "none"}
     gemini_result = await call_gemini(client, messages, max_tokens, enable_tools=True)
     if gemini_result:
