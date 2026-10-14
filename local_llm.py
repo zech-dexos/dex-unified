@@ -110,12 +110,28 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
         else:
             normalized.pop(0)
 
-    if token_count(normalized) > context_size - output_tokens - 16:
-        system = normalized[0] if normalized[0]["role"] == "system" else None
-        last = normalized[-1]
-        budget = max(128, context_size * 3)
-        last = {"role": last["role"], "content": last["content"][-budget:]}
+    # Leave room for the model's chat-template tokens as well as the
+    # completion. Raw message token counts alone do not include that overhead.
+    prompt_budget = max(128, context_size - output_tokens - 256)
+    if token_count(normalized) > prompt_budget:
+        system = dict(normalized[0]) if normalized[0]["role"] == "system" else None
+        last = dict(normalized[-1])
         normalized = ([system] if system else []) + [last]
+
+        # The old code shortened only the final message, leaving an oversized
+        # system prompt intact. That could still produce a 3k+ token prompt
+        # against the configured 2k context. Shrink the system prompt's tail
+        # first, preserving its opening instructions, then shorten the input.
+        while token_count(normalized) > prompt_budget:
+            if system and len(system["content"]) > 256:
+                system["content"] = system["content"][:max(256, int(len(system["content"]) * 0.8))]
+            elif len(last["content"]) > 256:
+                last["content"] = last["content"][-max(256, int(len(last["content"]) * 0.8)):]
+            else:
+                raise ValueError(
+                    f"Unable to fit chat messages into context window: "
+                    f"{token_count(normalized)} tokens, budget {prompt_budget}"
+                )
 
     result = llm.create_chat_completion(
         messages=normalized,
