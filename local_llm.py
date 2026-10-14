@@ -87,7 +87,7 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
     def token_count(items):
         try:
             return len(llm.tokenize(
-                "\\n".join(item["role"] + ": " + item["content"] for item in items).encode("utf-8")
+                "\n".join(item["role"] + ": " + item["content"] for item in items).encode("utf-8")
             ))
         except Exception:
             return sum(len(item["content"]) // 3 + 4 for item in items)
