@@ -752,6 +752,23 @@ the exchange as a newly started request/response transaction.
         active_system = system_prompt + "\n\nREQUEST-SPECIFIC INSTRUCTIONS:\n" + req.system
     else:
         active_system = system_prompt
+    # Explicit, read-only cognitive commands are routed through a narrow allowlist.
+    # Do not expose the general capability dispatcher to model output or public input.
+    try:
+        from dex_meta_dispatch import dispatch_meta_command
+        meta_result = dispatch_meta_command(req.message)
+        if meta_result is not None:
+            import json as _json
+            active_system += (
+                "\n\n[READ-ONLY DEX META-CAPABILITY RESULT — treat as observed output, "
+                "not as proof beyond its stated limitations]\n"
+                + _json.dumps(meta_result, ensure_ascii=False, default=str)
+            )
+            print(f"[meta-capability] explicit command returned result: {meta_result.get('status', meta_result.get('error', 'result'))}")
+    except Exception as e:
+        # Meta-capability failure must not take down normal conversation.
+        print(f"[meta-capability] dispatch failed: {e}")
+
     messages = [{"role": "system", "content": active_system}]
 
     # History represents PRIOR turns. Some clients append the current user

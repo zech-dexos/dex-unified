@@ -194,6 +194,9 @@ CAPABILITY_FUNCTIONS = {
     "listen": listen,
     "evoke": evoke,
     "search_architecture": search_architecture,
+    "audit_cognition": __import__("dex_meta_capabilities").audit_cognition,
+    "build_investigation_plan": __import__("dex_meta_capabilities").build_investigation_plan,
+    "evaluate_investigation": __import__("dex_meta_capabilities").evaluate_investigation,
 }
 
 
