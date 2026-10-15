@@ -11,18 +11,32 @@ try:
 except ImportError:
     SIGIL_ACTIVE = False
     _memory = None
+DEXOS_ACTIVE = False
+DEXOS_STARTUP_ERROR = None
+_dexos = None
+
 try:
     from pathlib import Path
-    Path("/app/dexos_state").mkdir(exist_ok=True)
+    Path("/app/dexos_state").mkdir(parents=True, exist_ok=True)
     from github_persistence import pull_from_github, push_to_github
     pull_from_github()
     from dexos import DexOS
+
     _dexos = DexOS()
-    _dexos.initialize()
-    DEXOS_ACTIVE = True
+    initialized = _dexos.initialize()
+    if initialized and _dexos.online:
+        DEXOS_ACTIVE = True
+        print("[DexRuntime] DexOS governance initialized and online")
+    else:
+        reason = (_dexos.boot_result or {}).get("reason", "initialize() returned False")
+        DEXOS_STARTUP_ERROR = f"DexOS initialization failed: {reason}"
+        print(f"[DexRuntime] {DEXOS_STARTUP_ERROR}")
+        _dexos = None
 except Exception as e:
     DEXOS_ACTIVE = False
+    DEXOS_STARTUP_ERROR = f"{type(e).__name__}: {e}"
     _dexos = None
+    print(f"[DexRuntime] startup failed: {DEXOS_STARTUP_ERROR}")
 def dex_runtime(user_input: str, user_id: str = "default") -> dict:
     # User recognition + recall
     try:
