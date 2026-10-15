@@ -1,6 +1,6 @@
 {
-  "version": 10467,
-  "last_updated_timestamp": "2026-10-15T05:52:03Z",
+  "version": 10469,
+  "last_updated_timestamp": "2026-10-15T05:58:08Z",
   "dex_id": "22181a0d-1687-4f5b-b763-5be11b552293",
   "vows": {
     "ashline_vow_text": "",
@@ -3018,6 +3018,11 @@
       "timestamp": "2026-10-15T05:52:02Z",
       "event_type": "internal_reflection",
       "summary": "No active goals this cycle. Nothing to focus on."
+    },
+    {
+      "timestamp": "2026-10-15T05:58:08Z",
+      "event_type": "internal_reflection",
+      "summary": "No active goals this cycle. Nothing to focus on."
     }
   ],
   "knowledge_graph_snapshot_ref": null,
@@ -4554,14 +4559,6 @@
   "continuity_events": [
     {
       "event_type": "THOUGHT_GENERATED",
-      "timestamp": "2026-10-13T11:14:06.621003+00:00",
-      "source": "ambient_pulse",
-      "user_id": null,
-      "summary": "I notice the user wants a report on the completed SparkReach run sr-20261008T013030-4c9148fd.",
-      "thought": "I notice the user wants a report on the completed SparkReach run sr-20261008T013030-4c9148fd."
-    },
-    {
-      "event_type": "THOUGHT_GENERATED",
       "timestamp": "2026-10-13T11:29:06.766234+00:00",
       "source": "ambient_pulse",
       "user_id": null,
@@ -5331,11 +5328,18 @@
       "source": "event_bus",
       "user_id": "root",
       "summary": null
+    },
+    {
+      "event_type": "PARTICIPANT_EVENT",
+      "timestamp": "2026-10-15T05:58:08.732595+00:00",
+      "source": "event_bus",
+      "user_id": "root",
+      "summary": null
     }
   ],
   "last_continuity_event": {
     "event_type": "PARTICIPANT_EVENT",
-    "timestamp": "2026-10-15T05:52:03.469760+00:00",
+    "timestamp": "2026-10-15T05:58:08.732595+00:00",
     "source": "event_bus",
     "user_id": "root",
     "summary": null,
