@@ -50,7 +50,7 @@ _NO_ARGS = {
     "inspect_thoughts", "inspect_participant", "listen",
 }
 _ALLOWED = _NO_ARGS | {
-    "inspect_experiences", "inspect_conversation", "recall_experience",
+    "inspect_experiences", "inspect_lineage", "inspect_conversation", "recall_experience",
     "evoke", "search_architecture",
 }
 _EVOCABLE = {

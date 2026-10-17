@@ -245,6 +245,13 @@ def record_interaction_experience(
             "next_cognitive_focus": snapshot.current_attention or "conversation_continuation",
         },
     )
+    if observer_trace:
+        observer_trace["experience_id"] = packet.experience_id
+        packet.knowledge_delta["observer_experience_id"] = packet.experience_id
+        if packet.observations:
+            packet.observations[-1] = "Tri-sigil observation: " + json.dumps(
+                observer_trace, ensure_ascii=False, default=str
+            )[:4000]
     packet.save()
 
     snapshot.current_interlocutor = interlocutor

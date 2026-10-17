@@ -859,13 +859,13 @@ the exchange as a newly started request/response transaction.
             "intent": result.get("intent"),
             "domain": result.get("domain"),
             "tri_sigil_observer": {
-            "available": bool(observer_trace),
-            "sigil_memory_active": bool(SIGIL_ACTIVE and _memory),
-            "observation_id": observer_trace.get("observation_id"),
-            "experience_id": observer_trace.get("experience_id"),
-            "stages": observer_trace.get("stages", {}),
-        },
-        "response_flag": governance_flag,
+                "available": bool(observer_trace),
+                "sigil_memory_active": bool(SIGIL_ACTIVE and _memory),
+                "observation_id": observer_trace.get("observation_id"),
+                "experience_id": observer_trace.get("experience_id"),
+                "stages": observer_trace.get("stages", {}),
+            },
+            "response_flag": governance_flag,
         })
     except Exception as e:
         print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")
@@ -883,6 +883,13 @@ the exchange as a newly started request/response transaction.
             item.get("name") for item in result_llm.get("tool_calls", [])
             if isinstance(item, dict) and item.get("name")
         ],
+        "tri_sigil_observer": {
+            "available": bool(observer_trace),
+            "sigil_memory_active": bool(SIGIL_ACTIVE and _memory),
+            "observation_id": observer_trace.get("observation_id"),
+            "experience_id": observer_trace.get("experience_id"),
+            "stages": observer_trace.get("stages", {}),
+        },
         "response_flag": governance_flag,
     }
 
