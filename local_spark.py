@@ -28,6 +28,7 @@ Allowed capabilities and argument shapes:
 - inspect_observations: {}
 - inspect_architecture: {"query": optional string}
 - reason_with_talnir: {"prompt": string, max 2000}
+- request_reflection: {"focus": string, max 500, "reason": optional string, max 500}; queue a future ambient architecture pass
 - inspect_identity: {}
 - inspect_lineage: {"limit": integer 1..20}
 - inspect_workspace: {}
@@ -55,7 +56,7 @@ _NO_ARGS = {
 }
 _ALLOWED = _NO_ARGS | {
     "inspect_experiences", "inspect_lineage", "inspect_conversation", "recall_experience",
-    "evoke", "search_architecture", "inspect_architecture", "reason_with_talnir",
+    "evoke", "search_architecture", "inspect_architecture", "reason_with_talnir", "request_reflection",
 }
 _EVOCABLE = {
     "state", "workspace", "goals", "open_loops", "thoughts", "experiences",
@@ -126,6 +127,13 @@ def _parse_tool_request(text):
             if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 2000:
                 continue
             args = {"prompt": prompt.strip()}
+        elif name == "request_reflection":
+            focus, reason = args.get("focus"), args.get("reason", "")
+            if not isinstance(focus, str) or not focus.strip() or len(focus) > 500:
+                continue
+            if not isinstance(reason, str) or len(reason) > 500:
+                continue
+            args = {"focus": focus.strip(), "reason": reason.strip()}
         elif name == "search_architecture":
             query = args.get("query")
             if not isinstance(query, str) or not query.strip() or len(query) > 200:
