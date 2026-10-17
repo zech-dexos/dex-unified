@@ -150,10 +150,21 @@ def build_experience_from_pulse(snapshot: ParticipantSnapshot, pulse_data: dict)
             f"Chain status: {chain_status}",
             f"Fragments loaded: {pulse_data.get('fragments_loaded', 0)}",
             f"Narrative entries: {pulse_data.get('narrative_entries', 0)}",
+        ] + [
+            "Tri-sigil observer evidence: " + json.dumps(item, ensure_ascii=False, default=str)[:1200]
+            for item in pulse_data.get("observer_evidence", [])[-5:]
         ],
         unexpected_events=[] if chain_status == "intact" else [f"Chain anomaly: {chain_status}"],
         lessons=calibration["lessons"],
-        reflection=f"Pulse cycle complete. Confidence moved from {snapshot.current_confidence:.2f} to {calibration['confidence_after']:.2f}.",
+        reflection=(
+            f"Pulse cycle complete. Confidence moved from {snapshot.current_confidence:.2f} "
+            f"to {calibration['confidence_after']:.2f}. "
+            + (
+                "Recent tri-sigil observer evidence for intent and goal judgment: "
+                + json.dumps(pulse_data.get("observer_evidence", [])[-5:], ensure_ascii=False, default=str)[:2500]
+                if pulse_data.get("observer_evidence") else ""
+            )
+        ),
         knowledge_delta={
             "confidence_updated": True,
             "new_confidence": calibration["confidence_after"],
