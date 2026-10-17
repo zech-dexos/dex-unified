@@ -54,7 +54,7 @@ _NO_ARGS = {
 }
 _ALLOWED = _NO_ARGS | {
     "inspect_experiences", "inspect_lineage", "inspect_conversation", "recall_experience",
-    "evoke", "search_architecture",
+    "evoke", "search_architecture", "inspect_architecture",
 }
 _EVOCABLE = {
     "state", "workspace", "goals", "open_loops", "thoughts", "experiences",
