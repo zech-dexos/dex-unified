@@ -27,6 +27,7 @@ Allowed capabilities and argument shapes:
 - inspect_tools: {}
 - inspect_observations: {}
 - inspect_architecture: {"query": optional string}
+- reason_with_talnir: {"prompt": string, max 2000}
 - inspect_identity: {}
 - inspect_lineage: {"limit": integer 1..20}
 - inspect_workspace: {}
@@ -54,7 +55,7 @@ _NO_ARGS = {
 }
 _ALLOWED = _NO_ARGS | {
     "inspect_experiences", "inspect_lineage", "inspect_conversation", "recall_experience",
-    "evoke", "search_architecture", "inspect_architecture",
+    "evoke", "search_architecture", "inspect_architecture", "reason_with_talnir",
 }
 _EVOCABLE = {
     "state", "workspace", "goals", "open_loops", "thoughts", "experiences",
@@ -120,6 +121,11 @@ def _parse_tool_request(text):
             if not isinstance(query, str) or len(query) > 200:
                 continue
             args = {"query": query.strip()}
+        elif name == "reason_with_talnir":
+            prompt = args.get("prompt")
+            if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 2000:
+                continue
+            args = {"prompt": prompt.strip()}
         elif name == "search_architecture":
             query = args.get("query")
             if not isinstance(query, str) or not query.strip() or len(query) > 200:
