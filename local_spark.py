@@ -49,7 +49,7 @@ If no capability is needed, answer normally in plain text.
 
 
 _NO_ARGS = {
-    "inspect_state", "inspect_identity", "inspect_tools", "inspect_observations", "inspect_architecture", "inspect_workspace", "inspect_goals", "inspect_open_loops",
+    "inspect_state", "inspect_identity", "inspect_tools", "inspect_observations", "inspect_workspace", "inspect_goals", "inspect_open_loops",
     "inspect_thoughts", "inspect_participant", "listen",
 }
 _ALLOWED = _NO_ARGS | {
