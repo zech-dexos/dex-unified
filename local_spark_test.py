@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import local_spark
+import dex_capabilities
 from dex_observer import build_observer_trace
 from participant import ParticipantSnapshot
 
@@ -35,6 +36,19 @@ class LocalSparkBridgeTests(unittest.TestCase):
         self.assertEqual(parsed[1]["arguments"], {"prompt": "inspect ambient goals"})
         self.assertEqual(parsed[2]["arguments"], {"resource": "observations"})
 
+
+    def test_reflection_request_is_durably_queued_without_running_inline(self):
+        with patch.object(dex_capabilities, "_state", return_value={"pending_reflection_requests": []}), \
+             patch("self_state.update_self_state") as update:
+            result = dex_capabilities.request_reflection(
+                "revisit architecture feedback", "a new observation may change the interpretation"
+            )
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["status"], "pending")
+        self.assertEqual(result["next_step"], "ambient_architecture_pass")
+        queued = update.call_args.args[0]["pending_reflection_requests"]
+        self.assertEqual(queued[0]["focus"], "revisit architecture feedback")
+        self.assertEqual(queued[0]["status"], "pending")
 
     def test_parser_accepts_bounded_reflection_request(self):
         parsed = local_spark._parse_tool_request(
