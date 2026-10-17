@@ -16,6 +16,8 @@ jobs:
           node-version: "20"
       - name: Compile Python sources
         run: python -m compileall -q .
+      - name: Test local spark capability bridge
+        run: python local_spark_test.py
       - name: Syntax-check inline JavaScript
         shell: bash
         run: |

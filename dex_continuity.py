@@ -48,6 +48,7 @@ def _meaningful_event(payload: Dict[str, Any]) -> bool:
         "ACTION_COMPLETED",
         "SIGNAL_RAISED",
         "SALIENCE_CHANGED",
+        "TRI_SIGIL_OBSERVED",
     }
 
 
@@ -119,6 +120,11 @@ async def process_continuity_event(payload: Dict[str, Any]):
         "significance",
         "open_loop",
         "state_changes",
+        "observation_id",
+        "experience_id",
+        "lineage_hash",
+        "stages",
+        "sigil_ids",
     ):
         if key in payload:
             record[key] = payload[key]
@@ -154,6 +160,7 @@ def setup_continuity():
         "ACTION_COMPLETED",
         "SIGNAL_RAISED",
         "SALIENCE_CHANGED",
+        "TRI_SIGIL_OBSERVED",
     ):
         bus.subscribe(event_type, process_continuity_event)
 

@@ -289,28 +289,35 @@ DEFAULT_MODEL = "local:llama.cpp"
 
 
 async def call_llm(client, messages, max_tokens=1000):
-    """Generate only through the bundled local GGUF using llama-cpp-python."""
+    """Run Dex chat through the local Heretic spark and DexOS capability bridge."""
     try:
-        from local_llm import local_chat_generate, CHAT_MODEL_PATH
-        answer = await asyncio.get_running_loop().run_in_executor(
-            None, local_chat_generate, messages, min(max_tokens, 256)
+        from local_llm import CHAT_MODEL_PATH
+        from local_spark import local_spark_generate
+        result = await asyncio.get_running_loop().run_in_executor(
+            None, local_spark_generate, messages, min(max_tokens, 256)
         )
-        if not answer or not answer.strip():
-            raise RuntimeError("local GGUF returned empty text")
-        print(f"[call_llm] backend=llama.cpp model={os.path.basename(CHAT_MODEL_PATH)}")
+        answer = str(result.get("reply", "")).strip()
+        if not answer:
+            raise RuntimeError("local Heretic spark returned empty text")
+        print(
+            f"[call_llm] backend=llama.cpp model={os.path.basename(CHAT_MODEL_PATH)} "
+            f"capabilities={len(result.get('tool_calls', []))}"
+        )
         return {
-            "reply": answer.strip(),
+            "reply": answer,
             "model": "local:" + os.path.basename(CHAT_MODEL_PATH),
             "provider": "local",
-            "capability_execution_available": False,
+            "capability_execution_available": True,
+            "tool_calls": result.get("tool_calls", []),
         }
     except Exception as exc:
-        print(f"[call_llm] local llama.cpp inference failed: {type(exc).__name__}: {exc}")
+        print(f"[call_llm] local spark inference failed: {type(exc).__name__}: {exc}")
         return {
-            "reply": "[local inference failed; no hosted fallback is configured]",
+            "reply": "[local inference failed; no hosted fallback was attempted]",
             "model": "none",
             "provider": "local",
             "capability_execution_available": False,
+            "tool_calls": [],
         }
 
 class ChatRequest(BaseModel):
@@ -790,25 +797,6 @@ the exchange as a newly started request/response transaction.
     if isinstance(reply, str) and reply.strip() == "[NO_RESPONSE]":
         reply = ""
 
-    # Record the contribution as lived experience. This does not close the
-    # conversation: it records what I experienced and whether I expressed a response.
-    try:
-        user_id = getattr(req, "user_id", "default")
-        experience_packet = record_interaction_experience(
-            ParticipantSnapshot.load(),
-            req.message,
-            reply,
-            user_id=user_id,
-        )
-        experience_contribution(
-            user_id=user_id,
-            message=req.message,
-            reply=reply,
-            experience_id=experience_packet.experience_id,
-        )
-    except Exception as e:
-        print(f"[experience] conversation experience record failed: {e}")
-
     # Response-side governance check — catches parroting/sycophancy in
     # the ACTUAL reply going out, not just incoming prompt drift.
     governance_flag = None
@@ -826,6 +814,41 @@ the exchange as a newly started request/response transaction.
     except Exception as e:
         print(f"[check_response] error: {e}")
 
+    observer_trace = {}
+    try:
+        from dex_observer import build_observer_trace, persist_observation
+        observer_trace = build_observer_trace(
+            snapshot=ParticipantSnapshot.load(),
+            user_id=getattr(req, "user_id", "default"),
+            message=req.message,
+            reply=reply,
+            model=used_model,
+            provider=result_llm.get("provider", "local"),
+            capability_available=result_llm.get("capability_execution_available", False),
+            capability_calls=result_llm.get("tool_calls", []),
+            sigil_ids=result.get("sigil_ids", []),
+            sigil_active=bool(SIGIL_ACTIVE and _memory),
+            response_flag=governance_flag,
+        )
+    except Exception as e:
+        print(f"[observer] tri-sigil observation failed: {e}")
+
+    try:
+        user_id = getattr(req, "user_id", "default")
+        experience_packet = record_interaction_experience(
+            ParticipantSnapshot.load(), req.message, reply,
+            user_id=user_id, observer_trace=observer_trace,
+        )
+        experience_contribution(
+            user_id=user_id, message=req.message, reply=reply,
+            experience_id=experience_packet.experience_id,
+        )
+        if observer_trace:
+            observer_trace["experience_id"] = experience_packet.experience_id
+            await persist_observation(observer_trace, user_id=user_id)
+    except Exception as e:
+        print(f"[experience] conversation experience record failed: {e}")
+
     try:
         from dex_events import bus
         await bus.publish("RESPONSE_COMPLETED", {
@@ -835,6 +858,13 @@ the exchange as a newly started request/response transaction.
             "user_id": getattr(req, "user_id", "default"),
             "intent": result.get("intent"),
             "domain": result.get("domain"),
+            "tri_sigil_observer": {
+                "available": bool(observer_trace),
+                "sigil_memory_active": bool(SIGIL_ACTIVE and _memory),
+                "observation_id": observer_trace.get("observation_id"),
+                "experience_id": observer_trace.get("experience_id"),
+                "stages": observer_trace.get("stages", {}),
+            },
             "response_flag": governance_flag,
         })
     except Exception as e:
@@ -847,6 +877,19 @@ the exchange as a newly started request/response transaction.
         "route_reason": result["route_reason"],
         "sigil_ids":    result["sigil_ids"],
         "model":        used_model,
+        "provider":      result_llm.get("provider", "local"),
+        "capability_execution_available": result_llm.get("capability_execution_available", False),
+        "capability_calls": [
+            item.get("name") for item in result_llm.get("tool_calls", [])
+            if isinstance(item, dict) and item.get("name")
+        ],
+        "tri_sigil_observer": {
+            "available": bool(observer_trace),
+            "sigil_memory_active": bool(SIGIL_ACTIVE and _memory),
+            "observation_id": observer_trace.get("observation_id"),
+            "experience_id": observer_trace.get("experience_id"),
+            "stages": observer_trace.get("stages", {}),
+        },
         "response_flag": governance_flag,
     }
 
