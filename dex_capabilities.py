@@ -244,6 +244,29 @@ def evoke(resource: str, **kwargs) -> Dict[str, Any]:
     return fn()
 
 
+def reason_with_talnir(prompt: str) -> Dict[str, Any]:
+    """Run Talnir structured translation and branch decomposition on bounded text."""
+    text = str(prompt or "").strip()
+    if not text:
+        return {"error": "empty_prompt"}
+    if len(text) > 2000:
+        text = text[:2000]
+    from talnir import translate, decompose
+    signal = translate(text)
+    decomposition = decompose(text)
+    return {
+        "signal": {
+            "intent": signal.intent,
+            "domain": signal.domain,
+            "modifiers": list(signal.modifiers),
+            "tools": list(signal.tools),
+            "context": signal.to_context_string(),
+        },
+        "branches": decomposition.get("branches", []),
+        "decomposition_context": decomposition.get("context", ""),
+        "source": "talnir.translate+decompose",
+    }
+
 def search_architecture(query: str) -> Dict[str, Any]:
     """Search DexOS source/state text without executing it."""
     needle = str(query).strip().lower()
@@ -290,6 +313,7 @@ CAPABILITY_CATALOG = [
     ("inspect_tools", "Inspect this allowlisted tool catalog and usage boundary.", {}),
     ("inspect_observations", "Inspect participant, tri-sigil, and runtime observations.", {}),
     ("inspect_architecture", "Inspect the module map; optional query searches source.", {"query": "optional string, max 200"}),
+    ("reason_with_talnir", "Run Talnir structured intent and reasoning-branch analysis.", {"prompt": "string, max 2000"}),
     ("listen", "Notice current runtime signals without taking action.", {}),
     ("evoke", "Deliberately retrieve a named resource.", {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}),
     ("search_architecture", "Search source text without executing it.", {"query": "string, max 200"}),
@@ -303,6 +327,7 @@ CAPABILITY_FUNCTIONS = {
     "inspect_tools": inspect_tools,
     "inspect_observations": inspect_observations,
     "inspect_architecture": inspect_architecture,
+    "reason_with_talnir": reason_with_talnir,
     "inspect_workspace": inspect_workspace,
     "inspect_goals": inspect_goals,
     "inspect_open_loops": inspect_open_loops,
