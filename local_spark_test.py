@@ -36,6 +36,19 @@ class LocalSparkBridgeTests(unittest.TestCase):
         self.assertEqual(parsed[2]["arguments"], {"resource": "observations"})
 
 
+    def test_parser_accepts_bounded_reflection_request(self):
+        parsed = local_spark._parse_tool_request(
+            '{"tool_calls":[{"name":"request_reflection","arguments":'
+            '{"focus":"revisit architecture feedback","reason":"new observation"}]}'
+        )
+        self.assertEqual(parsed, [{
+            "name": "request_reflection",
+            "arguments": {"focus": "revisit architecture feedback", "reason": "new observation"},
+        }])
+        self.assertIsNone(local_spark._parse_tool_request(
+            '{"tool_calls":[{"name":"request_reflection","arguments":{"focus":"' + ("x" * 501) + '"}}]}'
+        ))
+
     def test_capability_observation_returns_to_spark(self):
         fake_local_llm = types.ModuleType("local_llm")
         fake_local_llm.CHAT_MODEL_PATH = "/models/heretic.gguf"
