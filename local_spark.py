@@ -65,8 +65,7 @@ def _parse_tool_request(text):
             lines = lines[1:]
         if lines and lines[-1].strip() == "```":
             lines = lines[:-1]
-        candidate = "
-".join(lines).strip()
+        candidate = "\n".join(lines).strip()
     try:
         value = json.loads(candidate)
     except (json.JSONDecodeError, TypeError):
@@ -135,10 +134,7 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
             # Prefix protocol so the existing local_llm context trimmer preserves
             # the capability contract and the opening of Dex's constitutional prompt.
             conversation[system_index]["content"] = (
-                _CAPABILITY_PROTOCOL + "
-
-DEXOS CONSTITUTIONAL CONTEXT:
-" + original
+                _CAPABILITY_PROTOCOL + "\n\nDEXOS CONSTITUTIONAL CONTEXT:\n" + original
             )
 
         executed = []
