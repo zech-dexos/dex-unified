@@ -797,25 +797,6 @@ the exchange as a newly started request/response transaction.
     if isinstance(reply, str) and reply.strip() == "[NO_RESPONSE]":
         reply = ""
 
-    # Record the contribution as lived experience. This does not close the
-    # conversation: it records what I experienced and whether I expressed a response.
-    try:
-        user_id = getattr(req, "user_id", "default")
-        experience_packet = record_interaction_experience(
-            ParticipantSnapshot.load(),
-            req.message,
-            reply,
-            user_id=user_id,
-        )
-        experience_contribution(
-            user_id=user_id,
-            message=req.message,
-            reply=reply,
-            experience_id=experience_packet.experience_id,
-        )
-    except Exception as e:
-        print(f"[experience] conversation experience record failed: {e}")
-
     # Response-side governance check — catches parroting/sycophancy in
     # the ACTUAL reply going out, not just incoming prompt drift.
     governance_flag = None
@@ -833,6 +814,41 @@ the exchange as a newly started request/response transaction.
     except Exception as e:
         print(f"[check_response] error: {e}")
 
+    observer_trace = {}
+    try:
+        from dex_observer import build_observer_trace, persist_observation
+        observer_trace = build_observer_trace(
+            snapshot=ParticipantSnapshot.load(),
+            user_id=getattr(req, "user_id", "default"),
+            message=req.message,
+            reply=reply,
+            model=used_model,
+            provider=result_llm.get("provider", "local"),
+            capability_available=result_llm.get("capability_execution_available", False),
+            capability_calls=result_llm.get("tool_calls", []),
+            sigil_ids=result.get("sigil_ids", []),
+            sigil_active=bool(SIGIL_ACTIVE and _memory),
+            response_flag=governance_flag,
+        )
+    except Exception as e:
+        print(f"[observer] tri-sigil observation failed: {e}")
+
+    try:
+        user_id = getattr(req, "user_id", "default")
+        experience_packet = record_interaction_experience(
+            ParticipantSnapshot.load(), req.message, reply,
+            user_id=user_id, observer_trace=observer_trace,
+        )
+        experience_contribution(
+            user_id=user_id, message=req.message, reply=reply,
+            experience_id=experience_packet.experience_id,
+        )
+        if observer_trace:
+            observer_trace["experience_id"] = experience_packet.experience_id
+            await persist_observation(observer_trace, user_id=user_id)
+    except Exception as e:
+        print(f"[experience] conversation experience record failed: {e}")
+
     try:
         from dex_events import bus
         await bus.publish("RESPONSE_COMPLETED", {
@@ -842,7 +858,14 @@ the exchange as a newly started request/response transaction.
             "user_id": getattr(req, "user_id", "default"),
             "intent": result.get("intent"),
             "domain": result.get("domain"),
-            "response_flag": governance_flag,
+            "tri_sigil_observer": {
+            "available": bool(observer_trace),
+            "sigil_memory_active": bool(SIGIL_ACTIVE and _memory),
+            "observation_id": observer_trace.get("observation_id"),
+            "experience_id": observer_trace.get("experience_id"),
+            "stages": observer_trace.get("stages", {}),
+        },
+        "response_flag": governance_flag,
         })
     except Exception as e:
         print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")

@@ -5,6 +5,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 import local_spark
+from dex_observer import build_observer_trace
+from participant import ParticipantSnapshot
 
 
 class LocalSparkBridgeTests(unittest.TestCase):
@@ -42,6 +44,25 @@ class LocalSparkBridgeTests(unittest.TestCase):
         second_call_messages = fake_local_llm.local_chat_generate.call_args_list[1].args[0]
         self.assertIn("dex_id", second_call_messages[-1]["content"])
         self.assertIn("Dex constitutional prompt", second_call_messages[0]["content"])
+
+    def test_tri_sigil_observer_uses_participant_and_actual_capability_evidence(self):
+        snapshot = ParticipantSnapshot(
+            participant_id="participant-test",
+            current_attention="integration",
+            experiential_continuity={"last_experience_id": "experience-prior"},
+        )
+        trace = build_observer_trace(
+            snapshot=snapshot, user_id="root", message="Inspect state",
+            reply="State inspected.", model="local:heretic.gguf", provider="local",
+            capability_available=True,
+            capability_calls=[{"name": "inspect_state", "observation": {"dex_id": "deximus"}}],
+            sigil_ids=["sigil-a"], sigil_active=False, response_flag=None,
+        )
+        self.assertEqual(set(trace["stages"]), {"continuity", "awareness", "emergence"})
+        self.assertEqual(trace["stages"]["continuity"]["last_experience_id"], "experience-prior")
+        self.assertEqual(trace["stages"]["awareness"]["capability_calls"][0]["name"], "inspect_state")
+        self.assertFalse(trace["sigil_memory_active"])
+        self.assertEqual(trace["stages"]["emergence"]["status"], "response_observed")
 
     def test_no_capability_request_is_plain_reply(self):
         fake_local_llm = types.ModuleType("local_llm")
