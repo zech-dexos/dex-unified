@@ -62,6 +62,25 @@ def _select_target(state):
     """Select existing cognitive work without asking the LLM to choose it."""
     now = datetime.now(timezone.utc)
 
+    # A deliberate reflection request takes priority: Dex can signal that the
+    # architecture should take another pass, while the scheduler still owns execution.
+    pending_reflections = [
+        item for item in state.get("pending_reflection_requests", [])
+        if isinstance(item, dict) and item.get("status", "pending") == "pending"
+    ]
+    if pending_reflections:
+        item = pending_reflections[0]
+        return {
+            "kind": "reflection_request",
+            "id": item.get("request_id"),
+            "text": json.dumps({
+                "focus": item.get("focus", ""),
+                "reason": item.get("reason", ""),
+                "requested_at": item.get("timestamp"),
+                "source": item.get("source", "unknown"),
+            }, ensure_ascii=False),
+        }
+
     # Observer evidence is a first-class ambient cognition target.
     pending_observations = [
         item for item in state.get("pending_cognitive_observations", [])
@@ -385,6 +404,26 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     )
 
             if thought_text:
+                # Complete a queued reflection request only after usable ambient cognition.
+                if target.get("kind") == "reflection_request":
+                    current_state = load_self_state()
+                    pending = list(current_state.get("pending_reflection_requests", []) or [])
+                    completed = list(current_state.get("recent_reflection_requests", []) or [])
+                    request_id = target.get("id")
+                    updated = []
+                    for item in pending:
+                        if item.get("request_id") == request_id:
+                            item = dict(item)
+                            item["status"] = "processed"
+                            item["processed_at"] = _now_iso()
+                            item["reflection"] = str(thought_text)[:1000]
+                            completed.append(item)
+                        updated.append(item)
+                    update_self_state({
+                        "pending_reflection_requests": updated[-10:],
+                        "recent_reflection_requests": completed[-10:],
+                    })
+
                 # Acknowledge observer intake only after a usable cognition result.
                 if target.get("kind") == "tri_sigil_observation":
                     current_state = load_self_state()
