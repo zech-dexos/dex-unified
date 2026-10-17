@@ -24,6 +24,9 @@ If you need a runtime capability, return ONLY one JSON object in this form:
 
 Allowed capabilities and argument shapes:
 - inspect_state: {}
+- inspect_tools: {}
+- inspect_observations: {}
+- inspect_architecture: {"query": optional string}
 - inspect_identity: {}
 - inspect_lineage: {"limit": integer 1..20}
 - inspect_workspace: {}
@@ -35,7 +38,7 @@ Allowed capabilities and argument shapes:
 - inspect_conversation: {"user_id": string}
 - recall_experience: {"query": string, "limit": integer 1..10}
 - listen: {}
-- evoke: {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals"}
+- evoke: {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}
 - search_architecture: {"query": string}
 
 Do not request shell execution, network calls, arbitrary code, or the spark
@@ -46,7 +49,7 @@ If no capability is needed, answer normally in plain text.
 
 
 _NO_ARGS = {
-    "inspect_state", "inspect_identity", "inspect_workspace", "inspect_goals", "inspect_open_loops",
+    "inspect_state", "inspect_identity", "inspect_tools", "inspect_observations", "inspect_architecture", "inspect_workspace", "inspect_goals", "inspect_open_loops",
     "inspect_thoughts", "inspect_participant", "listen",
 }
 _ALLOWED = _NO_ARGS | {
@@ -55,7 +58,7 @@ _ALLOWED = _NO_ARGS | {
 }
 _EVOCABLE = {
     "state", "workspace", "goals", "open_loops", "thoughts", "experiences",
-    "participant", "conversation", "signals",
+    "participant", "conversation", "signals", "tools", "observations", "architecture", "spark_reaches",
 }
 
 
@@ -112,6 +115,11 @@ def _parse_tool_request(text):
             if resource not in _EVOCABLE:
                 continue
             args = {"resource": resource}
+        elif name == "inspect_architecture":
+            query = args.get("query", "")
+            if not isinstance(query, str) or len(query) > 200:
+                continue
+            args = {"query": query.strip()}
         elif name == "search_architecture":
             query = args.get("query")
             if not isinstance(query, str) or not query.strip() or len(query) > 200:
