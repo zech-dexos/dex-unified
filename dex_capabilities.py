@@ -85,6 +85,8 @@ def inspect_observations() -> Dict[str, Any]:
         "last_continuity_event": state.get("last_continuity_event"),
         "last_autobiographical_event": state.get("last_autobiographical_event"),
         "pending_signals": list(state.get("pending_signals", []) or [])[-10:],
+        "pending_reflection_requests": list(state.get("pending_reflection_requests", []) or [])[-10:],
+        "recent_reflection_requests": list(state.get("recent_reflection_requests", []) or [])[-5:],
     }
 
 
