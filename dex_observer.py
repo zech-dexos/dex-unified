@@ -71,6 +71,29 @@ async def persist_observation(trace, user_id="default"):
             "input_reply_digest": trace.get("input_reply_digest"),
         },
     )
+    # Durable intake for ambient cognition and goal/intent cycles. Observations
+    # are evidence, not commands, and never mutate goals directly.
+    from self_state import load_self_state, update_self_state
+    state = load_self_state()
+    queue = list(state.get("pending_cognitive_observations", []) or [])
+    intake = {
+        "observation_id": trace.get("observation_id"),
+        "experience_id": trace.get("experience_id"),
+        "timestamp": trace.get("timestamp"),
+        "user_id": str(user_id)[:128],
+        "lineage_hash": entry.get("entry_hash"),
+        "sigil_ids": list(trace.get("sigil_ids", []))[:32],
+        "sigil_memory_active": bool(trace.get("sigil_memory_active")),
+        "stages": stages,
+        "input_reply_digest": trace.get("input_reply_digest"),
+        "status": "pending",
+    }
+    queue = [item for item in queue if item.get("observation_id") != intake["observation_id"]]
+    queue.append(intake)
+    update_self_state({
+        "pending_cognitive_observations": queue[-20:],
+        "last_tri_sigil_observation": intake,
+    })
     await bus.publish("TRI_SIGIL_OBSERVED", {
         "event_type": "TRI_SIGIL_OBSERVED", "source": "dex_observer",
         "user_id": str(user_id)[:128],
@@ -78,4 +101,6 @@ async def persist_observation(trace, user_id="default"):
         "experience_id": trace.get("experience_id"),
         "lineage_hash": entry.get("entry_hash"), "stages": stages,
     })
-    return {"entry_hash": entry.get("entry_hash"), "observation_id": trace.get("observation_id")}
+    return {"entry_hash": entry.get("entry_hash"), "observation_id": trace.get("observation_id"),
+            "queued_for_cognition": True}
+}
