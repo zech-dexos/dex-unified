@@ -372,6 +372,25 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     )
 
             if thought_text:
+                # Acknowledge observer intake only after a usable cognition result.
+                if target.get("kind") == "tri_sigil_observation":
+                    current_state = load_self_state()
+                    pending = list(current_state.get("pending_cognitive_observations", []) or [])
+                    recent = list(current_state.get("recent_cognitive_observations", []) or [])
+                    observed_id = target.get("id")
+                    updated = []
+                    for item in pending:
+                        if item.get("observation_id") == observed_id:
+                            item = dict(item)
+                            item["status"] = "processed"
+                            item["processed_at"] = _now_iso()
+                            item["ambient_thought"] = str(thought_text)[:1000]
+                            recent.append(item)
+                        updated.append(item)
+                    update_self_state({
+                        "pending_cognitive_observations": updated[-20:],
+                        "recent_cognitive_observations": recent[-10:],
+                    })
                 add_thought(thought_text, salience)
 
                 next_attention = (
