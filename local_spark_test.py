@@ -53,7 +53,7 @@ class LocalSparkBridgeTests(unittest.TestCase):
     def test_parser_accepts_bounded_reflection_request(self):
         parsed = local_spark._parse_tool_request(
             '{"tool_calls":[{"name":"request_reflection","arguments":'
-            '{"focus":"revisit architecture feedback","reason":"new observation"}]}'
+            '{"focus":"revisit architecture feedback","reason":"new observation"}}]}'
         )
         self.assertEqual(parsed, [{
             "name": "request_reflection",
