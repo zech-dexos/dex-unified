@@ -287,7 +287,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             from dex_capabilities import reason_with_talnir
             talnir_result = reason_with_talnir(str(target.get("text", ""))[:2000])
             talnir_context = (
-                "\\n\\nTALNIR STRUCTURED REASONING CONTEXT:\\n"
+                "\n\nTALNIR STRUCTURED REASONING CONTEXT:\n"
                 + json.dumps(talnir_result, ensure_ascii=False, default=str)[:4000]
             )
         except Exception as e:
