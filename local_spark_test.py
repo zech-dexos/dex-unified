@@ -28,13 +28,13 @@ class LocalSparkBridgeTests(unittest.TestCase):
             '{"name":"inspect_architecture","arguments":{"query":"ambient"}},'
             '{"name":"reason_with_talnir","arguments":{"prompt":"inspect ambient goals"}},'
             '{"name":"evoke","arguments":{"resource":"observations"}},'
-            '{"name":"evoke","arguments":{"resource":"observations"}}]}'
         )
         self.assertEqual([item["name"] for item in parsed],
                          ["inspect_architecture", "reason_with_talnir", "evoke"])
         self.assertEqual(parsed[0]["arguments"], {"query": "ambient"})
         self.assertEqual(parsed[1]["arguments"], {"prompt": "inspect ambient goals"})
         self.assertEqual(parsed[2]["arguments"], {"resource": "observations"})
+
     def test_capability_observation_returns_to_spark(self):
         fake_local_llm = types.ModuleType("local_llm")
         fake_local_llm.CHAT_MODEL_PATH = "/models/heretic.gguf"
