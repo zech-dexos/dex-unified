@@ -92,6 +92,7 @@ def inspect_architecture(query: str = "") -> Dict[str, Any]:
     modules = {
         "cognition_entry": "api.py",
         "spark_bridge": "local_spark.py",
+        "talnir_reasoning": "talnir.py",
         "capabilities": "dex_capabilities.py",
         "participant_and_experience": "participant.py",
         "tri_sigil_observer": "dex_observer.py",
@@ -106,6 +107,7 @@ def inspect_architecture(query: str = "") -> Dict[str, Any]:
         ],
         "flow": [
             "evoke/context retrieval",
+            "Talnir structured intent and branch decomposition",
             "local spark inference",
             "allowlisted capability call",
             "actual observation returned to cognition",
