@@ -62,6 +62,26 @@ def _select_target(state):
     """Select existing cognitive work without asking the LLM to choose it."""
     now = datetime.now(timezone.utc)
 
+    # Observer evidence is a first-class ambient cognition target.
+    pending_observations = [
+        item for item in state.get("pending_cognitive_observations", [])
+        if isinstance(item, dict) and item.get("status", "pending") == "pending"
+    ]
+    if pending_observations:
+        item = pending_observations[0]
+        return {
+            "kind": "tri_sigil_observation",
+            "id": item.get("observation_id"),
+            "text": json.dumps({
+                "observation_id": item.get("observation_id"),
+                "experience_id": item.get("experience_id"),
+                "sigil_ids": item.get("sigil_ids", []),
+                "sigil_memory_active": item.get("sigil_memory_active", False),
+                "lineage_hash": item.get("lineage_hash"),
+                "stages": item.get("stages", {}),
+            }, ensure_ascii=False),
+        }
+
     # Existing persistent thoughts are revisitable work, but not every tick.
     thoughts = [
         t for t in state.get("persistent_thoughts", [])
