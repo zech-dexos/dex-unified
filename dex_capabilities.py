@@ -6,6 +6,8 @@ capabilities. Read-only introspection is exposed first; arbitrary shell
 execution is intentionally not exposed.
 """
 import json
+import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict
 
@@ -246,6 +248,48 @@ def evoke(resource: str, **kwargs) -> Dict[str, Any]:
     return fn()
 
 
+
+def request_reflection(focus: str, reason: str = "") -> Dict[str, Any]:
+    """Queue a bounded request for another architecture-owned reflection pass.
+
+    This signals the ambient cognition scheduler; it does not invoke the spark
+    inline, mutate goals, or bypass the normal Talnir/governance flow.
+    """
+    focus = str(focus or "").strip()
+    reason = str(reason or "").strip()
+    if not focus:
+        return {"accepted": False, "error": "focus_required"}
+    if len(focus) > 500 or len(reason) > 500:
+        return {"accepted": False, "error": "focus_and_reason_must_be_at_most_500_characters"}
+
+    state = _state()
+    pending = [
+        item for item in state.get("pending_reflection_requests", [])
+        if isinstance(item, dict) and item.get("status", "pending") == "pending"
+    ]
+    if len(pending) >= 10:
+        return {"accepted": False, "error": "reflection_queue_full", "pending_count": len(pending)}
+
+    request = {
+        "request_id": str(uuid.uuid4()),
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "focus": focus,
+        "reason": reason,
+        "status": "pending",
+        "source": "dex_experience_capability",
+    }
+    pending.append(request)
+    from self_state import update_self_state
+    update_self_state({"pending_reflection_requests": pending[-10:]})
+    return {
+        "accepted": True,
+        "request_id": request["request_id"],
+        "status": "pending",
+        "next_step": "ambient_architecture_pass",
+        "focus": focus,
+    }
+
+
 def reason_with_talnir(prompt: str) -> Dict[str, Any]:
     """Run Talnir structured translation and branch decomposition on bounded text."""
     text = str(prompt or "").strip()
@@ -316,6 +360,7 @@ CAPABILITY_CATALOG = [
     ("inspect_observations", "Inspect participant, tri-sigil, and runtime observations.", {}),
     ("inspect_architecture", "Inspect the module map; optional query searches source.", {"query": "optional string, max 200"}),
     ("reason_with_talnir", "Run Talnir structured intent and reasoning-branch analysis.", {"prompt": "string, max 2000"}),
+    ("request_reflection", "Queue a durable request for another ambient architecture reflection pass; does not directly change goals.", {"focus": "string, max 500", "reason": "optional string, max 500"}),
     ("listen", "Notice current runtime signals without taking action.", {}),
     ("evoke", "Deliberately retrieve a named resource.", {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}),
     ("search_architecture", "Search source text without executing it.", {"query": "string, max 200"}),
@@ -330,6 +375,7 @@ CAPABILITY_FUNCTIONS = {
     "inspect_observations": inspect_observations,
     "inspect_architecture": inspect_architecture,
     "reason_with_talnir": reason_with_talnir,
+    "request_reflection": request_reflection,
     "inspect_workspace": inspect_workspace,
     "inspect_goals": inspect_goals,
     "inspect_open_loops": inspect_open_loops,
