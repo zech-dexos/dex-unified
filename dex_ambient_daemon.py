@@ -281,9 +281,22 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                 + json.dumps(pending_reaches, ensure_ascii=False)
             )
 
+        # Talnir supplies a deterministic structured reading before ambient reasoning.
+        talnir_context = ""
+        try:
+            from dex_capabilities import reason_with_talnir
+            talnir_result = reason_with_talnir(str(target.get("text", ""))[:2000])
+            talnir_context = (
+                "\\n\\nTALNIR STRUCTURED REASONING CONTEXT:\\n"
+                + json.dumps(talnir_result, ensure_ascii=False, default=str)[:4000]
+            )
+        except Exception as e:
+            print(f"[Ambient Daemon] Talnir context unavailable: {e}")
+
         target_prompt = (
             f"{AMBIENT_PROMPT}\n\n"
             f"SELECTED COGNITIVE TARGET ({target['kind']}):\n{target['text']}\n\n"
+            + talnir_context
             + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
             + completed_ctx
             + "\n\nReturn one small development of that target. "
