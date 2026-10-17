@@ -44,6 +44,22 @@ def inspect_state() -> Dict[str, Any]:
     }
 
 
+def inspect_identity() -> Dict[str, Any]:
+    """Inspect persisted identity without modifying it."""
+    if not IDENTITY_PATH.exists():
+        return {"available": False, "source": str(IDENTITY_PATH)}
+    try:
+        return {"available": True, "identity": json.loads(IDENTITY_PATH.read_text(encoding="utf-8")), "source": str(IDENTITY_PATH)}
+    except Exception as exc:
+        return {"available": False, "error": str(exc), "source": str(IDENTITY_PATH)}
+
+
+def inspect_lineage(limit: int = 10) -> Dict[str, Any]:
+    """Expose lineage integrity and a bounded recent ledger window."""
+    from lineage import get_recent, verify_chain
+    return {"integrity": verify_chain(), "recent_entries": get_recent(max(1, min(int(limit), 20)))}
+
+
 def inspect_workspace() -> Dict[str, Any]:
     return _state().get("active_mental_workspace_state", {})
 
@@ -183,6 +199,8 @@ def search_architecture(query: str) -> Dict[str, Any]:
 
 CAPABILITY_FUNCTIONS = {
     "inspect_state": inspect_state,
+    "inspect_identity": inspect_identity,
+    "inspect_lineage": inspect_lineage,
     "inspect_workspace": inspect_workspace,
     "inspect_goals": inspect_goals,
     "inspect_open_loops": inspect_open_loops,

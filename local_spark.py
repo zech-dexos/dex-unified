@@ -24,6 +24,8 @@ If you need a runtime capability, return ONLY one JSON object in this form:
 
 Allowed capabilities and argument shapes:
 - inspect_state: {}
+- inspect_identity: {}
+- inspect_lineage: {"limit": integer 1..20}
 - inspect_workspace: {}
 - inspect_goals: {}
 - inspect_open_loops: {}
@@ -44,7 +46,7 @@ If no capability is needed, answer normally in plain text.
 
 
 _NO_ARGS = {
-    "inspect_state", "inspect_workspace", "inspect_goals", "inspect_open_loops",
+    "inspect_state", "inspect_identity", "inspect_workspace", "inspect_goals", "inspect_open_loops",
     "inspect_thoughts", "inspect_participant", "listen",
 }
 _ALLOWED = _NO_ARGS | {
@@ -84,6 +86,11 @@ def _parse_tool_request(text):
         if name in _NO_ARGS:
             args = {}
         elif name == "inspect_experiences":
+            limit = args.get("limit", 10)
+            if not isinstance(limit, int) or isinstance(limit, bool):
+                continue
+            args = {"limit": max(1, min(20, limit))}
+        elif name == "inspect_lineage":
             limit = args.get("limit", 10)
             if not isinstance(limit, int) or isinstance(limit, bool):
                 continue

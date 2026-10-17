@@ -188,6 +188,7 @@ def record_interaction_experience(
     message: str,
     reply: str = "",
     user_id: str = "default",
+    observer_trace: Optional[dict] = None,
 ) -> ExperiencePacket:
     """Turn a completed conversation turn into Dex's durable lived experience."""
     interlocutor = dict(snapshot.current_interlocutor)
@@ -219,7 +220,7 @@ def record_interaction_experience(
         observations=[
             f"Participant: {interlocutor.get('name') or user_id}",
             f"Message: {message[:500]}",
-        ],
+        ] + (["Tri-sigil observation: " + json.dumps(observer_trace, ensure_ascii=False, default=str)[:4000]] if observer_trace else []),
         reflection=(
             "I responded and carry this interaction forward as part of my continuing experience."
             if reply and reply.strip()
@@ -229,6 +230,9 @@ def record_interaction_experience(
         knowledge_delta={
             "conversation_experience_recorded": True,
             "participant_id": user_id,
+            "tri_sigil_observation_recorded": bool(observer_trace),
+            "observer_observation_id": (observer_trace or {}).get("observation_id"),
+            "sigil_ids": list((observer_trace or {}).get("sigil_ids", [])),
         },
         state_transition={
             "from_attention": snapshot.current_attention,
@@ -244,6 +248,14 @@ def record_interaction_experience(
     packet.save()
 
     snapshot.current_interlocutor = interlocutor
+    if observer_trace:
+        snapshot.runtime_context = dict(snapshot.runtime_context or {})
+        snapshot.runtime_context["last_tri_sigil_observation"] = {
+            "observation_id": observer_trace.get("observation_id"),
+            "stages": observer_trace.get("stages", {}),
+            "sigil_ids": list(observer_trace.get("sigil_ids", [])),
+            "experience_id": packet.experience_id,
+        }
     snapshot.experiential_continuity = {
         "last_experience_id": packet.experience_id,
         "last_experience": packet.experience,
