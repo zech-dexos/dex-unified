@@ -103,4 +103,3 @@ async def persist_observation(trace, user_id="default"):
     })
     return {"entry_hash": entry.get("entry_hash"), "observation_id": trace.get("observation_id"),
             "queued_for_cognition": True}
-}
