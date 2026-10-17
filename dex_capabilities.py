@@ -60,6 +60,66 @@ def inspect_lineage(limit: int = 10) -> Dict[str, Any]:
     return {"integrity": verify_chain(), "recent_entries": get_recent(max(1, min(int(limit), 20)))}
 
 
+def inspect_tools() -> Dict[str, Any]:
+    """Describe the actual callable surface and its argument expectations."""
+    return {
+        "available": True,
+        "execution_boundary": "Only names in CAPABILITY_FUNCTIONS can execute; no arbitrary shell or network capability.",
+        "tools": [
+            {"name": name, "description": description, "arguments": arguments}
+            for name, description, arguments in CAPABILITY_CATALOG
+        ],
+    }
+
+
+def inspect_observations() -> Dict[str, Any]:
+    """Inspect recent participant observations and the last tri-sigil observer record."""
+    from participant import ParticipantSnapshot
+    snapshot = ParticipantSnapshot.load()
+    state = _state()
+    return {
+        "participant_observations": list(getattr(snapshot, "recent_observations", []) or [])[-10:],
+        "last_tri_sigil_observation": (getattr(snapshot, "runtime_context", {}) or {}).get("last_tri_sigil_observation"),
+        "last_continuity_event": state.get("last_continuity_event"),
+        "last_autobiographical_event": state.get("last_autobiographical_event"),
+        "pending_signals": list(state.get("pending_signals", []) or [])[-10:],
+    }
+
+
+def inspect_architecture(query: str = "") -> Dict[str, Any]:
+    """Return a grounded module map and optionally search source for a concept."""
+    root = Path(__file__).resolve().parent
+    modules = {
+        "cognition_entry": "api.py",
+        "spark_bridge": "local_spark.py",
+        "capabilities": "dex_capabilities.py",
+        "participant_and_experience": "participant.py",
+        "tri_sigil_observer": "dex_observer.py",
+        "continuity_events": "dex_continuity.py",
+        "cryptographic_lineage": "lineage.py",
+        "asynchronous_spark_limb": "spark_reach.py",
+    }
+    result = {
+        "modules": [
+            {"role": role, "path": path, "present": (root / path).is_file()}
+            for role, path in modules.items()
+        ],
+        "flow": [
+            "evoke/context retrieval",
+            "local spark inference",
+            "allowlisted capability call",
+            "actual observation returned to cognition",
+            "participant ExperiencePacket",
+            "tri-sigil observer and lineage event",
+            "continuity event processing",
+        ],
+        "query": str(query or "")[:200],
+    }
+    if str(query or "").strip():
+        result["source_matches"] = search_architecture(query)
+    return result
+
+
 def inspect_workspace() -> Dict[str, Any]:
     return _state().get("active_mental_workspace_state", {})
 
@@ -123,13 +183,27 @@ def recall_experience(query: str, limit: int = 5) -> Dict[str, Any]:
 
 
 def listen() -> Dict[str, Any]:
-    """Read the latest durable signals currently available to Dex."""
+    """Notice durable runtime signals without executing an action."""
     state = _state()
     return {
         "last_ambient_pulse": state.get("last_ambient_pulse"),
         "last_continuity_event": state.get("last_continuity_event"),
         "last_autobiographical_event": state.get("last_autobiographical_event"),
+        "pending_signals": list(state.get("pending_signals", []) or [])[-10:],
+        "pending_spark_reaches": list(state.get("pending_spark_reaches", []) or [])[-10:],
+        "last_spark_reach": state.get("last_spark_reach"),
         "workspace": state.get("active_mental_workspace_state", {}),
+    }
+
+
+def _inspect_spark_reaches() -> Dict[str, Any]:
+    """Retrieve bounded completed/pending SparkReach results for deliberate review."""
+    from spark_reach import pending_spark_reaches
+    state = _state()
+    return {
+        "pending_spark_reaches": pending_spark_reaches(limit=5),
+        "last_spark_reach": state.get("last_spark_reach"),
+        "active_spark_reaches": list(state.get("active_spark_reaches", []) or [])[-5:],
     }
 
 
@@ -144,6 +218,10 @@ def evoke(resource: str, **kwargs) -> Dict[str, Any]:
         "participant": inspect_participant,
         "conversation": inspect_conversation,
         "signals": listen,
+        "tools": inspect_tools,
+        "observations": inspect_observations,
+        "architecture": lambda: inspect_architecture(),
+        "spark_reaches": _inspect_spark_reaches,
     }
     if resource == "spark":
         from spark_reach import submit_spark_reach
@@ -197,10 +275,34 @@ def search_architecture(query: str) -> Dict[str, Any]:
     return {"query": query, "matches": matches}
 
 
+CAPABILITY_CATALOG = [
+    ("inspect_state", "Inspect summarized runtime state.", {}),
+    ("inspect_identity", "Read persisted identity without changing it.", {}),
+    ("inspect_lineage", "Inspect recent lineage entries and chain integrity.", {"limit": "integer 1..20"}),
+    ("inspect_workspace", "Inspect active mental workspace.", {}),
+    ("inspect_goals", "Inspect persisted active goals.", {}),
+    ("inspect_open_loops", "Inspect open loops.", {}),
+    ("inspect_thoughts", "Inspect recent persistent thoughts.", {}),
+    ("inspect_experiences", "Inspect durable experience packets and continuity evidence.", {"limit": "integer 1..20"}),
+    ("inspect_participant", "Inspect participant snapshot and runtime context.", {}),
+    ("inspect_conversation", "Inspect a user's conversation state.", {"user_id": "string, max 128"}),
+    ("recall_experience", "Recall matching experiences into the active workspace.", {"query": "string, max 500", "limit": "integer 1..10"}),
+    ("inspect_tools", "Inspect this allowlisted tool catalog and usage boundary.", {}),
+    ("inspect_observations", "Inspect participant, tri-sigil, and runtime observations.", {}),
+    ("inspect_architecture", "Inspect the module map; optional query searches source.", {"query": "optional string, max 200"}),
+    ("listen", "Notice current runtime signals without taking action.", {}),
+    ("evoke", "Deliberately retrieve a named resource.", {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}),
+    ("search_architecture", "Search source text without executing it.", {"query": "string, max 200"}),
+]
+
+
 CAPABILITY_FUNCTIONS = {
     "inspect_state": inspect_state,
     "inspect_identity": inspect_identity,
     "inspect_lineage": inspect_lineage,
+    "inspect_tools": inspect_tools,
+    "inspect_observations": inspect_observations,
+    "inspect_architecture": inspect_architecture,
     "inspect_workspace": inspect_workspace,
     "inspect_goals": inspect_goals,
     "inspect_open_loops": inspect_open_loops,
