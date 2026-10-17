@@ -289,28 +289,35 @@ DEFAULT_MODEL = "local:llama.cpp"
 
 
 async def call_llm(client, messages, max_tokens=1000):
-    """Generate only through the bundled local GGUF using llama-cpp-python."""
+    """Run Dex chat through the local Heretic spark and DexOS capability bridge."""
     try:
-        from local_llm import local_chat_generate, CHAT_MODEL_PATH
-        answer = await asyncio.get_running_loop().run_in_executor(
-            None, local_chat_generate, messages, min(max_tokens, 256)
+        from local_llm import CHAT_MODEL_PATH
+        from local_spark import local_spark_generate
+        result = await asyncio.get_running_loop().run_in_executor(
+            None, local_spark_generate, messages, min(max_tokens, 256)
         )
-        if not answer or not answer.strip():
-            raise RuntimeError("local GGUF returned empty text")
-        print(f"[call_llm] backend=llama.cpp model={os.path.basename(CHAT_MODEL_PATH)}")
+        answer = str(result.get("reply", "")).strip()
+        if not answer:
+            raise RuntimeError("local Heretic spark returned empty text")
+        print(
+            f"[call_llm] backend=llama.cpp model={os.path.basename(CHAT_MODEL_PATH)} "
+            f"capabilities={len(result.get('tool_calls', []))}"
+        )
         return {
-            "reply": answer.strip(),
+            "reply": answer,
             "model": "local:" + os.path.basename(CHAT_MODEL_PATH),
             "provider": "local",
-            "capability_execution_available": False,
+            "capability_execution_available": True,
+            "tool_calls": result.get("tool_calls", []),
         }
     except Exception as exc:
-        print(f"[call_llm] local llama.cpp inference failed: {type(exc).__name__}: {exc}")
+        print(f"[call_llm] local spark inference failed: {type(exc).__name__}: {exc}")
         return {
-            "reply": "[local inference failed; no hosted fallback is configured]",
+            "reply": "[local inference failed; no hosted fallback was attempted]",
             "model": "none",
             "provider": "local",
             "capability_execution_available": False,
+            "tool_calls": [],
         }
 
 class ChatRequest(BaseModel):
@@ -847,6 +854,12 @@ the exchange as a newly started request/response transaction.
         "route_reason": result["route_reason"],
         "sigil_ids":    result["sigil_ids"],
         "model":        used_model,
+        "provider":      result_llm.get("provider", "local"),
+        "capability_execution_available": result_llm.get("capability_execution_available", False),
+        "capability_calls": [
+            item.get("name") for item in result_llm.get("tool_calls", [])
+            if isinstance(item, dict) and item.get("name")
+        ],
         "response_flag": governance_flag,
     }
 
