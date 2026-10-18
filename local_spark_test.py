@@ -105,6 +105,41 @@ class LocalSparkBridgeTests(unittest.TestCase):
         self.assertFalse(trace["sigil_memory_active"])
         self.assertEqual(trace["stages"]["emergence"]["status"], "response_observed")
 
+    def test_tool_round_limit_is_clamped(self):
+        for requested_limit in (-3, 0, 4, 99):
+            with self.subTest(requested_limit=requested_limit):
+                fake_local_llm = types.ModuleType("local_llm")
+                fake_local_llm.CHAT_MODEL_PATH = "/models/heretic.gguf"
+                fake_local_llm.local_chat_generate = Mock(
+                    return_value='{"tool_calls":[{"name":"inspect_state","arguments":{}}]}'
+                )
+                fake_capabilities = types.ModuleType("dex_capabilities")
+                fake_capabilities.execute_capability = Mock(return_value={"ok": True})
+
+                with patch.dict(sys.modules, {
+                    "local_llm": fake_local_llm,
+                    "dex_capabilities": fake_capabilities,
+                }):
+                    result = local_spark.local_spark_generate(
+                        [{"role": "system", "content": "Dex identity"},
+                         {"role": "user", "content": "Inspect state"}],
+                        max_tokens=64,
+                        max_tool_rounds=requested_limit,
+                    )
+
+                effective_limit = max(0, min(requested_limit, local_spark.MAX_TOOL_ROUNDS))
+                self.assertEqual(
+                    fake_local_llm.local_chat_generate.call_count,
+                    effective_limit + 1,
+                )
+                self.assertEqual(
+                    fake_capabilities.execute_capability.call_count,
+                    effective_limit,
+                )
+                if effective_limit == 0:
+                    self.assertEqual(result["reply"], "[DexOS capability round limit reached]")
+
+
     def test_no_capability_request_is_plain_reply(self):
         fake_local_llm = types.ModuleType("local_llm")
         fake_local_llm.CHAT_MODEL_PATH = "/models/heretic.gguf"

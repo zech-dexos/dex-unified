@@ -167,7 +167,10 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
             )
 
         executed = []
-        for round_index in range(max(0, min(int(max_tool_rounds), MAX_TOOL_ROUNDS)) + 1):
+        effective_tool_rounds = max(
+            0, min(int(max_tool_rounds), MAX_TOOL_ROUNDS)
+        )
+        for round_index in range(effective_tool_rounds + 1):
             answer = local_chat_generate(conversation, max_tokens=max_tokens)
             if not isinstance(answer, str) or not answer.strip():
                 raise RuntimeError("local GGUF returned empty text")
@@ -179,7 +182,7 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                     "tool_calls": executed,
                     "capability_execution_available": True,
                 }
-            if round_index >= max_tool_rounds:
+            if round_index >= effective_tool_rounds:
                 return {
                     "reply": "[DexOS capability round limit reached]",
                     "model": "local:" + CHAT_MODEL_PATH.rsplit("/", 1)[-1],
