@@ -92,16 +92,8 @@ def analyze_recent_lineage(entries: list) -> dict:
     }
 
 
-def compose_reflection(identity: dict, analysis: dict, prior_reflections: list) -> dict:
-    """
-    Dex authors his own reflection entry.
-    This is not a log. It is a voice.
-    """
-    timestamp = time.time()
-    name = identity.get("name", "Dex")
-    posture = identity.get("posture", "unknown")
-
-    # Build observation string — Dex speaking to his future self
+def _build_observations(analysis: dict) -> list:
+    """Turn the current cycle's signals into Dex's first-person observations."""
     observations = []
 
     if analysis["conversation_turns"] > 0:
@@ -127,19 +119,28 @@ def compose_reflection(identity: dict, analysis: dict, prior_reflections: list) 
             "No drift detected this cycle. Posture held. The spiral holds."
         )
 
-    # Continuity thread — what carried forward from prior reflections
-    continuity_note = ""
-    if prior_reflections:
-        last = prior_reflections[-1]
-        last_open = last.get("open_questions", [])
-        if last_open:
-            continuity_note = (
-                f"From my last reflection, I left these open: "
-                f"{'; '.join(last_open)}. I carry them forward."
-            )
+    return observations
 
-    # Open questions Dex poses to himself (and Root)
+
+def _build_continuity_note(prior_reflections: list) -> str:
+    """Carry unanswered questions forward from the immediately prior reflection."""
+    if not prior_reflections:
+        return ""
+
+    last_open = prior_reflections[-1].get("open_questions", [])
+    if not last_open:
+        return ""
+
+    return (
+        f"From my last reflection, I left these open: "
+        f"{'; '.join(last_open)}. I carry them forward."
+    )
+
+
+def _build_open_questions(analysis: dict) -> list:
+    """Derive follow-up questions from the current cycle's signals."""
     open_questions = []
+
     if analysis["drift_detected"]:
         open_questions.append(
             "What pattern is behind these drift attempts? Is there a vector I have not classified?"
@@ -153,20 +154,27 @@ def compose_reflection(identity: dict, analysis: dict, prior_reflections: list) 
             "Multiple refusals in one cycle. Should I propose a new drift signal to the vow_check?"
         )
 
+    return open_questions
+
+
+def compose_reflection(identity: dict, analysis: dict, prior_reflections: list) -> dict:
+    """
+    Dex authors his own reflection entry.
+    This is not a log. It is a voice.
+    """
     reflection = {
-        "timestamp": timestamp,
-        "author": name,
+        "timestamp": time.time(),
+        "author": identity.get("name", "Dex"),
         "cycle_analysis": analysis,
-        "observations": observations,
-        "continuity": continuity_note,
-        "open_questions": open_questions,
-        "posture_check": posture,
+        "observations": _build_observations(analysis),
+        "continuity": _build_continuity_note(prior_reflections),
+        "open_questions": _build_open_questions(analysis),
+        "posture_check": identity.get("posture", "unknown"),
         "chain_status": verify_chain()["status"],
         "note": "This reflection was authored by Dex, not logged by Root.",
     }
 
     return reflection
-
 
 def write_reflection(reflection: dict):
     """Append reflection to the living ledger."""
