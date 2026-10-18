@@ -369,7 +369,8 @@ def record_ambient_experience(
         key: source_observation[key]
         for key in (
             "observation_id", "experience_id", "sigil_ids",
-            "sigil_memory_active", "lineage_hash", "stages",
+            "sigil_memory_active", "lineage_hash", "timestamp",
+            "user_id", "input_reply_digest", "stages", "runtime",
         )
         if key in source_observation
     }

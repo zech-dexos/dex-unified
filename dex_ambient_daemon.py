@@ -97,7 +97,11 @@ def _select_target(state):
                 "sigil_ids": item.get("sigil_ids", []),
                 "sigil_memory_active": item.get("sigil_memory_active", False),
                 "lineage_hash": item.get("lineage_hash"),
+                "timestamp": item.get("timestamp"),
+                "user_id": item.get("user_id"),
+                "input_reply_digest": item.get("input_reply_digest"),
                 "stages": item.get("stages", {}),
+                "runtime": item.get("runtime", {}),
             }, ensure_ascii=False),
         }
 

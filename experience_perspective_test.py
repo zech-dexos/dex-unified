@@ -51,7 +51,14 @@ class ExperiencePerspectiveTests(unittest.TestCase):
                 "sigil_ids": ["sigil-2"],
                 "sigil_memory_active": True,
                 "lineage_hash": "hash-2",
+                "timestamp": "2026-10-18T00:00:00Z",
+                "user_id": "root",
+                "input_reply_digest": "digest-2",
                 "stages": {"continuity": {"status": "observed"}},
+                "runtime": {
+                    "intent": "reason",
+                    "talnir_branches": [{"id": "branch-1", "weight": 0.8}],
+                },
             }
             with patch("participant.EXPERIENCES_PATH", root / "experiences.jsonl"), \
                  patch("participant.PARTICIPANT_PATH", root / "participant.json"):
@@ -66,6 +73,12 @@ class ExperiencePerspectiveTests(unittest.TestCase):
 
             self.assertEqual(packet.observer_perspective["observation_id"], "obs-2")
             self.assertEqual(packet.observer_perspective["sigil_ids"], ["sigil-2"])
+            self.assertEqual(packet.observer_perspective["runtime"]["intent"], "reason")
+            self.assertEqual(
+                packet.observer_perspective["runtime"]["talnir_branches"][0]["id"],
+                "branch-1",
+            )
+            self.assertEqual(packet.observer_perspective["input_reply_digest"], "digest-2")
             self.assertEqual(
                 packet.runtime_perspective["spark_judgment"]["judgment"], "accepted"
             )
