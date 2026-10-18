@@ -68,6 +68,7 @@ async def persist_observation(trace, user_id="default"):
             "sigil_ids": trace.get("sigil_ids", []),
             "sigil_memory_active": bool(trace.get("sigil_memory_active")),
             "stages": stages,
+            "runtime": trace.get("runtime", {}),
             "input_reply_digest": trace.get("input_reply_digest"),
         },
     )
@@ -85,6 +86,7 @@ async def persist_observation(trace, user_id="default"):
         "sigil_ids": list(trace.get("sigil_ids", []))[:32],
         "sigil_memory_active": bool(trace.get("sigil_memory_active")),
         "stages": stages,
+        "runtime": trace.get("runtime", {}),
         "input_reply_digest": trace.get("input_reply_digest"),
         "status": "pending",
     }
@@ -100,6 +102,7 @@ async def persist_observation(trace, user_id="default"):
         "observation_id": trace.get("observation_id"),
         "experience_id": trace.get("experience_id"),
         "lineage_hash": entry.get("entry_hash"), "stages": stages,
+        "runtime": trace.get("runtime", {}),
     })
     return {"entry_hash": entry.get("entry_hash"), "observation_id": trace.get("observation_id"),
             "queued_for_cognition": True}

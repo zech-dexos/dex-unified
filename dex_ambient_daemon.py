@@ -467,6 +467,11 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                         target=target,
                         thought=thought_text,
                         salience=salience,
+                        runtime_trace={
+                            "lifecycle_mode": lifecycle_mode,
+                            "spark_reach": spark_result,
+                            "spark_judgment": spark_judgment,
+                        },
                     )
                     if target.get("kind") == "conversation":
                         conversation = load_conversation("default")

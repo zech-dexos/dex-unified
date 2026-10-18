@@ -753,6 +753,47 @@ If I do respond, remain inside the ongoing experience rather than treating
 the exchange as a newly started request/response transaction.
 """
 
+    # Pass Talnir's actual branch priorities into the active spark prompt.
+    # These are routing guidance, not claims that a branch was executed.
+    try:
+        branch_labels = {
+            "direct": "answer directly",
+            "structured": "organize the reasoning clearly",
+            "exploratory": "consider useful alternatives",
+            "debug_first": "diagnose before proposing changes",
+            "planning": "sequence the work into a practical plan",
+            "tool_execution": "prioritize the requested tool or execution workflow",
+        }
+        branches = result.get("branches", [])
+        ranked_branches = sorted(
+            (
+                b for b in branches
+                if isinstance(b, dict)
+                and isinstance(b.get("id"), str)
+                and isinstance(b.get("weight"), (int, float))
+            ),
+            key=lambda b: float(b["weight"]),
+            reverse=True,
+        )[:3]
+        if ranked_branches:
+            routing_lines = [
+                f"- {b['id']} (priority {max(0.0, min(1.0, float(b['weight']))):.3f}): "
+                f"{branch_labels.get(b['id'], 'use this reasoning approach when relevant')}"
+                for b in ranked_branches
+            ]
+            system_prompt += (
+                "\n\nTALNIR COGNITIVE ROUTING\n"
+                "Use these internal priorities to guide how you approach the current turn. "
+                "Higher values indicate stronger priorities; combine compatible approaches "
+                "when useful. These priorities do not override Dex's constitution, safety, "
+                "the user's actual request, or tool availability. Do not claim a tool ran "
+                "or an action occurred unless it actually did.\n"
+                + "\n".join(routing_lines)
+                + "\n"
+            )
+    except Exception as exc:
+        print(f"[talnir] prompt routing guidance skipped: {exc}")
+
     # Dex constitutional identity is always the root system layer.
     # Request-level system instructions may extend Dex, but never replace him.
     if req.system:
@@ -830,6 +871,24 @@ the exchange as a newly started request/response transaction.
             sigil_active=bool(SIGIL_ACTIVE and _memory),
             response_flag=governance_flag,
         )
+        observer_trace["runtime"] = {
+            "intent": result.get("intent"),
+            "domain": result.get("domain"),
+            "route_reason": result.get("route_reason"),
+            "model": used_model,
+            "provider": result_llm.get("provider", "local"),
+            "talnir_branches": (
+                result.get("branches", [])[:8]
+                if isinstance(result.get("branches"), list) else []
+            ),
+            "sigil_ids": list(result.get("sigil_ids", []))[:32],
+            "sigil_memory_active": bool(SIGIL_ACTIVE and _memory),
+            "capability_calls": [
+                item.get("name") for item in result_llm.get("tool_calls", [])
+                if isinstance(item, dict) and item.get("name")
+            ][:12],
+            "response_flag": governance_flag,
+        }
     except Exception as e:
         print(f"[observer] tri-sigil observation failed: {e}")
 
@@ -1093,51 +1152,26 @@ def apply_memory_line(memory: dict, memory_line: str, user_id: str):
 
 
 async def extract_memory_facts(client, user_said: str, kalimi_said: str, user_id: str) -> str:
-    """
-    Dedicated memory-extraction pass. Runs every turn independent of Kalimi's
-    conversational reply, so short/warm replies never cost us a fact worth remembering.
-    Uses Groq (same as Talnir) since it is already proven fast and cheap in this pipeline.
-    Returns a key=value,key=value line, or "" if nothing worth remembering.
-    """
-    if not GROQ_KEY:
-        return ""
-    prompt = f"""You are a memory extractor for an elder companion AI. Your ONLY job is to notice facts worth remembering long-term from what the user just said.
-
-Extract things like: medications and doses, doctor appointments or health events, pets (names, status like lost/found/sick), family members and relationship details, hobbies, fears or worries, emotional state, favorites, anything a real companion would remember days later.
-
-Do NOT extract small talk, greetings, or anything with no lasting relevance.
-
-Output format: comma-separated key=value pairs, using these keys when they fit:
-note=..., medication=..., event=..., pet=..., fear=..., hobby=..., emotion=..., favorite_X=..., daughter_name=... (or son/wife/husband/etc), otherwise a short custom key=value.
-
-If NOTHING is worth remembering from this message, output exactly: NONE
-
-Examples:
-User said: "I lost my cat Whiskers yesterday, I'm so worried"
-Output: pet=Whiskers is missing since yesterday,emotion=worried
-
-User said: "I take my blood pressure pill every morning at 8"
-Output: medication=blood pressure pill at 8am
-
-User said: "hi there, how are you"
-Output: NONE
+    """Extract durable memory facts using the small local model, without hosted APIs."""
+    prompt = f"""You are a memory extractor. Extract only durable facts from the latest exchange.
+Return comma-separated key=value pairs using keys such as note, medication, event,
+pet, fear, hobby, emotion, favorite_X, daughter_name, or another concise key.
+If there is nothing worth remembering, output exactly NONE.
 
 User said: "{user_said}"
 Kalimi replied: "{kalimi_said}"
 Output:"""
     try:
-        res = await client.post(
-            GROQ_URL,
-            headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 100}
+        from local_llm import local_slm_generate
+        text = await asyncio.get_running_loop().run_in_executor(
+            None, local_slm_generate, prompt, 100
         )
-        data = res.json()
-        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        text = text.strip()
+        text = str(text or "").strip()
         if not text or text.upper().startswith("NONE"):
             return ""
         return text
-    except Exception:
+    except Exception as exc:
+        print(f"[local-memory-extraction] unavailable: {type(exc).__name__}: {exc}")
         return ""
 
 def memory_to_prompt(memory: dict) -> str:
@@ -1234,66 +1268,45 @@ class HavenResponseSchema(BaseModel):
 
 
 async def talnir_classify(client, message: str, user_id: str = "default") -> dict:
-    """
-    Talnir: Fast intent classifier.
-    Translates messy human speech into clean structured intent.
-    Returns: {intent: DEVICE_ACTION|CONVERSATION, action_type, target}
-    """
-    if not GROQ_KEY:
-        return {"intent": "CONVERSATION"}
+    """Classify phone-action intent locally; fail closed to ordinary conversation."""
+    import json as _json
 
-    # Load this user's installed apps
     user_apps = load_user_apps(user_id)
-    app_list_str = ""
-    if user_apps:
-        app_list_str = "\nINSTALLED APPS ON THIS DEVICE:\n"
-        for app in user_apps[:50]:  # limit to 50
-            app_list_str += f"- {app.get('label','')}: {app.get('package','')}\n"
+    app_list = "\\n".join(
+        f"- {app.get('label', '')}: {app.get('package', '')}"
+        for app in user_apps[:50]
+    ) if user_apps else "(no installed-app list available)"
 
-    prompt = f"""You are Talnir, an intent classifier. Your ONLY job is to classify what the user wants.
-
-Output ONLY valid JSON. Nothing else. No explanation.
-
-If the user wants to DO something on their phone (open app, call someone, send text, download something, change settings):
-{{"intent": "DEVICE_ACTION", "action_type": "OPEN_APP|SEARCH_PLAY|CALL|SMS|OPEN_FILES|OPEN_SETTINGS", "target": "what they want"}}
-
-If the user is talking, asking questions, sharing feelings, or having a conversation:
-{{"intent": "CONVERSATION"}}
-
-Examples:
-"open google play" -> {{"intent": "DEVICE_ACTION", "action_type": "OPEN_APP", "target": "google play"}}
-"can you get me solitaire" -> {{"intent": "DEVICE_ACTION", "action_type": "SEARCH_PLAY", "target": "solitaire"}}
-"call my daughter" -> {{"intent": "DEVICE_ACTION", "action_type": "CALL", "target": "daughter"}}
-"call 555-1234" -> {{"intent": "DEVICE_ACTION", "action_type": "CALL", "target": "555-1234"}}
-"who should i call" -> {{"intent": "CONVERSATION"}}
-"should i call my mom or dad" -> {{"intent": "CONVERSATION"}}
-"i want to talk about calling someone" -> {{"intent": "CONVERSATION"}}
-"how are you today" -> {{"intent": "CONVERSATION"}}
-"i feel lonely" -> {{"intent": "CONVERSATION"}}
-"what can you do with my phone" -> {{"intent": "CONVERSATION"}}
-"tell me about my phone" -> {{"intent": "CONVERSATION"}}
-"can you help me with my phone" -> {{"intent": "CONVERSATION"}}
-"how do i use my phone" -> {{"intent": "CONVERSATION"}}
-"who is the president" -> {{"intent": "CONVERSATION"}}
-"i want to talk about my phone" -> {{"intent": "CONVERSATION"}}
-"open my downloads" -> {{"intent": "DEVICE_ACTION", "action_type": "OPEN_FILES", "target": "downloads"}}
-
-{app_list_str}
-User said: "{message}"
+    prompt = f"""You are Talnir, a phone-action intent classifier.
+Return ONLY one JSON object.
+For a clear request to perform a phone action now, use:
+{{"intent":"DEVICE_ACTION","action_type":"OPEN_APP|SEARCH_PLAY|CALL|SMS|OPEN_FILES|OPEN_SETTINGS","target":"..."}}
+For ordinary conversation, questions, hypotheticals, or ambiguity, use:
+{{"intent":"CONVERSATION"}}
+Installed apps:
+{app_list}
+User said: {message}
 JSON:"""
 
     try:
-        res = await client.post(
-            GROQ_URL,
-            headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 60}
+        from local_llm import local_slm_generate
+        raw = await asyncio.get_running_loop().run_in_executor(
+            None, local_slm_generate, prompt, 100
         )
-        data = res.json()
-        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        text = text.strip()
-        import json as _json
-        return _json.loads(text)
-    except Exception:
+        raw = str(raw or "").strip()
+        if raw.startswith("```"):
+            raw = raw.split("\\n", 1)[-1].rsplit("```", 1)[0].strip()
+        result = _json.loads(raw)
+        if not isinstance(result, dict):
+            return {"intent": "CONVERSATION"}
+        if result.get("intent") != "DEVICE_ACTION":
+            return {"intent": "CONVERSATION"}
+        allowed = {"OPEN_APP", "SEARCH_PLAY", "CALL", "SMS", "OPEN_FILES", "OPEN_SETTINGS"}
+        if result.get("action_type") not in allowed or not isinstance(result.get("target"), str):
+            return {"intent": "CONVERSATION"}
+        return result
+    except Exception as exc:
+        print(f"[local-talnir] classification unavailable: {type(exc).__name__}: {exc}")
         return {"intent": "CONVERSATION"}
 
 @app.post("/haven_api")
@@ -1305,9 +1318,6 @@ async def haven_api(req: HavenRequest):
         return {"response": "I am right here with you.", "error": str(e), "trace": traceback.format_exc()}
 
 async def _haven_api_inner(req: HavenRequest):
-    if not GEMINI_KEY and not OPENROUTER_KEY:
-        return {"response": "I'm having trouble connecting right now."}
-
     memory = load_memory(req.user_id)
     memory_prompt = memory_to_prompt(memory)
     # If we know this person, tell Kalimi to greet them like she remembers them
