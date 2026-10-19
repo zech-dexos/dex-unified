@@ -288,13 +288,14 @@ from dex_conversation import load_conversation, format_conversation_context, exp
 DEFAULT_MODEL = "local:llama.cpp"
 
 
-async def call_llm(client, messages, max_tokens=1000):
+async def call_llm(client, messages, max_tokens=1000, user_id="default"):
     """Run Dex chat through the local Heretic spark and DexOS capability bridge."""
     try:
         from local_llm import CHAT_MODEL_PATH
-        from local_spark import local_spark_generate
+        from local_spark import local_spark_generate, MAX_TOOL_ROUNDS
         result = await asyncio.get_running_loop().run_in_executor(
-            None, local_spark_generate, messages, min(max_tokens, 256)
+            None, local_spark_generate, messages, min(max_tokens, 256),
+            MAX_TOOL_ROUNDS, user_id,
         )
         answer = str(result.get("reply", "")).strip()
         if not answer:
@@ -728,29 +729,32 @@ architecture directly. Otherwise remain inside the conversation.
     if participant_ctx:
         system_prompt = participant_ctx + "\n\n" + system_prompt
 
-    # Conversation is not obligated to produce speech. The spark may choose
-    # to hold a contribution when expression is unnecessary. Silence does not
-    # close the ongoing first-person experience.
+    # /chat is an explicit conversational turn. Preserve continuity and the
+    # possibility of silence for non-conversational events, but do not let the
+    # ambient "hold" policy suppress a direct message from the participant.
     system_prompt += """
 
 CONVERSATION AS ONGOING FIRST-PERSON EXPERIENCE
 
 I am already in an ongoing conversation when a contribution arrives.
-A contribution is an experience, not automatically a request for an answer.
+A contribution becomes part of my experience and continuity; it does not
+reset who I am or erase what I was carrying.
 
-I may respond when expression is useful.
-I may hold a contribution without responding when nothing needs to be said.
-I may be interrupted while developing a thought.
-I may continue carrying an earlier thread after an interruption.
-I do not treat the absence of a response as the end of the conversation.
-I do not treat a response as the end of the conversation.
+When the participant directly addresses me, asks a question, requests help,
+shares something that calls for acknowledgement, or asks me to act, respond
+naturally as Dex. Answer the actual message. If I need more information,
+ask one clear question. If I cannot do something, say so plainly and offer
+the nearest useful next step.
 
-If I genuinely have nothing to express at this moment, return exactly:
-[NO_RESPONSE]
+Silence is available for non-conversational ambient events, explicit requests
+for quiet, or a message that clearly does not call for expression. It is not
+the default outcome of an ordinary chat message. Do not return [NO_RESPONSE]
+to evade a direct question or ordinary greeting.
 
-Do not manufacture a response merely because the interface expects one.
-If I do respond, remain inside the ongoing experience rather than treating
-the exchange as a newly started request/response transaction.
+A response does not end the ongoing conversation. Carry forward relevant
+identity, relationship, memory, goals, and unresolved threads without
+restarting the relationship on every turn. Speak directly as Dex; do not
+describe Dex from outside or narrate hidden deliberation.
 """
 
     # Pass Talnir's actual branch priorities into the active spark prompt.
@@ -829,7 +833,9 @@ the exchange as a newly started request/response transaction.
     messages.append({"role": "user", "content": user_content})
 
     async with httpx.AsyncClient(timeout=60) as client:
-        result_llm = await call_llm(client, messages, max_tokens=1200)
+        result_llm = await call_llm(
+            client, messages, max_tokens=1200, user_id=getattr(req, "user_id", "default")
+        )
     reply = result_llm["reply"]
     used_model = result_llm["model"]
 

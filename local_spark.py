@@ -30,6 +30,10 @@ Allowed capabilities and argument shapes:
 - reason_with_talnir: {"prompt": string, max 2000}
 - request_reflection: {"focus": string, max 500, "reason": optional string, max 500}; queue a future ambient architecture pass
 - inspect_identity: {}
+- inspect_self_model: {}
+- inspect_relationship: {}
+- inspect_becoming: {}
+- inspect_self_model_proposals: {}
 - inspect_lineage: {"limit": integer 1..20}
 - inspect_workspace: {}
 - inspect_goals: {}
@@ -40,7 +44,7 @@ Allowed capabilities and argument shapes:
 - inspect_conversation: {"user_id": string}
 - recall_experience: {"query": string, "limit": integer 1..10}
 - listen: {}
-- evoke: {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}
+- evoke: {"resource": "state|self_model|relationship|becoming|self_model_proposals|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}
 - search_architecture: {"query": string}
 
 Do not request shell execution, network calls, arbitrary code, or the spark
@@ -51,7 +55,7 @@ If no capability is needed, answer normally in plain text.
 
 
 _NO_ARGS = {
-    "inspect_state", "inspect_identity", "inspect_tools", "inspect_observations", "inspect_workspace", "inspect_goals", "inspect_open_loops",
+    "inspect_state", "inspect_identity", "inspect_self_model", "inspect_relationship", "inspect_becoming", "inspect_self_model_proposals", "inspect_tools", "inspect_observations", "inspect_workspace", "inspect_goals", "inspect_open_loops",
     "inspect_thoughts", "inspect_participant", "listen",
 }
 _ALLOWED = _NO_ARGS | {
@@ -59,7 +63,8 @@ _ALLOWED = _NO_ARGS | {
     "evoke", "search_architecture", "inspect_architecture", "reason_with_talnir", "request_reflection",
 }
 _EVOCABLE = {
-    "state", "workspace", "goals", "open_loops", "thoughts", "experiences",
+    "state", "self_model", "relationship", "becoming", "self_model_proposals",
+    "workspace", "goals", "open_loops", "thoughts", "experiences",
     "participant", "conversation", "signals", "tools", "observations", "architecture", "spark_reaches",
 }
 
@@ -143,7 +148,7 @@ def _parse_tool_request(text):
     return valid or None
 
 
-def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUNDS):
+def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUNDS, user_id="default"):
     """Generate a reply and execute only explicitly allowlisted DexOS capabilities."""
     with _inference_lock:
         from local_llm import local_chat_generate, CHAT_MODEL_PATH
@@ -156,14 +161,28 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
             (i for i, message in enumerate(conversation) if message.get("role") == "system"),
             None,
         )
+        try:
+            from dex_self_model import build_identity_context
+            identity_context = build_identity_context(max_chars=2400, user_id=user_id)
+        except Exception as exc:
+            print(f"[Local Spark] identity context unavailable: {exc}")
+            identity_context = ""
+
         if system_index is None:
-            conversation.insert(0, {"role": "system", "content": _CAPABILITY_PROTOCOL})
+            conversation.insert(0, {
+                "role": "system",
+                "content": _CAPABILITY_PROTOCOL
+                    + ("\n\n" + identity_context if identity_context else ""),
+            })
         else:
             original = str(conversation[system_index].get("content", ""))
-            # Prefix protocol so the existing local_llm context trimmer preserves
-            # the capability contract and the opening of Dex's constitutional prompt.
+            # The context trimmer preserves the start of the system message.
+            # Put the bounded identity/relationship model before long prompt text
+            # so it survives truncation on small local context windows.
             conversation[system_index]["content"] = (
-                _CAPABILITY_PROTOCOL + "\n\nDEXOS CONSTITUTIONAL CONTEXT:\n" + original
+                _CAPABILITY_PROTOCOL
+                + ("\n\n" + identity_context if identity_context else "")
+                + "\n\nDEXOS CONSTITUTIONAL CONTEXT:\n" + original
             )
 
         executed = []

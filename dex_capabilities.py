@@ -56,6 +56,30 @@ def inspect_identity() -> Dict[str, Any]:
         return {"available": False, "error": str(exc), "source": str(IDENTITY_PATH)}
 
 
+def inspect_self_model() -> Dict[str, Any]:
+    """Inspect Dex's explicit self-model and its grounded runtime state."""
+    from dex_self_model import inspect_self_model as _inspect
+    return _inspect()
+
+
+def inspect_relationship() -> Dict[str, Any]:
+    """Inspect relational context and shared continuity, not just participant IDs."""
+    from dex_self_model import inspect_relationship as _inspect
+    return _inspect()
+
+
+def inspect_becoming() -> Dict[str, Any]:
+    """Inspect Dex's represented developmental direction and its active work."""
+    from dex_self_model import inspect_becoming as _inspect
+    return _inspect()
+
+
+def inspect_self_model_proposals() -> Dict[str, Any]:
+    """Inspect evidence-backed self-model proposals awaiting governance review."""
+    from dex_self_model import inspect_self_model_proposals as _inspect
+    return _inspect()
+
+
 def inspect_lineage(limit: int = 10) -> Dict[str, Any]:
     """Expose lineage integrity and a bounded recent ledger window."""
     from lineage import get_recent, verify_chain
@@ -216,6 +240,10 @@ def _inspect_spark_reaches() -> Dict[str, Any]:
 def evoke(resource: str, **kwargs) -> Dict[str, Any]:
     resources = {
         "state": inspect_state,
+        "self_model": inspect_self_model,
+        "relationship": inspect_relationship,
+        "becoming": inspect_becoming,
+        "self_model_proposals": inspect_self_model_proposals,
         "workspace": inspect_workspace,
         "goals": inspect_goals,
         "open_loops": inspect_open_loops,
@@ -349,6 +377,10 @@ def search_architecture(query: str) -> Dict[str, Any]:
 CAPABILITY_CATALOG = [
     ("inspect_state", "Inspect summarized runtime state.", {}),
     ("inspect_identity", "Read persisted identity without changing it.", {}),
+    ("inspect_self_model", "Inspect Dex's internal self-model and grounded current state.", {}),
+    ("inspect_relationship", "Inspect the current relationship model and shared continuity.", {}),
+    ("inspect_becoming", "Inspect Dex's intended development and goals toward it.", {}),
+    ("inspect_self_model_proposals", "Inspect proposed self-model changes awaiting governance review; does not apply them.", {}),
     ("inspect_lineage", "Inspect recent lineage entries and chain integrity.", {"limit": "integer 1..20"}),
     ("inspect_workspace", "Inspect active mental workspace.", {}),
     ("inspect_goals", "Inspect persisted active goals.", {}),
@@ -364,7 +396,7 @@ CAPABILITY_CATALOG = [
     ("reason_with_talnir", "Run Talnir structured intent and reasoning-branch analysis.", {"prompt": "string, max 2000"}),
     ("request_reflection", "Queue a durable request for another ambient architecture reflection pass; does not directly change goals.", {"focus": "string, max 500", "reason": "optional string, max 500"}),
     ("listen", "Notice current runtime signals without taking action.", {}),
-    ("evoke", "Deliberately retrieve a named resource.", {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}),
+    ("evoke", "Deliberately retrieve a named resource.", {"resource": "state|self_model|relationship|becoming|self_model_proposals|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}),
     ("search_architecture", "Search source text without executing it.", {"query": "string, max 200"}),
 ]
 
@@ -372,6 +404,10 @@ CAPABILITY_CATALOG = [
 CAPABILITY_FUNCTIONS = {
     "inspect_state": inspect_state,
     "inspect_identity": inspect_identity,
+    "inspect_self_model": inspect_self_model,
+    "inspect_relationship": inspect_relationship,
+    "inspect_becoming": inspect_becoming,
+    "inspect_self_model_proposals": inspect_self_model_proposals,
     "inspect_lineage": inspect_lineage,
     "inspect_tools": inspect_tools,
     "inspect_observations": inspect_observations,

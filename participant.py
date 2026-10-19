@@ -47,6 +47,40 @@ class ParticipantSnapshot:
                 pass
         return cls()
 
+    @classmethod
+    def for_interlocutor(cls, user_id: str = "default"):
+        """Return the shared runtime snapshot without another user's personal thread."""
+        snapshot = cls.load()
+        requested = str(user_id or "default")[:128]
+        current = dict(snapshot.current_interlocutor or {})
+        known_ids = {
+            str(current.get("participant_id", "") or ""),
+            str(current.get("user_id", "") or ""),
+        }
+        aliases = {"root", "default", ""}
+        matches = requested in known_ids or (
+            requested in aliases and bool(known_ids & aliases)
+        )
+        if matches:
+            return snapshot
+
+        runtime = dict(snapshot.runtime_context or {})
+        runtime.pop("last_tri_sigil_observation", None)
+        return cls(
+            participant_id=snapshot.participant_id,
+            timestamp=snapshot.timestamp,
+            current_attention=snapshot.current_attention,
+            current_goals=list(snapshot.current_goals or []),
+            current_environment=snapshot.current_environment,
+            active_conversations=[],
+            predicted_outcomes=list(snapshot.predicted_outcomes or []),
+            current_confidence=snapshot.current_confidence,
+            runtime_context=runtime,
+            recent_observations=[],
+            current_interlocutor={"participant_id": requested, "relationship": "unknown"},
+            experiential_continuity={},
+        )
+
 @dataclass
 class ExperiencePacket:
     experience_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
@@ -205,8 +239,17 @@ def record_interaction_experience(
     observer_trace: Optional[dict] = None,
 ) -> ExperiencePacket:
     """Turn a completed conversation turn into Dex's durable lived experience."""
-    interlocutor = dict(snapshot.current_interlocutor)
-    interlocutor.setdefault("participant_id", user_id)
+    interlocutor = dict(snapshot.current_interlocutor or {})
+    existing_id = str(interlocutor.get("participant_id", "") or "")
+    requested_id = str(user_id or "default")[:128]
+    aliases = {"root", "default", ""}
+    if existing_id and existing_id != requested_id and not (
+        existing_id in aliases and requested_id in aliases
+    ):
+        # ParticipantSnapshot is a single active snapshot; never attribute a
+        # different participant's relationship details to this interaction.
+        interlocutor = {}
+    interlocutor.setdefault("participant_id", requested_id)
 
     packet = ExperiencePacket(
         participant_id=snapshot.participant_id,
@@ -306,6 +349,11 @@ def record_interaction_experience(
         "next_cognitive_focus": packet.continuation["next_cognitive_focus"],
     }
     snapshot.save()
+    try:
+        from dex_self_model import record_experience_context
+        record_experience_context(packet, cycle_type="interaction")
+    except Exception as exc:
+        print(f"[Dex Self-Model] interaction feedback unavailable: {exc}")
     return packet
 
 def record_ambient_experience(
@@ -404,6 +452,11 @@ def record_ambient_experience(
     snapshot.current_attention = target.get("text", "")[:500] or snapshot.current_attention
     snapshot.recent_observations = [thought[:500]] + list(snapshot.recent_observations)[:9]
     snapshot.save()
+    try:
+        from dex_self_model import record_experience_context
+        record_experience_context(packet, cycle_type="ambient")
+    except Exception as exc:
+        print(f"[Dex Self-Model] ambient feedback unavailable: {exc}")
     return packet
 
 def produce_next_snapshot(current: ParticipantSnapshot, packet: ExperiencePacket) -> ParticipantSnapshot:
