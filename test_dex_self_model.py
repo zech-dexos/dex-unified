@@ -82,6 +82,49 @@ class DexSelfModelTests(unittest.TestCase):
         self.assertEqual(result["active_goals"][0]["goal_id"], "g1")
         self.assertEqual(result["open_loops"][0]["loop_id"], "loop-1")
 
+
+    def test_experience_feeds_self_model_observation_and_scoped_relationship(self):
+        packet = type("Packet", (), {
+            "experience_id": "exp-new",
+            "timestamp": "2026-10-19T00:00:00Z",
+            "self_identity": "Deximus Maximus",
+            "interlocutor": {"participant_id": "root", "relationship": "architect and collaborator"},
+            "intent": "architecture",
+            "action": "inspect wiring",
+            "experience": "I traced a cognitive loop with Root.",
+            "reflection": "The return path was missing.",
+            "state_transition": {"from_attention": "audit", "to_attention": "feedback"},
+            "continuation": {"carry_forward": "complete feedback path"},
+            "observer_perspective": {"stages": {"continuity": {"symbol": "☧"}}},
+            "runtime_perspective": {"cycle_type": "ambient"},
+        })()
+        with patch.object(dex_self_model, "update_self_state") as update:
+            result = dex_self_model.record_experience_context(packet, "ambient")
+        self.assertTrue(result["recorded"])
+        delta = update.call_args.args[0]
+        self.assertEqual(delta["last_experience_id"], "exp-new")
+        self.assertEqual(delta["self_model_observations"][-1]["reflection"], "The return path was missing.")
+        self.assertEqual(
+            delta["relationship_contexts"]["root"]["current_interlocutor"]["relationship"],
+            "architect and collaborator",
+        )
+
+    def test_self_model_proposal_is_queued_but_never_applied(self):
+        with patch.object(dex_self_model, "update_self_state") as update:
+            result = dex_self_model.queue_self_model_proposal({
+                "field": "becoming",
+                "proposed_value": {"direction": "more reliable feedback loops"},
+                "rationale": "Repeated experience shows the return path needs validation.",
+                "evidence": ["exp-1", "exp-2"],
+            }, source_experience_id="exp-2")
+        self.assertTrue(result["queued"])
+        delta = update.call_args.args[0]
+        proposal = delta["pending_self_model_proposals"][0]
+        self.assertEqual(proposal["status"], "pending")
+        self.assertTrue(proposal["requires_governance_review"])
+        self.assertEqual(proposal["source_experience_id"], "exp-2")
+        self.assertNotIn("self_model", delta)
+
     def test_identity_context_is_bounded_and_explicitly_grounded(self):
         context = dex_self_model.build_identity_context(max_chars=900)
         self.assertIn("DEX CONTINUITY CONTEXT", context)
