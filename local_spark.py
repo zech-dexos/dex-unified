@@ -63,7 +63,8 @@ _ALLOWED = _NO_ARGS | {
     "evoke", "search_architecture", "inspect_architecture", "reason_with_talnir", "request_reflection",
 }
 _EVOCABLE = {
-    "state", "self_model", "relationship", "becoming", "workspace", "goals", "open_loops", "thoughts", "experiences",
+    "state", "self_model", "relationship", "becoming", "self_model_proposals",
+    "workspace", "goals", "open_loops", "thoughts", "experiences",
     "participant", "conversation", "signals", "tools", "observations", "architecture", "spark_reaches",
 }
 
