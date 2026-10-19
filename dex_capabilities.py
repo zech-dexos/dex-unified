@@ -388,7 +388,7 @@ CAPABILITY_CATALOG = [
     ("reason_with_talnir", "Run Talnir structured intent and reasoning-branch analysis.", {"prompt": "string, max 2000"}),
     ("request_reflection", "Queue a durable request for another ambient architecture reflection pass; does not directly change goals.", {"focus": "string, max 500", "reason": "optional string, max 500"}),
     ("listen", "Notice current runtime signals without taking action.", {}),
-    ("evoke", "Deliberately retrieve a named resource.", {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}),
+    ("evoke", "Deliberately retrieve a named resource.", {"resource": "state|self_model|relationship|becoming|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}),
     ("search_architecture", "Search source text without executing it.", {"query": "string, max 200"}),
 ]
 
