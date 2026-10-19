@@ -140,6 +140,26 @@ class LocalSparkBridgeTests(unittest.TestCase):
                     self.assertEqual(result["reply"], "[DexOS capability round limit reached]")
 
 
+
+    def test_identity_context_is_injected_without_existing_system_message(self):
+        fake_local_llm = types.ModuleType("local_llm")
+        fake_local_llm.CHAT_MODEL_PATH = "/models/heretic.gguf"
+        fake_local_llm.local_chat_generate = Mock(return_value="Continuity context received.")
+        fake_capabilities = types.ModuleType("dex_capabilities")
+        fake_capabilities.execute_capability = Mock()
+        with patch("dex_self_model.build_identity_context", return_value="RELATIONSHIP_CONTEXT_SENTINEL") as build, \\
+             patch.dict(sys.modules, {"local_llm": fake_local_llm, "dex_capabilities": fake_capabilities}):
+            result = local_spark.local_spark_generate(
+                [{"role": "user", "content": "Who am I speaking with?"}],
+                max_tokens=64,
+                user_id="root",
+            )
+        self.assertEqual(result["reply"], "Continuity context received.")
+        build.assert_called_once_with(max_chars=2400, user_id="root")
+        system = fake_local_llm.local_chat_generate.call_args.args[0][0]["content"]
+        self.assertIn("RELATIONSHIP_CONTEXT_SENTINEL", system)
+        self.assertIn("DEXOS RUNTIME CAPABILITY PROTOCOL", system)
+
     def test_no_capability_request_is_plain_reply(self):
         fake_local_llm = types.ModuleType("local_llm")
         fake_local_llm.CHAT_MODEL_PATH = "/models/heretic.gguf"
