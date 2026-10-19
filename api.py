@@ -288,13 +288,14 @@ from dex_conversation import load_conversation, format_conversation_context, exp
 DEFAULT_MODEL = "local:llama.cpp"
 
 
-async def call_llm(client, messages, max_tokens=1000):
+async def call_llm(client, messages, max_tokens=1000, user_id="default"):
     """Run Dex chat through the local Heretic spark and DexOS capability bridge."""
     try:
         from local_llm import CHAT_MODEL_PATH
         from local_spark import local_spark_generate
         result = await asyncio.get_running_loop().run_in_executor(
-            None, local_spark_generate, messages, min(max_tokens, 256)
+            None, local_spark_generate, messages, min(max_tokens, 256),
+            local_spark.MAX_TOOL_ROUNDS, user_id,
         )
         answer = str(result.get("reply", "")).strip()
         if not answer:
@@ -829,7 +830,9 @@ the exchange as a newly started request/response transaction.
     messages.append({"role": "user", "content": user_content})
 
     async with httpx.AsyncClient(timeout=60) as client:
-        result_llm = await call_llm(client, messages, max_tokens=1200)
+        result_llm = await call_llm(
+            client, messages, max_tokens=1200, user_id=getattr(req, "user_id", "default")
+        )
     reply = result_llm["reply"]
     used_model = result_llm["model"]
 
