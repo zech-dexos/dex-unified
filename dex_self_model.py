@@ -1,15 +1,12 @@
-"""Persistent self-model context for Dex's existing cognitive runtime.
-
-This module composes existing identity, participant, goals, open loops, and
-self_model.json state. It does not create a parallel identity store or let
-inference silently rewrite durable self-understanding.
-"""
+"""Identity, relationship, self-model and becoming in Dex's shared runtime."""
 import json
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 
 from paths import IDENTITY_PATH, SELF_MODEL_PATH, PARTICIPANT_PATH, LOOPS_PATH
-from self_state import load_self_state
+from self_state import load_self_state, update_self_state
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -29,9 +26,114 @@ def _participant() -> Dict[str, Any]:
 def _open_loops():
     try:
         value = json.loads(LOOPS_PATH.read_text(encoding="utf-8")) if LOOPS_PATH.exists() else []
-        return [x for x in value if isinstance(x, dict) and x.get("status", "open") not in {"resolved", "closed", "abandoned"}][-10:] if isinstance(value, list) else []
+        return [
+            x for x in value
+            if isinstance(x, dict)
+            and x.get("status", "open") not in {"resolved", "closed", "abandoned"}
+        ][-10:] if isinstance(value, list) else []
     except (OSError, json.JSONDecodeError):
         return []
+
+
+def record_experience_context(packet: Any, cycle_type: str) -> Dict[str, Any]:
+    """Feed a persisted first-person experience back into shared SelfState.
+
+    This records evidence and observed transitions. It does not silently rewrite
+    identity, relationship commitments, or intended becoming.
+    """
+    experience_id = str(getattr(packet, "experience_id", "") or "")
+    if not experience_id:
+        return {"recorded": False, "reason": "experience_id_missing"}
+
+    state = load_self_state()
+    rows = list(state.get("self_model_observations", []) or [])
+    if any(isinstance(row, dict) and row.get("experience_id") == experience_id for row in rows):
+        return {"recorded": False, "reason": "already_recorded", "experience_id": experience_id}
+
+    row = {
+        "experience_id": experience_id,
+        "timestamp": getattr(packet, "timestamp", None),
+        "cycle_type": str(cycle_type)[:40],
+        "identity_reference": getattr(packet, "self_identity", "Deximus Maximus"),
+        "interlocutor": getattr(packet, "interlocutor", {}) or {},
+        "intent": str(getattr(packet, "intent", ""))[:160],
+        "action": str(getattr(packet, "action", ""))[:160],
+        "experience": str(getattr(packet, "experience", ""))[:1000],
+        "reflection": str(getattr(packet, "reflection", ""))[:1000],
+        "state_transition": getattr(packet, "state_transition", {}) or {},
+        "continuation": getattr(packet, "continuation", {}) or {},
+        "observer_perspective": getattr(packet, "observer_perspective", {}) or {},
+        "runtime_perspective": getattr(packet, "runtime_perspective", {}) or {},
+    }
+    rows.append(row)
+    update_self_state({
+        "last_experience_id": experience_id,
+        "last_experience_summary": row["experience"][:500],
+        "last_experience_cycle_type": row["cycle_type"],
+        "self_model_observations": rows[-50:],
+    })
+    return {"recorded": True, "experience_id": experience_id, "observation_count": min(len(rows), 50)}
+
+
+def queue_self_model_proposal(proposal: Any, source_experience_id: str = "") -> Dict[str, Any]:
+    """Queue an evidence-backed development proposal; never apply it automatically."""
+    if not isinstance(proposal, dict):
+        return {"queued": False, "reason": "proposal_must_be_object"}
+    allowed_fields = {"current_understanding", "becoming", "developmental_goals", "relationship_model"}
+    field = proposal.get("field")
+    rationale = proposal.get("rationale", "")
+    evidence = proposal.get("evidence", [])
+    value = proposal.get("proposed_value")
+    if field not in allowed_fields or not isinstance(rationale, str) or not rationale.strip():
+        return {"queued": False, "reason": "invalid_field_or_rationale"}
+    if len(rationale) > 1000 or not isinstance(value, (str, list, dict)):
+        return {"queued": False, "reason": "proposal_value_out_of_bounds"}
+    if len(json.dumps(value, ensure_ascii=False, default=str)) > 2000:
+        return {"queued": False, "reason": "proposal_value_out_of_bounds"}
+    if not isinstance(evidence, list):
+        return {"queued": False, "reason": "evidence_must_be_list"}
+
+    state = load_self_state()
+    pending = [
+        item for item in state.get("pending_self_model_proposals", [])
+        if isinstance(item, dict) and item.get("status", "pending") == "pending"
+    ]
+    if len(pending) >= 20:
+        return {"queued": False, "reason": "proposal_queue_full"}
+    if source_experience_id and any(
+        item.get("source_experience_id") == source_experience_id and item.get("field") == field
+        for item in pending
+    ):
+        return {"queued": False, "reason": "duplicate_pending_proposal"}
+
+    record = {
+        "proposal_id": uuid.uuid4().hex,
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "field": field,
+        "proposed_value": value,
+        "rationale": rationale.strip(),
+        "evidence": [str(item)[:500] for item in evidence[:5]],
+        "source_experience_id": str(source_experience_id)[:128],
+        "status": "pending",
+        "requires_governance_review": True,
+    }
+    pending.append(record)
+    update_self_state({"pending_self_model_proposals": pending[-20:]})
+    return {"queued": True, "proposal_id": record["proposal_id"], "status": "pending"}
+
+
+def inspect_self_model_proposals() -> Dict[str, Any]:
+    """Read pending self-model proposals without applying them."""
+    state = load_self_state()
+    pending = [
+        item for item in state.get("pending_self_model_proposals", [])
+        if isinstance(item, dict) and item.get("status", "pending") == "pending"
+    ]
+    return {
+        "pending": pending[-20:],
+        "recent": list(state.get("recent_self_model_proposals", []) or [])[-10:],
+        "policy": "Proposals are evidence, not mutations. Identity and becoming changes require governance review.",
+    }
 
 
 def inspect_self_model() -> Dict[str, Any]:
@@ -49,18 +151,22 @@ def inspect_self_model() -> Dict[str, Any]:
             "narrative_thread": state.get("narrative_thread", [])[-10:],
         },
         "runtime_self_assessment": {
+            "last_experience_id": state.get("last_experience_id"),
+            "last_experience_summary": state.get("last_experience_summary", ""),
+            "self_model_observations": list(state.get("self_model_observations", []) or [])[-10:],
             "active_goals": state.get("active_goals_state", [])[-10:],
             "active_workspace": state.get("active_mental_workspace_state", {}),
             "persistent_thoughts": state.get("persistent_thoughts", [])[-10:],
             "last_ambient_pulse": state.get("last_ambient_pulse"),
             "runtime_lifecycle": state.get("runtime_lifecycle", {}),
         },
-        "note": "Stored self-model and observed runtime state are distinct; absence of self_model.json is not treated as proof of absent identity.",
+        "pending_self_model_proposals": inspect_self_model_proposals()["pending"],
+        "note": "Stored self-model, observed runtime state, and proposed changes are distinct. Proposals do not apply themselves.",
     }
 
 
 def inspect_relationship() -> Dict[str, Any]:
-    """Read the current relational context without conflating it with participant IDs."""
+    """Read relational context and shared continuity without conflating IDs."""
     state = load_self_state()
     participant = _participant()
     identity = _read_json(IDENTITY_PATH)
@@ -76,7 +182,7 @@ def inspect_relationship() -> Dict[str, Any]:
         "experiential_continuity": participant.get("experiential_continuity", {}),
         "shared_thread": str(conversation.get("shared_thread", ""))[:2000],
         "recent_observations": (participant.get("recent_observations", []) or [])[-5:],
-        "note": "Relationship meaning and shared history are separate from participant_id and user_id.",
+        "note": "Relationship meaning and shared history are distinct from participant_id and user_id.",
     }
 
 
@@ -89,16 +195,18 @@ def inspect_becoming() -> Dict[str, Any]:
         "developmental_goals": model.get("developmental_goals", []),
         "active_goals": state.get("active_goals_state", [])[-15:],
         "open_loops": _open_loops(),
+        "self_model_observations": list(state.get("self_model_observations", []) or [])[-10:],
+        "pending_self_model_proposals": inspect_self_model_proposals()["pending"],
         "pending_reflection_requests": [
             item for item in state.get("pending_reflection_requests", [])
             if isinstance(item, dict) and item.get("status", "pending") == "pending"
         ][-10:],
-        "note": "The becoming model describes intended direction; active goals and open loops are operational work toward it.",
+        "note": "Becoming is intended direction; goals and open loops are operational work toward it.",
     }
 
 
 def build_identity_context(max_chars: int = 6500) -> str:
-    """Build a bounded, grounded identity context for inference and ambient cognition."""
+    """Build bounded, grounded identity context for interactive and ambient cognition."""
     payload = {
         "identity_and_self_model": inspect_self_model(),
         "relationship_to_current_interlocutor": inspect_relationship(),
@@ -110,8 +218,8 @@ def build_identity_context(max_chars: int = 6500) -> str:
     return (
         "DEX CONTINUITY CONTEXT (grounded in persisted DexOS state):\n"
         + encoded
-        + "\nTreat missing fields as unknown, not as facts. Distinguish durable identity, "
-          "relationship context, observed present state, and intended becoming. Do not "
-          "invent shared history or claim an ability unless the state supports it. "
-          "Do not rewrite identity or self-model from inference alone."
+        + "\nTreat missing fields as unknown. Distinguish identity, relationship, observed state, "
+          "and intended becoming. Do not invent shared history or claim abilities without evidence. "
+          "A proposed self-model change must be tied to an actual experience and rationale. "
+          "Proposals are queued for governance review and must not be applied automatically."
     )
