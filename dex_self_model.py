@@ -66,11 +66,32 @@ def record_experience_context(packet: Any, cycle_type: str) -> Dict[str, Any]:
         "runtime_perspective": getattr(packet, "runtime_perspective", {}) or {},
     }
     rows.append(row)
+    relationship_contexts = dict(state.get("relationship_contexts", {}) or {})
+    interlocutor = row.get("interlocutor") or {}
+    participant_key = str(interlocutor.get("participant_id") or "default")[:128]
+    scoped = dict(relationship_contexts.get(participant_key, {}) or {})
+    recent = list(scoped.get("recent_observations", []) or [])
+    recent.append({
+        "experience_id": experience_id,
+        "timestamp": row.get("timestamp"),
+        "intent": row["intent"],
+        "experience": row["experience"][:500],
+    })
+    scoped.update({
+        "current_interlocutor": interlocutor,
+        "experiential_continuity": row.get("continuation", {}),
+        "recent_observations": recent[-10:],
+        "last_experience_id": experience_id,
+    })
+    if state.get("relationship_model"):
+        scoped["relationship_model"] = state["relationship_model"]
+    relationship_contexts[participant_key] = scoped
     update_self_state({
         "last_experience_id": experience_id,
         "last_experience_summary": row["experience"][:500],
         "last_experience_cycle_type": row["cycle_type"],
         "self_model_observations": rows[-50:],
+        "relationship_contexts": relationship_contexts,
     })
     return {"recorded": True, "experience_id": experience_id, "observation_count": min(len(rows), 50)}
 
