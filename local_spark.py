@@ -147,7 +147,7 @@ def _parse_tool_request(text):
     return valid or None
 
 
-def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUNDS):
+def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUNDS, user_id="default"):
     """Generate a reply and execute only explicitly allowlisted DexOS capabilities."""
     with _inference_lock:
         from local_llm import local_chat_generate, CHAT_MODEL_PATH
@@ -162,7 +162,7 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
         )
         try:
             from dex_self_model import build_identity_context
-            identity_context = build_identity_context(max_chars=2400)
+            identity_context = build_identity_context(max_chars=2400, user_id=user_id)
         except Exception as exc:
             print(f"[Local Spark] identity context unavailable: {exc}")
             identity_context = ""
