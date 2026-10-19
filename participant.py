@@ -306,6 +306,11 @@ def record_interaction_experience(
         "next_cognitive_focus": packet.continuation["next_cognitive_focus"],
     }
     snapshot.save()
+    try:
+        from dex_self_model import record_experience_context
+        record_experience_context(packet, cycle_type="interaction")
+    except Exception as exc:
+        print(f"[Dex Self-Model] interaction feedback unavailable: {exc}")
     return packet
 
 def record_ambient_experience(
@@ -404,6 +409,11 @@ def record_ambient_experience(
     snapshot.current_attention = target.get("text", "")[:500] or snapshot.current_attention
     snapshot.recent_observations = [thought[:500]] + list(snapshot.recent_observations)[:9]
     snapshot.save()
+    try:
+        from dex_self_model import record_experience_context
+        record_experience_context(packet, cycle_type="ambient")
+    except Exception as exc:
+        print(f"[Dex Self-Model] ambient feedback unavailable: {exc}")
     return packet
 
 def produce_next_snapshot(current: ParticipantSnapshot, packet: ExperiencePacket) -> ParticipantSnapshot:
