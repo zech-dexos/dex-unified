@@ -165,24 +165,50 @@ def inspect_self_model() -> Dict[str, Any]:
     }
 
 
-def inspect_relationship() -> Dict[str, Any]:
-    """Read relational context and shared continuity without conflating IDs."""
+def inspect_relationship(user_id: str = "default") -> Dict[str, Any]:
+    """Read relationship context for this interlocutor without leaking another user's thread."""
     state = load_self_state()
     participant = _participant()
     identity = _read_json(IDENTITY_PATH)
+    requested_id = str(user_id or "default")[:128]
+    interlocutor = participant.get("current_interlocutor", {})
+    interlocutor_id = str((interlocutor or {}).get("participant_id", ""))
+    # ParticipantSnapshot is currently a single active snapshot. Never attach
+    # its personal context to a different user merely because that snapshot is
+    # the most recently written one.
+    aliases = {"root", "default", ""}
+    matches = interlocutor_id == requested_id or (
+        requested_id in aliases and interlocutor_id in aliases
+    )
     conversation = {}
     try:
         from dex_conversation import load_conversation
-        conversation = load_conversation("default")
+        conversation = load_conversation(requested_id)
     except Exception as exc:
         print(f"[Dex Self-Model] conversation context unavailable: {exc}")
+    relationship_contexts = state.get("relationship_contexts", {}) or {}
+    scoped = relationship_contexts.get(requested_id, {})
     return {
-        "relationship_model": state.get("relationship_model", identity.get("relationship_model", {})),
-        "current_interlocutor": participant.get("current_interlocutor", {}),
-        "experiential_continuity": participant.get("experiential_continuity", {}),
+        "user_id": requested_id,
+        "relationship_model": scoped.get(
+            "relationship_model",
+            state.get("relationship_model", identity.get("relationship_model", {}))
+        ),
+        "current_interlocutor": interlocutor if matches else {
+            "participant_id": requested_id,
+            "relationship": "unknown",
+            "context_status": "no matching participant snapshot; personal details withheld",
+        },
+        "experiential_continuity": (
+            participant.get("experiential_continuity", {}) if matches
+            else scoped.get("experiential_continuity", {})
+        ),
         "shared_thread": str(conversation.get("shared_thread", ""))[:2000],
-        "recent_observations": (participant.get("recent_observations", []) or [])[-5:],
-        "note": "Relationship meaning and shared history are distinct from participant_id and user_id.",
+        "recent_observations": (
+            (participant.get("recent_observations", []) or [])[-5:] if matches
+            else scoped.get("recent_observations", [])[-5:]
+        ),
+        "note": "Relationship meaning and shared history are distinct from participant IDs; context is scoped to the requested interlocutor.",
     }
 
 
@@ -205,11 +231,11 @@ def inspect_becoming() -> Dict[str, Any]:
     }
 
 
-def build_identity_context(max_chars: int = 3000) -> str:
-    """Build bounded, valid JSON context for interactive and ambient cognition."""
+def build_identity_context(max_chars: int = 3000, user_id: str = "default") -> str:
+    """Build bounded, valid JSON context for this interlocutor and current cognition."""
     payload = {
         "identity_and_self_model": inspect_self_model(),
-        "relationship_to_current_interlocutor": inspect_relationship(),
+        "relationship_to_current_interlocutor": inspect_relationship(user_id),
         "developmental_direction": inspect_becoming(),
     }
     encoded = json.dumps(payload, ensure_ascii=False, default=str)
