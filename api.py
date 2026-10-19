@@ -292,10 +292,10 @@ async def call_llm(client, messages, max_tokens=1000, user_id="default"):
     """Run Dex chat through the local Heretic spark and DexOS capability bridge."""
     try:
         from local_llm import CHAT_MODEL_PATH
-        from local_spark import local_spark_generate
+        from local_spark import local_spark_generate, MAX_TOOL_ROUNDS
         result = await asyncio.get_running_loop().run_in_executor(
             None, local_spark_generate, messages, min(max_tokens, 256),
-            local_spark.MAX_TOOL_ROUNDS, user_id,
+            MAX_TOOL_ROUNDS, user_id,
         )
         answer = str(result.get("reply", "")).strip()
         if not answer:
