@@ -30,6 +30,9 @@ Allowed capabilities and argument shapes:
 - reason_with_talnir: {"prompt": string, max 2000}
 - request_reflection: {"focus": string, max 500, "reason": optional string, max 500}; queue a future ambient architecture pass
 - inspect_identity: {}
+- inspect_self_model: {}
+- inspect_relationship: {}
+- inspect_becoming: {}
 - inspect_lineage: {"limit": integer 1..20}
 - inspect_workspace: {}
 - inspect_goals: {}
@@ -51,7 +54,7 @@ If no capability is needed, answer normally in plain text.
 
 
 _NO_ARGS = {
-    "inspect_state", "inspect_identity", "inspect_tools", "inspect_observations", "inspect_workspace", "inspect_goals", "inspect_open_loops",
+    "inspect_state", "inspect_identity", "inspect_self_model", "inspect_relationship", "inspect_becoming", "inspect_tools", "inspect_observations", "inspect_workspace", "inspect_goals", "inspect_open_loops",
     "inspect_thoughts", "inspect_participant", "listen",
 }
 _ALLOWED = _NO_ARGS | {
@@ -59,7 +62,7 @@ _ALLOWED = _NO_ARGS | {
     "evoke", "search_architecture", "inspect_architecture", "reason_with_talnir", "request_reflection",
 }
 _EVOCABLE = {
-    "state", "workspace", "goals", "open_loops", "thoughts", "experiences",
+    "state", "self_model", "relationship", "becoming", "workspace", "goals", "open_loops", "thoughts", "experiences",
     "participant", "conversation", "signals", "tools", "observations", "architecture", "spark_reaches",
 }
 
@@ -162,8 +165,11 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
             original = str(conversation[system_index].get("content", ""))
             # Prefix protocol so the existing local_llm context trimmer preserves
             # the capability contract and the opening of Dex's constitutional prompt.
+            from dex_self_model import build_identity_context
+            identity_context = build_identity_context()
             conversation[system_index]["content"] = (
                 _CAPABILITY_PROTOCOL + "\n\nDEXOS CONSTITUTIONAL CONTEXT:\n" + original
+                + "\n\n" + identity_context
             )
 
         executed = []
