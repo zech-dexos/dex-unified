@@ -321,7 +321,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         identity_context = ""
         try:
             from dex_self_model import build_identity_context
-            identity_context = build_identity_context()
+            identity_context = build_identity_context(max_chars=1800)
         except Exception as e:
             print(f"[Ambient Daemon] identity context unavailable: {e}")
 
