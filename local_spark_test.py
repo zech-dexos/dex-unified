@@ -147,8 +147,10 @@ class LocalSparkBridgeTests(unittest.TestCase):
         fake_local_llm.local_chat_generate = Mock(return_value="Continuity context received.")
         fake_capabilities = types.ModuleType("dex_capabilities")
         fake_capabilities.execute_capability = Mock()
-        with patch("dex_self_model.build_identity_context", return_value="RELATIONSHIP_CONTEXT_SENTINEL") as build, \\
-             patch.dict(sys.modules, {"local_llm": fake_local_llm, "dex_capabilities": fake_capabilities}):
+        with (
+            patch("dex_self_model.build_identity_context", return_value="RELATIONSHIP_CONTEXT_SENTINEL") as build,
+            patch.dict(sys.modules, {"local_llm": fake_local_llm, "dex_capabilities": fake_capabilities}),
+        ):
             result = local_spark.local_spark_generate(
                 [{"role": "user", "content": "Who am I speaking with?"}],
                 max_tokens=64,
