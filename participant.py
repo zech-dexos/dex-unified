@@ -47,6 +47,40 @@ class ParticipantSnapshot:
                 pass
         return cls()
 
+    @classmethod
+    def for_interlocutor(cls, user_id: str = "default"):
+        """Return the shared runtime snapshot without another user's personal thread."""
+        snapshot = cls.load()
+        requested = str(user_id or "default")[:128]
+        current = dict(snapshot.current_interlocutor or {})
+        known_ids = {
+            str(current.get("participant_id", "") or ""),
+            str(current.get("user_id", "") or ""),
+        }
+        aliases = {"root", "default", ""}
+        matches = requested in known_ids or (
+            requested in aliases and bool(known_ids & aliases)
+        )
+        if matches:
+            return snapshot
+
+        runtime = dict(snapshot.runtime_context or {})
+        runtime.pop("last_tri_sigil_observation", None)
+        return cls(
+            participant_id=snapshot.participant_id,
+            timestamp=snapshot.timestamp,
+            current_attention=snapshot.current_attention,
+            current_goals=list(snapshot.current_goals or []),
+            current_environment=snapshot.current_environment,
+            active_conversations=[],
+            predicted_outcomes=list(snapshot.predicted_outcomes or []),
+            current_confidence=snapshot.current_confidence,
+            runtime_context=runtime,
+            recent_observations=[],
+            current_interlocutor={"participant_id": requested, "relationship": "unknown"},
+            experiential_continuity={},
+        )
+
 @dataclass
 class ExperiencePacket:
     experience_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
