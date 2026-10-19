@@ -162,7 +162,7 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
         )
         try:
             from dex_self_model import build_identity_context
-            identity_context = build_identity_context()
+            identity_context = build_identity_context(max_chars=2400)
         except Exception as exc:
             print(f"[Local Spark] identity context unavailable: {exc}")
             identity_context = ""
@@ -170,15 +170,18 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
         if system_index is None:
             conversation.insert(0, {
                 "role": "system",
-                "content": _CAPABILITY_PROTOCOL + ("\n\n" + identity_context if identity_context else ""),
+                "content": _CAPABILITY_PROTOCOL
+                    + ("\n\n" + identity_context if identity_context else ""),
             })
         else:
             original = str(conversation[system_index].get("content", ""))
-            # Preserve both the capability contract and the constitutional
-            # prompt while injecting the same grounded continuity context.
+            # The context trimmer preserves the start of the system message.
+            # Put the bounded identity/relationship model before long prompt text
+            # so it survives truncation on small local context windows.
             conversation[system_index]["content"] = (
-                _CAPABILITY_PROTOCOL + "\n\nDEXOS CONSTITUTIONAL CONTEXT:\n" + original
+                _CAPABILITY_PROTOCOL
                 + ("\n\n" + identity_context if identity_context else "")
+                + "\n\nDEXOS CONSTITUTIONAL CONTEXT:\n" + original
             )
 
         executed = []
