@@ -205,8 +205,17 @@ def record_interaction_experience(
     observer_trace: Optional[dict] = None,
 ) -> ExperiencePacket:
     """Turn a completed conversation turn into Dex's durable lived experience."""
-    interlocutor = dict(snapshot.current_interlocutor)
-    interlocutor.setdefault("participant_id", user_id)
+    interlocutor = dict(snapshot.current_interlocutor or {})
+    existing_id = str(interlocutor.get("participant_id", "") or "")
+    requested_id = str(user_id or "default")[:128]
+    aliases = {"root", "default", ""}
+    if existing_id and existing_id != requested_id and not (
+        existing_id in aliases and requested_id in aliases
+    ):
+        # ParticipantSnapshot is a single active snapshot; never attribute a
+        # different participant's relationship details to this interaction.
+        interlocutor = {}
+    interlocutor.setdefault("participant_id", requested_id)
 
     packet = ExperiencePacket(
         participant_id=snapshot.participant_id,
