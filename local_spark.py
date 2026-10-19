@@ -43,7 +43,7 @@ Allowed capabilities and argument shapes:
 - inspect_conversation: {"user_id": string}
 - recall_experience: {"query": string, "limit": integer 1..10}
 - listen: {}
-- evoke: {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}
+- evoke: {"resource": "state|self_model|relationship|becoming|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}
 - search_architecture: {"query": string}
 
 Do not request shell execution, network calls, arbitrary code, or the spark
