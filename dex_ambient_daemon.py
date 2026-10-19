@@ -28,7 +28,9 @@ AMBIENT_PROMPT = (
     '{"thought": "brief development of the selected target...", "salience": 0.5, '
     '"spark_reach": {"intention": "...", "reach_objective": "...", "code": "..."} or null, '
     '"spark_judgment": {"run_id": "...", "judgment": "accepted|rejected|redirected|deferred", '
-    '"reason": "..."} or null}'
+    '"reason": "..."} or null, '
+    '"self_model_proposal": {"field": "current_understanding|becoming|developmental_goals|relationship_model", '
+    '"proposed_value": "...", "rationale": "...", "evidence": ["experience or observation"]} or null}'
 )
 
 AMBIENT_REVISIT_SECONDS = 300.0
@@ -350,6 +352,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             salience = float(data.get("salience", 0.0))
             spark_request = data.get("spark_reach")
             spark_judgment = data.get("spark_judgment")
+            self_model_proposal = data.get("self_model_proposal")
 
             # A completed reach is an observation, not memory. Ambient
             # cognition must explicitly judge it before integration.
@@ -485,6 +488,23 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                             "spark_judgment": spark_judgment,
                         },
                     )
+                    if isinstance(self_model_proposal, dict):
+                        try:
+                            from dex_self_model import queue_self_model_proposal
+                            proposal_result = queue_self_model_proposal(
+                                self_model_proposal,
+                                source_experience_id=ambient_packet.experience_id,
+                            )
+                            if proposal_result.get("queued"):
+                                print(
+                                    "[Ambient Daemon] self-model proposal queued for governance: "
+                                    + str(proposal_result.get("proposal_id"))
+                                )
+                            elif proposal_result.get("reason") not in {"invalid_field_or_rationale"}:
+                                print("[Ambient Daemon] self-model proposal not queued: " + str(proposal_result.get("reason")))
+                        except Exception as proposal_error:
+                            print(f"[Ambient Daemon] self-model proposal handling failed: {proposal_error}")
+
                     if target.get("kind") == "conversation":
                         conversation = load_conversation("default")
                         conversation["last_ambient_at"] = _now_iso()
@@ -506,6 +526,10 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "target": target,
                     "spark_reach": spark_result,
                     "spark_judgment": spark_judgment,
+                    "self_model_proposal": (
+                        {"status": "queued_for_governance"}
+                        if isinstance(self_model_proposal, dict) else None
+                    ),
                 })
                 return {
                     "status": "ok",
@@ -515,6 +539,10 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "target": target,
                     "spark_reach": spark_result,
                     "spark_judgment": spark_judgment,
+                    "self_model_proposal": (
+                        {"status": "queued_for_governance"}
+                        if isinstance(self_model_proposal, dict) else None
+                    ),
                     "next_attention_at": next_attention,
                 }
 
