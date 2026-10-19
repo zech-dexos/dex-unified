@@ -205,16 +205,42 @@ def inspect_becoming() -> Dict[str, Any]:
     }
 
 
-def build_identity_context(max_chars: int = 6500) -> str:
-    """Build bounded, grounded identity context for interactive and ambient cognition."""
+def build_identity_context(max_chars: int = 3000) -> str:
+    """Build bounded, valid JSON context for interactive and ambient cognition."""
     payload = {
         "identity_and_self_model": inspect_self_model(),
         "relationship_to_current_interlocutor": inspect_relationship(),
         "developmental_direction": inspect_becoming(),
     }
     encoded = json.dumps(payload, ensure_ascii=False, default=str)
-    if len(encoded) > max_chars:
-        encoded = encoded[:max_chars] + "...[context bounded]"
+    # Preserve valid JSON when fitting the context window: discard older evidence
+    # before truncating individual text fields or dropping core identity dimensions.
+    while len(encoded) > max_chars:
+        candidates = [
+            payload["identity_and_self_model"]["runtime_self_assessment"].get("self_model_observations", []),
+            payload["identity_and_self_model"]["runtime_self_assessment"].get("persistent_thoughts", []),
+            payload["identity_and_self_model"]["runtime_self_assessment"].get("active_goals", []),
+            payload["relationship_to_current_interlocutor"].get("recent_observations", []),
+            payload["developmental_direction"].get("self_model_observations", []),
+            payload["developmental_direction"].get("open_loops", []),
+        ]
+        longest = max(candidates, key=len, default=[])
+        if longest:
+            longest.pop(0)
+        else:
+            # Retain the four core dimensions and omit lower-priority raw detail.
+            payload["identity_and_self_model"]["self_model"] = {}
+            payload["identity_and_self_model"]["runtime_self_assessment"]["active_workspace"] = {}
+            payload["relationship_to_current_interlocutor"]["shared_thread"] = str(
+                payload["relationship_to_current_interlocutor"].get("shared_thread", "")
+            )[:250]
+            payload["relationship_to_current_interlocutor"]["experiential_continuity"] = {}
+            payload["developmental_direction"]["pending_reflection_requests"] = []
+            payload["developmental_direction"]["pending_self_model_proposals"] = []
+            max_chars = max_chars - 250
+            if max_chars < 500:
+                break
+        encoded = json.dumps(payload, ensure_ascii=False, default=str)
     return (
         "DEX CONTINUITY CONTEXT (grounded in persisted DexOS state):\n"
         + encoded
