@@ -316,8 +316,16 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         except Exception as e:
             print(f"[Ambient Daemon] Talnir context unavailable: {e}")
 
+        identity_context = ""
+        try:
+            from dex_self_model import build_identity_context
+            identity_context = build_identity_context()
+        except Exception as e:
+            print(f"[Ambient Daemon] identity context unavailable: {e}")
+
         target_prompt = (
             f"{AMBIENT_PROMPT}\n\n"
+            + (f"{identity_context}\n\n" if identity_context else "")
             f"SELECTED COGNITIVE TARGET ({target['kind']}):\n{target['text']}\n\n"
             + talnir_context
             + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
