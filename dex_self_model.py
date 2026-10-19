@@ -253,46 +253,130 @@ def inspect_becoming() -> Dict[str, Any]:
 
 
 def build_identity_context(max_chars: int = 3000, user_id: str = "default") -> str:
-    """Build bounded, valid JSON context for this interlocutor and current cognition."""
+    """Build bounded, valid context while retaining identity, relationship and becoming."""
+    import copy
+
+    header = "DEX CONTINUITY CONTEXT (grounded in persisted DexOS state):\\n"
+    footer = (
+        "\\nTreat missing fields as unknown. Distinguish identity, relationship, observed state, "
+        "and intended becoming. Do not invent shared history or claim abilities without evidence. "
+        "Self-model proposals require experience evidence and governance review."
+    )
+    limit = max(1, int(max_chars))
+
     payload = {
         "identity_and_self_model": inspect_self_model(),
         "relationship_to_current_interlocutor": inspect_relationship(user_id),
         "developmental_direction": inspect_becoming(),
     }
-    encoded = json.dumps(payload, ensure_ascii=False, default=str)
-    # Preserve valid JSON when fitting the context window: discard older evidence
-    # before truncating individual text fields or dropping core identity dimensions.
-    while len(encoded) > max_chars:
-        candidates = [
-            payload["identity_and_self_model"]["runtime_self_assessment"].get("self_model_observations", []),
-            payload["identity_and_self_model"]["runtime_self_assessment"].get("persistent_thoughts", []),
-            payload["identity_and_self_model"]["runtime_self_assessment"].get("active_goals", []),
-            payload["relationship_to_current_interlocutor"].get("recent_observations", []),
-            payload["developmental_direction"].get("self_model_observations", []),
-            payload["developmental_direction"].get("open_loops", []),
-        ]
-        longest = max(candidates, key=len, default=[])
-        if longest:
-            longest.pop(0)
-        else:
-            # Retain the four core dimensions and omit lower-priority raw detail.
-            payload["identity_and_self_model"]["self_model"] = {}
-            payload["identity_and_self_model"]["runtime_self_assessment"]["active_workspace"] = {}
-            payload["relationship_to_current_interlocutor"]["shared_thread"] = str(
-                payload["relationship_to_current_interlocutor"].get("shared_thread", "")
-            )[:250]
-            payload["relationship_to_current_interlocutor"]["experiential_continuity"] = {}
-            payload["developmental_direction"]["pending_reflection_requests"] = []
-            payload["developmental_direction"]["pending_self_model_proposals"] = []
-            max_chars = max_chars - 250
-            if max_chars < 500:
+    payload = copy.deepcopy(payload)
+
+    def render():
+        return header + json.dumps(payload, ensure_ascii=False, default=str) + footer
+
+    # Remove older optional evidence first. Never mutate persisted state.
+    optional_lists = [
+        ("identity_and_self_model", "runtime_self_assessment", "self_model_observations"),
+        ("identity_and_self_model", "runtime_self_assessment", "persistent_thoughts"),
+        ("identity_and_self_model", "runtime_self_assessment", "active_goals"),
+        ("relationship_to_current_interlocutor", None, "recent_observations"),
+        ("developmental_direction", None, "self_model_observations"),
+        ("developmental_direction", None, "open_loops"),
+        ("developmental_direction", None, "active_goals"),
+        ("developmental_direction", None, "pending_reflection_requests"),
+        ("developmental_direction", None, "pending_self_model_proposals"),
+        ("identity_and_self_model", None, "pending_self_model_proposals"),
+    ]
+
+    while len(render()) > limit:
+        removed = False
+        for top, middle, key in optional_lists:
+            target = payload.get(top, {})
+            if middle:
+                target = target.get(middle, {}) if isinstance(target, dict) else {}
+            values = target.get(key) if isinstance(target, dict) else None
+            if isinstance(values, list) and values:
+                values.pop(0)
+                removed = True
                 break
-        encoded = json.dumps(payload, ensure_ascii=False, default=str)
-    return (
-        "DEX CONTINUITY CONTEXT (grounded in persisted DexOS state):\n"
-        + encoded
-        + "\nTreat missing fields as unknown. Distinguish identity, relationship, observed state, "
-          "and intended becoming. Do not invent shared history or claim abilities without evidence. "
-          "A proposed self-model change must be tied to an actual experience and rationale. "
-          "Proposals are queued for governance review and must not be applied automatically."
-    )
+        if removed:
+            continue
+
+        # Compact nonessential detail without discarding the three core dimensions.
+        relation = payload.get("relationship_to_current_interlocutor", {})
+        if isinstance(relation, dict) and relation.get("shared_thread"):
+            relation["shared_thread"] = str(relation["shared_thread"])[:100]
+            if len(render()) <= limit:
+                break
+            relation["shared_thread"] = ""
+            continue
+
+        identity = payload.get("identity_and_self_model", {})
+        if isinstance(identity, dict):
+            runtime = identity.get("runtime_self_assessment", {})
+            if isinstance(runtime, dict) and runtime.get("active_workspace"):
+                runtime["active_workspace"] = {}
+                continue
+            if identity.get("self_model"):
+                identity["self_model"] = {}
+                continue
+            if identity.get("pending_self_model_proposals"):
+                identity["pending_self_model_proposals"] = []
+                continue
+
+        if isinstance(relation, dict):
+            for key in ("experiential_continuity", "recent_observations"):
+                if relation.get(key):
+                    relation[key] = {} if key == "experiential_continuity" else []
+                    removed = True
+                    break
+            if removed:
+                continue
+            if relation.get("relationship_model"):
+                relation["relationship_model"] = {}
+                continue
+
+        becoming = payload.get("developmental_direction", {})
+        if isinstance(becoming, dict):
+            for key in ("open_loops", "developmental_goals", "active_goals",
+                        "pending_reflection_requests", "pending_self_model_proposals",
+                        "self_model_observations"):
+                if becoming.get(key):
+                    becoming[key] = []
+                    removed = True
+                    break
+            if removed:
+                continue
+            if becoming.get("becoming"):
+                becoming["becoming"] = {}
+                continue
+
+        # Last resort: small, valid JSON with all three dimensions explicitly present.
+        # This path is only used when the full context cannot fit.
+        payload = {
+            "identity_and_self_model": {
+                "identity": payload.get("identity_and_self_model", {}).get("identity", {}),
+                "self_model": "Details omitted to fit context limit",
+            },
+            "relationship_to_current_interlocutor": {
+                "user_id": str(user_id or "default")[:64],
+                "relationship_model": "Unknown unless grounded in persisted evidence",
+            },
+            "developmental_direction": {
+                "becoming": "Refer to persisted goals and open loops when available",
+            },
+        }
+        minimal = render()
+        if len(minimal) > limit:
+            # Keep JSON valid and bounded even for unusually tiny requested limits.
+            minimal = json.dumps({
+                "identity_and_self_model": {},
+                "relationship_to_current_interlocutor": {},
+                "developmental_direction": {},
+            }, ensure_ascii=False)
+            if len(minimal) > limit:
+                return "{}"[:limit]
+            return minimal
+        return minimal
+
+    return render()
