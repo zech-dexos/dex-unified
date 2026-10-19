@@ -33,6 +33,7 @@ Allowed capabilities and argument shapes:
 - inspect_self_model: {}
 - inspect_relationship: {}
 - inspect_becoming: {}
+- inspect_self_model_proposals: {}
 - inspect_lineage: {"limit": integer 1..20}
 - inspect_workspace: {}
 - inspect_goals: {}
@@ -43,7 +44,7 @@ Allowed capabilities and argument shapes:
 - inspect_conversation: {"user_id": string}
 - recall_experience: {"query": string, "limit": integer 1..10}
 - listen: {}
-- evoke: {"resource": "state|self_model|relationship|becoming|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}
+- evoke: {"resource": "state|self_model|relationship|becoming|self_model_proposals|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}
 - search_architecture: {"query": string}
 
 Do not request shell execution, network calls, arbitrary code, or the spark
@@ -54,7 +55,7 @@ If no capability is needed, answer normally in plain text.
 
 
 _NO_ARGS = {
-    "inspect_state", "inspect_identity", "inspect_self_model", "inspect_relationship", "inspect_becoming", "inspect_tools", "inspect_observations", "inspect_workspace", "inspect_goals", "inspect_open_loops",
+    "inspect_state", "inspect_identity", "inspect_self_model", "inspect_relationship", "inspect_becoming", "inspect_self_model_proposals", "inspect_tools", "inspect_observations", "inspect_workspace", "inspect_goals", "inspect_open_loops",
     "inspect_thoughts", "inspect_participant", "listen",
 }
 _ALLOWED = _NO_ARGS | {
