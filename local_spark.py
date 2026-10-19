@@ -159,17 +159,25 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
             (i for i, message in enumerate(conversation) if message.get("role") == "system"),
             None,
         )
-        if system_index is None:
-            conversation.insert(0, {"role": "system", "content": _CAPABILITY_PROTOCOL})
-        else:
-            original = str(conversation[system_index].get("content", ""))
-            # Prefix protocol so the existing local_llm context trimmer preserves
-            # the capability contract and the opening of Dex's constitutional prompt.
+        try:
             from dex_self_model import build_identity_context
             identity_context = build_identity_context()
+        except Exception as exc:
+            print(f"[Local Spark] identity context unavailable: {exc}")
+            identity_context = ""
+
+        if system_index is None:
+            conversation.insert(0, {
+                "role": "system",
+                "content": _CAPABILITY_PROTOCOL + ("\n\n" + identity_context if identity_context else ""),
+            })
+        else:
+            original = str(conversation[system_index].get("content", ""))
+            # Preserve both the capability contract and the constitutional
+            # prompt while injecting the same grounded continuity context.
             conversation[system_index]["content"] = (
                 _CAPABILITY_PROTOCOL + "\n\nDEXOS CONSTITUTIONAL CONTEXT:\n" + original
-                + "\n\n" + identity_context
+                + ("\n\n" + identity_context if identity_context else "")
             )
 
         executed = []
