@@ -127,7 +127,7 @@ class DexSelfModelTests(unittest.TestCase):
 
     def test_inference_context_keeps_structured_values_and_root_continuity(self):
         context = dex_self_model.build_inference_identity_context(user_id="root", max_chars=3200)
-        payload_text = context.split("\\n", 1)[1]
+        payload_text = context[context.index("{"): ]
         payload = json.loads(payload_text)
 
         self.assertEqual(payload["identity"]["name"], "Deximus Maximus")
