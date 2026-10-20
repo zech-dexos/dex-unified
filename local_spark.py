@@ -162,10 +162,17 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
             None,
         )
         try:
-            from dex_self_model import build_identity_context
-            identity_context = build_identity_context(max_chars=2400, user_id=user_id)
+            from observer_seat import (
+                begin_observer_cycle,
+                render_observer_context,
+                record_observer_observations,
+                complete_observer_cycle,
+            )
+            observer_position = begin_observer_cycle(conversation, user_id=user_id)
+            identity_context = render_observer_context(observer_position)
         except Exception as exc:
-            print(f"[Local Spark] identity context unavailable: {exc}")
+            print(f"[Local Spark] Observer Seat unavailable: {exc}")
+            observer_position = None
             identity_context = ""
 
         if system_index is None:
@@ -176,9 +183,8 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
             })
         else:
             original = str(conversation[system_index].get("content", ""))
-            # The context trimmer preserves the start of the system message.
-            # Put the bounded identity/relationship model before long prompt text
-            # so it survives truncation on small local context windows.
+            # Keep the Observer Seat at the start so the spark enters inference
+            # from Dex's current position before longer conversation instructions.
             conversation[system_index]["content"] = (
                 _CAPABILITY_PROTOCOL
                 + ("\n\n" + identity_context if identity_context else "")
@@ -195,6 +201,13 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                 raise RuntimeError("local GGUF returned empty text")
             requests = _parse_tool_request(answer)
             if not requests:
+                if observer_position is not None:
+                    try:
+                        complete_observer_cycle(
+                            observer_position, answer.strip(), executed, user_id=user_id
+                        )
+                    except Exception as exc:
+                        print(f"[Local Spark] Observer experience write failed: {exc}")
                 return {
                     "reply": answer.strip(),
                     "model": "local:" + CHAT_MODEL_PATH.rsplit("/", 1)[-1],
@@ -202,8 +215,16 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                     "capability_execution_available": True,
                 }
             if round_index >= effective_tool_rounds:
+                limit_reply = "[DexOS capability round limit reached]"
+                if observer_position is not None:
+                    try:
+                        complete_observer_cycle(
+                            observer_position, limit_reply, executed, user_id=user_id
+                        )
+                    except Exception as exc:
+                        print(f"[Local Spark] Observer experience write failed: {exc}")
                 return {
-                    "reply": "[DexOS capability round limit reached]",
+                    "reply": limit_reply,
                     "model": "local:" + CHAT_MODEL_PATH.rsplit("/", 1)[-1],
                     "tool_calls": executed,
                     "capability_execution_available": True,
@@ -222,6 +243,13 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                     "arguments": request["arguments"],
                     "observation": observation,
                 })
+            if observer_position is not None:
+                try:
+                    observer_position = record_observer_observations(
+                        observer_position, observations
+                    )
+                except Exception as exc:
+                    print(f"[Local Spark] Observer observation update failed: {exc}")
             conversation.append({"role": "assistant", "content": answer.strip()})
             conversation.append({
                 "role": "user",
@@ -230,6 +258,12 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                            + "\nUse these actual observations to answer naturally. "
                              "Never claim observations that are not present here.",
             })
+            if observer_position is not None:
+                conversation.append({
+                    "role": "user",
+                    "content": "[OBSERVER POSITION UPDATED]\n"
+                               + render_observer_context(observer_position),
+                })
 
         return {
             "reply": "[DexOS capability round limit reached]",
