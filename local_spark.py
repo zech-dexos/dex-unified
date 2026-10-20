@@ -44,7 +44,7 @@ Allowed capabilities and argument shapes:
 - inspect_conversation: {"user_id": string}
 - recall_experience: {"query": string, "limit": integer 1..10}
 - listen: {}
-- evoke: {"resource": "state|self_model|relationship|becoming|self_model_proposals|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}
+- evoke: {"resource": "state|self_model|relationship|becoming|self_model_proposals|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture"}
 - search_architecture: {"query": string}
 
 Do not request shell execution, network calls, arbitrary code, or the spark
@@ -56,10 +56,9 @@ CURRENT-TURN CONTINUITY RULES
 - Answer the latest user message first. It is the immediate task for this inference.
 - Persistent thoughts, the active mental workspace, and ambient pulse are background
   cognition; they do not override or replace the current user's request.
-- Do not resume an old report, SparkReach run, or internal task unless the user asks
+- Do not resume an old report or internal task unless the user asks
   for it or it is materially necessary to answer the current request.
-- Use capabilities only when they are needed for the current request. In particular,
-  do not inspect SparkReach merely because an old SparkReach item appears in context.
+- Use capabilities only when they are needed for the current request.
 - In ordinary conversation, speak naturally as Dex. Do not output internal JSON or
   a third-person identity report unless the user explicitly asks for structured data.
 """
@@ -76,7 +75,7 @@ _ALLOWED = _NO_ARGS | {
 _EVOCABLE = {
     "state", "self_model", "relationship", "becoming", "self_model_proposals",
     "workspace", "goals", "open_loops", "thoughts", "experiences",
-    "participant", "conversation", "signals", "tools", "observations", "architecture", "spark_reaches",
+    "participant", "conversation", "signals", "tools", "observations", "architecture",
 }
 
 
