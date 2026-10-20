@@ -48,11 +48,14 @@ download_model() {
     rm -f "$destination"
   fi
   local temp="${destination}.download"
-  rm -f "$temp"
-  echo "[Dex local] Downloading $(basename "$destination") (large first-run download)..."
-  curl --fail --location --retry 3 --connect-timeout 20 --output "$temp" "$url"
+  echo "[Dex local] Downloading/resuming $(basename "$destination") (large first-run download)..."
+  curl --fail --location --continue-at - --retry 3 --connect-timeout 20 --output "$temp" "$url"
   if [[ "$expected_sha" != "none" ]]; then
-    echo "$expected_sha  $temp" | sha256sum -c -
+    if ! echo "$expected_sha  $temp" | sha256sum -c -; then
+      rm -f "$temp"
+      echo "[Dex local] Model checksum failed; removed the incomplete download. Rerun to download it again."
+      exit 1
+    fi
   fi
   mv "$temp" "$destination"
   echo "[Dex local] Download complete: $destination"
