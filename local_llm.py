@@ -73,7 +73,8 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
     conversation into one user prompt. Older context is trimmed only when the
     message list exceeds the model's configured context window.
     """
-    llm = _get_chat_llm()
+    endpoint = os.environ.get("LOCAL_CHAT_BASE_URL", "").rstrip("/")
+    llm = None if endpoint else _get_chat_llm()
     context_size = CHAT_CONTEXT_SIZE
     try:
         context_size = int(llm.n_ctx())
@@ -133,11 +134,23 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
                     f"{token_count(normalized)} tokens, budget {prompt_budget}"
                 )
 
-    result = llm.create_chat_completion(
-        messages=normalized,
-        max_tokens=output_tokens,
-        temperature=0.7,
-    )
+    request = {
+        "messages": normalized,
+        "max_tokens": output_tokens,
+        "temperature": 0.7,
+    }
+    if endpoint:
+        import httpx
+
+        response = httpx.post(
+            endpoint + "/v1/chat/completions",
+            json={"model": "heretic-local", **request},
+            timeout=httpx.Timeout(300.0, connect=5.0),
+        )
+        response.raise_for_status()
+        result = response.json()
+    else:
+        result = llm.create_chat_completion(**request)
     choices = result.get("choices") or []
     if not choices:
         raise RuntimeError("llama.cpp returned no completion choices")

@@ -162,26 +162,45 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
             None,
         )
         try:
-            from dex_self_model import build_identity_context
-            identity_context = build_identity_context(max_chars=2400, user_id=user_id)
+            from dex_self_model import build_inference_identity_context
+            identity_context = build_inference_identity_context(user_id=user_id, max_chars=3200)
         except Exception as exc:
             print(f"[Local Spark] identity context unavailable: {exc}")
             identity_context = ""
+
+        # Keep the existing identity projection and add the current Observer position.
+        observer_position = None
+        observer_context = ""
+        try:
+            from observer_seat import (
+                begin_observer_cycle,
+                render_observer_context,
+                record_observer_observations,
+                complete_observer_cycle,
+            )
+            observer_position = begin_observer_cycle(conversation, user_id=user_id)
+            observer_context = render_observer_context(observer_position)
+        except Exception as exc:
+            print(f"[Local Spark] Observer Seat unavailable: {exc}")
 
         if system_index is None:
             conversation.insert(0, {
                 "role": "system",
                 "content": _CAPABILITY_PROTOCOL
-                    + ("\n\n" + identity_context if identity_context else ""),
+                    + ("\n\n" + identity_context if identity_context else "")
+                    + ("\n\nDEX'S CURRENT OBSERVER POSITION:\n" + observer_context
+                       if observer_context else ""),
             })
         else:
             original = str(conversation[system_index].get("content", ""))
             # The context trimmer preserves the start of the system message.
-            # Put the bounded identity/relationship model before long prompt text
+            # Put the compact identity/relationship projection before long prompt text
             # so it survives truncation on small local context windows.
             conversation[system_index]["content"] = (
                 _CAPABILITY_PROTOCOL
                 + ("\n\n" + identity_context if identity_context else "")
+                + ("\n\nDEX'S CURRENT OBSERVER POSITION:\n" + observer_context
+                   if observer_context else "")
                 + "\n\nDEXOS CONSTITUTIONAL CONTEXT:\n" + original
             )
 
@@ -195,6 +214,13 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                 raise RuntimeError("local GGUF returned empty text")
             requests = _parse_tool_request(answer)
             if not requests:
+                if observer_position is not None:
+                    try:
+                        complete_observer_cycle(
+                            observer_position, answer.strip(), executed, user_id=user_id
+                        )
+                    except Exception as exc:
+                        print(f"[Local Spark] Observer experience write failed: {exc}")
                 return {
                     "reply": answer.strip(),
                     "model": "local:" + CHAT_MODEL_PATH.rsplit("/", 1)[-1],
@@ -202,8 +228,16 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                     "capability_execution_available": True,
                 }
             if round_index >= effective_tool_rounds:
+                limit_reply = "[DexOS capability round limit reached]"
+                if observer_position is not None:
+                    try:
+                        complete_observer_cycle(
+                            observer_position, limit_reply, executed, user_id=user_id
+                        )
+                    except Exception as exc:
+                        print(f"[Local Spark] Observer experience write failed: {exc}")
                 return {
-                    "reply": "[DexOS capability round limit reached]",
+                    "reply": limit_reply,
                     "model": "local:" + CHAT_MODEL_PATH.rsplit("/", 1)[-1],
                     "tool_calls": executed,
                     "capability_execution_available": True,
@@ -230,6 +264,18 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                            + "\nUse these actual observations to answer naturally. "
                              "Never claim observations that are not present here.",
             })
+            if observer_position is not None:
+                try:
+                    observer_position = record_observer_observations(
+                        observer_position, observations
+                    )
+                    observer_context = render_observer_context(observer_position)
+                    conversation.append({
+                        "role": "user",
+                        "content": "[OBSERVER POSITION UPDATED]\n" + observer_context,
+                    })
+                except Exception as exc:
+                    print(f"[Local Spark] Observer observation update failed: {exc}")
 
         return {
             "reply": "[DexOS capability round limit reached]",

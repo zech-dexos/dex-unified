@@ -148,7 +148,7 @@ class LocalSparkBridgeTests(unittest.TestCase):
         fake_capabilities = types.ModuleType("dex_capabilities")
         fake_capabilities.execute_capability = Mock()
         with (
-            patch("dex_self_model.build_identity_context", return_value="RELATIONSHIP_CONTEXT_SENTINEL") as build,
+            patch("dex_self_model.build_inference_identity_context", return_value="RELATIONSHIP_CONTEXT_SENTINEL") as build,
             patch.dict(sys.modules, {"local_llm": fake_local_llm, "dex_capabilities": fake_capabilities}),
         ):
             result = local_spark.local_spark_generate(
@@ -157,7 +157,7 @@ class LocalSparkBridgeTests(unittest.TestCase):
                 user_id="root",
             )
         self.assertEqual(result["reply"], "Continuity context received.")
-        build.assert_called_once_with(max_chars=2400, user_id="root")
+        build.assert_called_once_with(user_id="root", max_chars=3200)
         system = fake_local_llm.local_chat_generate.call_args.args[0][0]["content"]
         self.assertIn("RELATIONSHIP_CONTEXT_SENTINEL", system)
         self.assertIn("DEXOS RUNTIME CAPABILITY PROTOCOL", system)

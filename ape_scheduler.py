@@ -150,21 +150,9 @@ def run_cycle(
     """
     ranked = gosdw.prioritize_goals(path=path)
 
-    if not ranked:
-        consolidation_phase(
-            "No active goals this cycle. Nothing to focus on.",
-            path=path,
-        )
-        return {
-            "ran": True,
-            "top_goal": None,
-            "thought_id": None,
-            "thought": None,
-            "thought_source": None,
-            "amw_action": "none",
-        }
-
-    top_goal = ranked[0]
+    # A missing goal must not terminate cognition. Continue through
+    # the existing state_review thought-selection path.
+    top_goal = ranked[0] if ranked else None
     current = load_self_state(path)
 
     thought_record = _derive_autonomous_thought(current, ranked)
@@ -215,7 +203,7 @@ def run_cycle(
 
     return {
         "ran": True,
-        "top_goal": top_goal["goal_id"],
+        "top_goal": top_goal.get("goal_id") if top_goal else None,
         "thought_id": thought_id,
         "thought": concept,
         "thought_source": thought_record.get("source"),

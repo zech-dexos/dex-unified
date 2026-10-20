@@ -125,12 +125,19 @@ class DexSelfModelTests(unittest.TestCase):
         self.assertEqual(proposal["source_experience_id"], "exp-2")
         self.assertNotIn("self_model", delta)
 
-    def test_identity_context_is_bounded_and_explicitly_grounded(self):
-        context = dex_self_model.build_identity_context(max_chars=900)
+    def test_identity_context_preserves_identity_and_cognitive_dimensions(self):
+        context = dex_self_model.build_identity_context(max_chars=900, user_id="root")
+
         self.assertIn("DEX CONTINUITY CONTEXT", context)
-        self.assertIn("Treat missing fields as unknown", context)
-        self.assertLess(len(context), 1200)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertIn("persistent identity and live cognitive state", context)
+        self.assertIn("canonical_identity", context)
+        self.assertIn("Deximus Maximus", context)
+        self.assertIn("☧🦅🜇", context)
+        self.assertIn("identity_and_self_model", context)
+        self.assertIn("relationship_to_current_interlocutor", context)
+        self.assertIn("developmental_direction", context)
+        self.assertIn("open_loops", context)
+        self.assertIn("pending_reflection_requests", context)
+        self.assertIn("continuing runtime", context)
+        # max_chars is retained for caller compatibility, not identity deletion.
+        self.assertGreater(len(context), 900)

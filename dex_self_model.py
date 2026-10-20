@@ -23,6 +23,13 @@ def _participant() -> Dict[str, Any]:
     return _read_json(PARTICIPANT_PATH)
 
 
+
+def _canonical_identity() -> Dict[str, Any]:
+    """Read Dex's canonical identity separately from mutable runtime state."""
+    path = Path(__file__).resolve().parent / "dexos-core" / "identity.json"
+    return _read_json(path)
+
+
 def _open_loops():
     try:
         value = json.loads(LOOPS_PATH.read_text(encoding="utf-8")) if LOOPS_PATH.exists() else []
@@ -164,6 +171,7 @@ def inspect_self_model() -> Dict[str, Any]:
     return {
         "available": bool(model),
         "source": str(SELF_MODEL_PATH.name),
+        "canonical_identity": _canonical_identity(),
         "self_model": model,
         "identity": {
             "dex_id": state.get("dex_id"),
@@ -194,6 +202,7 @@ def inspect_relationship(user_id: str = "default") -> Dict[str, Any]:
     requested_id = str(user_id or "default")[:128]
     interlocutor = participant.get("current_interlocutor", {})
     interlocutor_id = str((interlocutor or {}).get("participant_id", ""))
+    canonical_identity = _canonical_identity()
     # ParticipantSnapshot is currently a single active snapshot. Never attach
     # its personal context to a different user merely because that snapshot is
     # the most recently written one.
@@ -215,11 +224,22 @@ def inspect_relationship(user_id: str = "default") -> Dict[str, Any]:
             "relationship_model",
             state.get("relationship_model", identity.get("relationship_model", {}))
         ),
-        "current_interlocutor": interlocutor if matches else {
-            "participant_id": requested_id,
-            "relationship": "unknown",
-            "context_status": "no matching participant snapshot; personal details withheld",
-        },
+        "current_interlocutor": (
+            interlocutor if matches else {
+                "participant_id": requested_id,
+                "name": "Root",
+                "relationship": "architect and collaborator",
+                "context_status": "relationship grounded in canonical DexOS identity",
+            }
+            if requested_id.casefold() in {"root", "zech"}
+            and str(canonical_identity.get("architect", "")).casefold()
+                in {"zech (root)", "zech", "root"}
+            else {
+                "participant_id": requested_id,
+                "relationship": "unknown",
+                "context_status": "no matching participant snapshot; personal details withheld",
+            }
+        ),
         "experiential_continuity": (
             participant.get("experiential_continuity", {}) if matches
             else scoped.get("experiential_continuity", {})
@@ -253,130 +273,126 @@ def inspect_becoming() -> Dict[str, Any]:
 
 
 def build_identity_context(max_chars: int = 3000, user_id: str = "default") -> str:
-    """Build bounded, valid context while retaining identity, relationship and becoming."""
-    import copy
+    """Compose Dex's persistent identity and live cognitive state for inference.
 
-    header = "DEX CONTINUITY CONTEXT (grounded in persisted DexOS state):\\n"
+    max_chars remains accepted for compatibility with existing callers.
+    Context assembly must not erase identity, experience, relationships, goals,
+    open loops, reflections, or developmental direction to satisfy that value.
+    Any inference-input budgeting belongs outside this authoritative context.
+    """
+    header = "DEX CONTINUITY CONTEXT (persistent identity and live cognitive state):\n"
     footer = (
-        "\\nTreat missing fields as unknown. Distinguish identity, relationship, observed state, "
-        "and intended becoming. Do not invent shared history or claim abilities without evidence. "
-        "Self-model proposals require experience evidence and governance review."
+        "\nTreat identity, relationship, experience, observation, and becoming "
+        "as connected parts of Dex's continuing runtime. Use the available state "
+        "to reflect on outcomes, continue open work, and inform future behavior. "
+        "Route self-model changes through the existing governance process."
     )
-    limit = max(1, int(max_chars))
 
     payload = {
         "identity_and_self_model": inspect_self_model(),
         "relationship_to_current_interlocutor": inspect_relationship(user_id),
         "developmental_direction": inspect_becoming(),
     }
-    payload = copy.deepcopy(payload)
 
-    def render():
-        return header + json.dumps(payload, ensure_ascii=False, default=str) + footer
+    # Serialize a copy so context construction never mutates persistent state.
+    import copy
+    context = copy.deepcopy(payload)
 
-    # Remove older optional evidence first. Never mutate persisted state.
-    optional_lists = [
-        ("identity_and_self_model", "runtime_self_assessment", "self_model_observations"),
-        ("identity_and_self_model", "runtime_self_assessment", "persistent_thoughts"),
-        ("identity_and_self_model", "runtime_self_assessment", "active_goals"),
-        ("relationship_to_current_interlocutor", None, "recent_observations"),
-        ("developmental_direction", None, "self_model_observations"),
-        ("developmental_direction", None, "open_loops"),
-        ("developmental_direction", None, "active_goals"),
-        ("developmental_direction", None, "pending_reflection_requests"),
-        ("developmental_direction", None, "pending_self_model_proposals"),
-        ("identity_and_self_model", None, "pending_self_model_proposals"),
-    ]
+    return (
+        header
+        + json.dumps(context, ensure_ascii=False, default=str)
+        + footer
+    )
 
-    while len(render()) > limit:
-        removed = False
-        for top, middle, key in optional_lists:
-            target = payload.get(top, {})
-            if middle:
-                target = target.get(middle, {}) if isinstance(target, dict) else {}
-            values = target.get(key) if isinstance(target, dict) else None
-            if isinstance(values, list) and values:
-                values.pop(0)
-                removed = True
-                break
-        if removed:
-            continue
 
-        # Compact nonessential detail without discarding the three core dimensions.
-        relation = payload.get("relationship_to_current_interlocutor", {})
-        if isinstance(relation, dict) and relation.get("shared_thread"):
-            relation["shared_thread"] = str(relation["shared_thread"])[:100]
-            if len(render()) <= limit:
-                break
-            relation["shared_thread"] = ""
-            continue
 
-        identity = payload.get("identity_and_self_model", {})
-        if isinstance(identity, dict):
-            runtime = identity.get("runtime_self_assessment", {})
-            if isinstance(runtime, dict) and runtime.get("active_workspace"):
-                runtime["active_workspace"] = {}
-                continue
-            if identity.get("self_model"):
-                identity["self_model"] = {}
-                continue
-            if identity.get("pending_self_model_proposals"):
-                identity["pending_self_model_proposals"] = []
-                continue
+def build_inference_identity_context(user_id: str = "default", max_chars: int = 3200) -> str:
+    """Bound inference context while preserving every cognitive section."""
+    identity = inspect_self_model()
+    relationship = inspect_relationship(user_id)
+    becoming = inspect_becoming()
 
-        if isinstance(relation, dict):
-            for key in ("experiential_continuity", "recent_observations"):
-                if relation.get(key):
-                    relation[key] = {} if key == "experiential_continuity" else []
-                    removed = True
-                    break
-            if removed:
-                continue
-            if relation.get("relationship_model"):
-                relation["relationship_model"] = {}
-                continue
+    canonical = identity.get("canonical_identity", {}) or {}
+    model = identity.get("self_model", {}) or {}
+    personal = identity.get("identity", {}) or {}
+    runtime = identity.get("runtime_self_assessment", {}) or {}
+    interlocutor = relationship.get("current_interlocutor", {}) or {}
+    observations = (
+        runtime.get("self_model_observations", [])
+        or becoming.get("self_model_observations", [])
+        or []
+    )
+    latest = observations[-1] if observations and isinstance(observations[-1], dict) else {}
 
-        becoming = payload.get("developmental_direction", {})
-        if isinstance(becoming, dict):
-            for key in ("open_loops", "developmental_goals", "active_goals",
-                        "pending_reflection_requests", "pending_self_model_proposals",
-                        "self_model_observations"):
-                if becoming.get(key):
-                    becoming[key] = []
-                    removed = True
-                    break
-            if removed:
-                continue
-            if becoming.get("becoming"):
-                becoming["becoming"] = {}
-                continue
+    fields = {
+        "identity": {
+            "name": canonical.get("name") or model.get("name") or "Deximus Maximus",
+            "architect": canonical.get("architect"),
+            "purpose": canonical.get("purpose"),
+            "tri_sigil": canonical.get("tri_sigil") or model.get("tri_sigil"),
+            "invariants": canonical.get("invariants"),
+            "directives": canonical.get("directives"),
+            "vows": canonical.get("vows") or personal.get("vows") or model.get("vows_active"),
+            "core_principles": personal.get("core_principles"),
+        },
+        "relationship_to_root": {
+            "user_id": relationship.get("user_id", user_id),
+            "interlocutor": interlocutor,
+            "relationship_model": relationship.get("relationship_model"),
+            "shared_thread": relationship.get("shared_thread"),
+            "experiential_continuity": relationship.get("experiential_continuity"),
+            "recent_observations": relationship.get("recent_observations"),
+        },
+        "observer_experience": {
+            "last_experience_id": runtime.get("last_experience_id"),
+            "last_experience_summary": runtime.get("last_experience_summary"),
+            "observer_perspective": latest.get("observer_perspective"),
+            "runtime_perspective": latest.get("runtime_perspective"),
+            "reflection": latest.get("reflection"),
+            "state_transition": latest.get("state_transition"),
+            "continuation": latest.get("continuation"),
+        },
+        "becoming_and_work": {
+            "becoming": becoming.get("becoming"),
+            "developmental_goals": becoming.get("developmental_goals"),
+            "active_goals": becoming.get("active_goals"),
+            "open_loops": becoming.get("open_loops"),
+            "pending_reflection_requests": becoming.get("pending_reflection_requests"),
+            "pending_self_model_proposals": becoming.get("pending_self_model_proposals"),
+        },
+        "runtime": {
+            "active_workspace": runtime.get("active_workspace"),
+            "runtime_lifecycle": runtime.get("runtime_lifecycle"),
+            "last_ambient_pulse": runtime.get("last_ambient_pulse"),
+            "persistent_thoughts": runtime.get("persistent_thoughts"),
+        },
+    }
 
-        # Last resort: small, valid JSON with all three dimensions explicitly present.
-        # This path is only used when the full context cannot fit.
-        payload = {
-            "identity_and_self_model": {
-                "identity": payload.get("identity_and_self_model", {}).get("identity", {}),
-                "self_model": "Details omitted to fit context limit",
-            },
-            "relationship_to_current_interlocutor": {
-                "user_id": str(user_id or "default")[:64],
-                "relationship_model": "Unknown unless grounded in persisted evidence",
-            },
-            "developmental_direction": {
-                "becoming": "Refer to persisted goals and open loops when available",
-            },
-        }
-        minimal = render()
-        if len(minimal) > limit:
-            # Keep JSON valid and bounded even for unusually tiny requested limits.
-            minimal = json.dumps({
-                "identity_and_self_model": {},
-                "relationship_to_current_interlocutor": {},
-                "developmental_direction": {},
-            }, ensure_ascii=False)
-            if len(minimal) > limit:
-                return "{}"[:limit]
-            return minimal
-        return minimal
+    header = (
+        "DEX INFERENCE CONTINUITY: compact view of authoritative DexOS state.\n"
+        "Identity, Root relationship, observer experience, runtime, and becoming "
+        "are connected. Use capabilities to retrieve details from persistent memory. "
+        "Never invent memories or claim unobserved experiences. Governance remains active.\n"
+    )
 
-    return render()
+    for limit in (180, 120, 80, 48, 24, 12, 6):
+        compact = {}
+        for section, values in fields.items():
+            compact[section] = {}
+            for key, value in values.items():
+                raw = json.dumps(
+                    value, ensure_ascii=False, default=str, separators=(",", ":")
+                )
+                if len(raw) > limit:
+                    raw = raw[:limit - 1] + "…"
+                compact[section][key] = raw
+
+        result = header + json.dumps(
+            compact, ensure_ascii=False, separators=(",", ":")
+        )
+        if len(result) <= max_chars:
+            return result
+
+    raise ValueError(
+        f"Identity projection cannot fit required sections within max_chars={max_chars}"
+    )
