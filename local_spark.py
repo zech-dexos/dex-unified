@@ -224,15 +224,15 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
         compact_system = (
             _CAPABILITY_PROTOCOL
             + (
-                "\\n\\nCURRENT DEX CONVERSATION RULES:\\n" + response_rules
+                "\n\nCURRENT DEX CONVERSATION RULES:\n" + response_rules
                 if response_rules else
-                "\\n\\nAnswer the latest participant message naturally as Dex. "
+                "\n\nAnswer the latest participant message naturally as Dex. "
                 "Do not emit internal JSON or a third-person identity report unless asked."
             )
-            + ("\\n\\n" + talnir_rules if talnir_rules else "")
-            + ("\\n\\nDEX IDENTITY AND RELATIONSHIP:\\n" + identity_context
+            + ("\n\n" + talnir_rules if talnir_rules else "")
+            + ("\n\nDEX IDENTITY AND RELATIONSHIP:\n" + identity_context
                if identity_context else "")
-            + ("\\n\\nDEX'S CURRENT OBSERVER POSITION:\\n" + observer_context
+            + ("\n\nDEX'S CURRENT OBSERVER POSITION:\n" + observer_context
                if observer_context else "")
         )
         if system_index is None:
