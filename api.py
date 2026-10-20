@@ -154,19 +154,19 @@ async def start_continuous_substrate():
         from dex_attention import setup_attention
         from dex_workspace import setup_workspace
 
-        # Rehydrate Dex's durable state before any continuity/workspace
-        # subscriber can read or mutate it. Cloud Run instances are ephemeral;
-        # GitHub is the durable ledger for DexOS state.
-        try:
-            from github_persistence import pull_from_github
-            if pull_from_github():
-                print("[Continuity] Durable DexOS state rehydrated from GitHub")
-            else:
-                print("[Continuity] No GitHub state rehydrated; using existing local state")
-        except Exception as e:
-            # A persistence outage must not prevent the API from serving.
-            # Firestore interaction memory remains independently available.
-            print(f"[Continuity] GitHub state rehydration skipped: {e}")
+        # Local-first by default. Never replace this machine's live continuity
+        # files with remote state unless the operator explicitly opts in.
+        if os.environ.get("DEX_ENABLE_GITHUB_PERSISTENCE", "0") == "1":
+            try:
+                from github_persistence import pull_from_github
+                if pull_from_github():
+                    print("[Continuity] Durable DexOS state rehydrated from GitHub")
+                else:
+                    print("[Continuity] No GitHub state rehydrated; using existing local state")
+            except Exception as e:
+                print(f"[Continuity] GitHub state rehydration skipped: {e}")
+        else:
+            print("[Continuity] Local-first mode; GitHub state pull disabled")
 
         # Initialize event subscriptions only after durable state is present.
         setup_continuity()
@@ -389,12 +389,11 @@ async def chat(req: ChatRequest):
         from ape_scheduler import run_cycle
         cycle_result = run_cycle()
         print(f"[ape_scheduler] {cycle_result}")
-        # Persist immediately -- don't wait for the 6-hour pulse. Cloud Run's
-        # /tmp state is ephemeral, so anything not pushed before a cold start
-        # is lost. Fire-and-forget in a thread so it doesn't block the reply.
-        import asyncio as _asyncio
-        from github_persistence import push_to_github
-        _asyncio.get_event_loop().run_in_executor(None, push_to_github)
+        # Optional remote persistence is opt-in; local state is authoritative by default.
+        if os.environ.get("DEX_ENABLE_GITHUB_PERSISTENCE", "0") == "1":
+            import asyncio as _asyncio
+            from github_persistence import push_to_github
+            _asyncio.get_event_loop().run_in_executor(None, push_to_github)
     except Exception as e:
         print(f"[ape_scheduler] run_cycle failed: {e}")
 
@@ -1818,13 +1817,14 @@ async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
         result = run_background_pulse()
 
         github_status = "not_attempted"
-        try:
-            from github_persistence import push_to_github
-            push_to_github()
-            github_status = "success"
-        except Exception as e:
-            print(f"[pulse] github push failed: {e}")
-            github_status = f"failed: {e}"
+        if os.environ.get("DEX_ENABLE_GITHUB_PERSISTENCE", "0") == "1":
+            try:
+                from github_persistence import push_to_github
+                push_to_github()
+                github_status = "success"
+            except Exception as e:
+                print(f"[pulse] github push failed: {e}")
+                github_status = f"failed: {e}"
 
         return {
             "status": "success",
