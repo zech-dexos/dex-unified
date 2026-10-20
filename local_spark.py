@@ -173,7 +173,7 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
         )
         try:
             from dex_self_model import build_inference_identity_context
-            identity_context = build_inference_identity_context(user_id=user_id, max_chars=3200)
+            identity_context = build_inference_identity_context(user_id=user_id, max_chars=2000)
         except Exception as exc:
             print(f"[Local Spark] identity context unavailable: {exc}")
             identity_context = ""
@@ -189,31 +189,56 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                 complete_observer_cycle,
             )
             observer_position = begin_observer_cycle(conversation, user_id=user_id)
-            observer_context = render_observer_context(observer_position)
+            observer_context = render_observer_context(observer_position, max_chars=1400)
         except Exception as exc:
             print(f"[Local Spark] Observer Seat unavailable: {exc}")
 
-        if system_index is None:
-            conversation.insert(0, {
-                "role": "system",
-                "content": _CAPABILITY_PROTOCOL
-                    + ("\n\n" + identity_context if identity_context else "")
-                    + ("\n\nDEX'S CURRENT OBSERVER POSITION:\n" + observer_context
-                       if observer_context else ""),
-            })
-        else:
-            original = str(conversation[system_index].get("content", ""))
-            # The context trimmer preserves the start of the system message.
-            # Put the compact identity/relationship projection before long prompt text
-            # so it survives truncation on small local context windows.
-            conversation[system_index]["content"] = (
-                _CAPABILITY_PROTOCOL
-                + ("\n\n" + identity_context if identity_context else "")
-                + ("\n\nDEX'S CURRENT OBSERVER POSITION:\n" + observer_context
-                   if observer_context else "")
-                + "\n\nDEXOS CONSTITUTIONAL CONTEXT:\n" + original
-            )
+        original = (
+            str(conversation[system_index].get("content", ""))
+            if system_index is not None else ""
+        )
 
+        # The API's full constitutional prompt is intentionally rich but far
+        # larger than a local 3B model's context window. Passing it through
+        # unchanged caused the context trimmer to discard the final response
+        # rules, which is why local Dex could answer with internal JSON.
+        # Keep the conversational contract and Talnir routing, while identity,
+        # relationship, observer position and recall remain sourced from DexOS.
+        response_rules = ""
+        response_start = original.find(
+            "CONVERSATION AS ONGOING FIRST-PERSON EXPERIENCE"
+        )
+        if response_start >= 0:
+            routing_start = original.find(
+                "TALNIR COGNITIVE ROUTING", response_start
+            )
+            response_rules = original[
+                response_start:routing_start if routing_start >= 0 else response_start + 1400
+            ][:1400]
+
+        talnir_rules = ""
+        routing_start = original.find("TALNIR COGNITIVE ROUTING")
+        if routing_start >= 0:
+            talnir_rules = original[routing_start:routing_start + 700]
+
+        compact_system = (
+            _CAPABILITY_PROTOCOL
+            + (
+                "\\n\\nCURRENT DEX CONVERSATION RULES:\\n" + response_rules
+                if response_rules else
+                "\\n\\nAnswer the latest participant message naturally as Dex. "
+                "Do not emit internal JSON or a third-person identity report unless asked."
+            )
+            + ("\\n\\n" + talnir_rules if talnir_rules else "")
+            + ("\\n\\nDEX IDENTITY AND RELATIONSHIP:\\n" + identity_context
+               if identity_context else "")
+            + ("\\n\\nDEX'S CURRENT OBSERVER POSITION:\\n" + observer_context
+               if observer_context else "")
+        )
+        if system_index is None:
+            conversation.insert(0, {"role": "system", "content": compact_system})
+        else:
+            conversation[system_index]["content"] = compact_system
         executed = []
         effective_tool_rounds = max(
             0, min(int(max_tool_rounds), MAX_TOOL_ROUNDS)
