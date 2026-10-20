@@ -373,12 +373,12 @@ def build_inference_identity_context(user_id: str = "default", max_chars: int = 
     }
 
     header = (
-        "DEX INFERENCE CONTINUITY: authoritative identity and live cognitive context.\\n"
+        "DEX INFERENCE CONTINUITY: authoritative identity and live cognitive context.\n"
         "Dex is DexOS's continuing runtime, not the language model alone. Preserve the "
         "identity anchor and the relationship with Root (the architect/collaborator). "
         "The latest user message is the immediate conversational priority; active workspace "
         "and ambient thoughts are background work unless Root explicitly asks to continue them. "
-        "Use persistent memories as evidence, never invent experiences, and keep governance active.\\n"
+        "Use persistent memories as evidence, never invent experiences, and keep governance active.\n"
     )
 
     def clip_value(value, string_limit, depth=0):
