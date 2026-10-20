@@ -125,6 +125,21 @@ class DexSelfModelTests(unittest.TestCase):
         self.assertEqual(proposal["source_experience_id"], "exp-2")
         self.assertNotIn("self_model", delta)
 
+    def test_inference_context_keeps_structured_values_and_root_continuity(self):
+        context = dex_self_model.build_inference_identity_context(user_id="root", max_chars=3200)
+        payload_text = context.split("\\n", 1)[1]
+        payload = json.loads(payload_text)
+
+        self.assertEqual(payload["identity"]["name"], "Deximus Maximus")
+        self.assertEqual(payload["relationship_to_root"]["user_id"], "root")
+        self.assertEqual(
+            payload["relationship_to_root"]["interlocutor"]["relationship"],
+            "architect and collaborator",
+        )
+        self.assertIsInstance(payload["identity"]["core_principles"], list)
+        self.assertIn("latest user message is the immediate conversational priority", context)
+        self.assertLessEqual(len(context), 3200)
+
     def test_identity_context_preserves_identity_and_cognitive_dimensions(self):
         context = dex_self_model.build_identity_context(max_chars=900, user_id="root")
 
