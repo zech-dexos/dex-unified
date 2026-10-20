@@ -12,7 +12,7 @@ except ModuleNotFoundError:
     def get_related_knowledge_nodes(concept_id, max_depth=2, min_relevance_score=0.7):
         return []
 
-from local_llm import local_chat_generate
+from local_spark import local_spark_generate
 from self_state import SELF_STATE_PATH
 
 _stop = False
@@ -57,23 +57,14 @@ Return only the resulting internal reflection."""
         },
     ]
 
-    # Persistent identity and self-model inform language generation.
-    root = Path(__file__).resolve().parent
-    for filename, label in (
-        ("identity.json", "Persistent identity"),
-        ("self_model.json", "Persistent self-model"),
-    ):
-        try:
-            data = (root / filename).read_text(encoding="utf-8")
-            if data.strip():
-                messages[1]["content"] += (
-                    f"\n\n{label} ({filename}):\n{data[:8000]}"
-                )
-        except (OSError, UnicodeError):
-            pass
-
-    from local_llm import local_chat_generate
-    return local_chat_generate(messages, max_tokens=512)
+    # Route ambient reflection through the same DexOS cognitive bridge as
+    # interactive conversation. This preserves identity projection, Root
+    # relationship, observer position, capability governance, and experience
+    # recording instead of bypassing those loops with raw model inference.
+    result = local_spark_generate(messages, max_tokens=512, user_id="root")
+    if isinstance(result, dict):
+        return str(result.get("reply", "")).strip()
+    return str(result or "").strip()
 
 
 def run_forever(interval_seconds: int, max_cycles: Optional[int] = None, path: Path = SELF_STATE_PATH):
