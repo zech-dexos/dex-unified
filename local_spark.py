@@ -173,7 +173,7 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
         )
         try:
             from dex_self_model import build_inference_identity_context
-            identity_context = build_inference_identity_context(user_id=user_id, max_chars=2000)
+            identity_context = build_inference_identity_context(user_id=user_id, max_chars=3200)
         except Exception as exc:
             print(f"[Local Spark] identity context unavailable: {exc}")
             identity_context = ""
@@ -189,7 +189,8 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                 complete_observer_cycle,
             )
             observer_position = begin_observer_cycle(conversation, user_id=user_id)
-            observer_context = render_observer_context(observer_position, max_chars=1400)
+            observer_context = render_observer_context(observer_position)
+            observer_context = observer_context[:1400]
         except Exception as exc:
             print(f"[Local Spark] Observer Seat unavailable: {exc}")
 
@@ -221,8 +222,17 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
         if routing_start >= 0:
             talnir_rules = original[routing_start:routing_start + 700]
 
+        # Keep short caller-supplied constitutional prompts intact (including
+        # lightweight clients); discard only oversized API prompts that cannot
+        # fit the local context and replace them with extracted response rules.
+        compact_original = original if len(original) <= 2400 else ""
+        identity_context = identity_context[:2000]
         compact_system = (
             _CAPABILITY_PROTOCOL
+            + (
+                "\n\nDEXOS CONSTITUTIONAL CONTEXT:\n" + compact_original
+                if compact_original else ""
+            )
             + (
                 "\n\nCURRENT DEX CONVERSATION RULES:\n" + response_rules
                 if response_rules else
