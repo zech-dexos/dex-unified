@@ -18,8 +18,33 @@ export LOCAL_CHAT_N_CTX="${LOCAL_CHAT_N_CTX:-3072}"
 export LOCAL_CHAT_THREADS="${LOCAL_CHAT_THREADS:-2}"
 export PYTHONUNBUFFERED=1
 
-command -v curl >/dev/null 2>&1 || { echo "Missing curl. Install it, then rerun: sudo apt-get install curl"; exit 1; }
+# Install only missing WSL prerequisites needed to build llama-cpp-python and run the launcher.
+missing_packages=()
+command -v curl >/dev/null 2>&1 || missing_packages+=(curl)
+command -v gcc >/dev/null 2>&1 || missing_packages+=(build-essential)
+command -v cmake >/dev/null 2>&1 || missing_packages+=(cmake)
+command -v ss >/dev/null 2>&1 || missing_packages+=(iproute2)
+if ! "$PYTHON" -m venv --help >/dev/null 2>&1; then
+  missing_packages+=(python3-venv)
+fi
+if (( ${#missing_packages[@]} )); then
+  echo "[Dex local] Installing required WSL packages: ${missing_packages[*]}"
+  if [[ "$(id -u)" == "0" ]]; then
+    apt-get update && apt-get install -y "${missing_packages[@]}"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo apt-get update && sudo apt-get install -y "${missing_packages[@]}"
+  else
+    echo "Cannot install prerequisites automatically. Install: ${missing_packages[*]}"
+    exit 1
+  fi
+fi
 command -v sha256sum >/dev/null 2>&1 || { echo "Missing sha256sum utility."; exit 1; }
+
+if [[ -n "$(ss -ltn 2>/dev/null | awk -v p=":$PORT" '$4 ~ p"$" {print $4}')" ]]; then
+  echo "[Dex local] Port $PORT is already in use."
+  echo "Stop the existing process on port $PORT, or rerun with PORT=8766 bash run_dex_local.sh"
+  exit 1
+fi
 
 if [[ ! -x "$VENV/bin/python" ]]; then
   echo "[Dex local] Creating isolated Python environment..."
@@ -68,12 +93,6 @@ download_model \
 download_model \
   "https://huggingface.co/tinyopsec/Llama-3.2-3B-Instruct-heretic-ablitered-uncensored-GGUF/resolve/main/model_q4_k_m.gguf" \
   "$LOCAL_CHAT_MODEL_PATH" "0c90de6859205a9df55663b42dba96e1bbb8157cf41234ce462afd414c68f956"
-
-if [[ -n "$(ss -ltn 2>/dev/null | awk -v p=":$PORT" '$4 ~ p"$" {print $4}')" ]]; then
-  echo "[Dex local] Port $PORT is already in use."
-  echo "Stop the existing process on port $PORT, or rerun with PORT=8766 ./run_dex_local.sh"
-  exit 1
-fi
 
 echo "[Dex local] Starting DexOS API on http://127.0.0.1:$PORT ..."
 "$VENV/bin/uvicorn" api:app --host 127.0.0.1 --port "$PORT" >"$API_LOG" 2>&1 &
