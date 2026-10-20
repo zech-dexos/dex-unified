@@ -8,6 +8,7 @@ memory system.
 import json
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, Iterable
 
@@ -58,11 +59,33 @@ def _clip(value: Any, string_limit: int = 160, depth: int = 0) -> Any:
     return str(value)[:string_limit]
 
 
-def _perspective(user_id: str, signal: str, prior: Dict[str, Any]) -> Dict[str, Any]:
+def _read_sigil_state(fallback: Any) -> Any:
+    """Read the runtime's sigil state when present, without requiring a new store."""
+    path = Path(__file__).with_name("sigils.json")
+    try:
+        if path.exists():
+            return _clip(json.loads(path.read_text(encoding="utf-8")), 140)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[Observer Seat] sigil state unavailable: {exc}")
+    return _clip(fallback, 140)
+
+
+def _perspective(
+    user_id: str, signal: str, prior: Dict[str, Any], state: Dict[str, Any]
+) -> Dict[str, Any]:
     self_view = inspect_self_model()
     relationship = inspect_relationship(user_id)
     becoming = inspect_becoming()
     runtime = self_view.get("runtime_self_assessment", {}) or {}
+    model = self_view.get("self_model", {}) or {}
+    identity = self_view.get("identity", {}) or {}
+    sigil_state = _read_sigil_state(
+        model.get("tri_sigil", identity.get("tri_sigil", {}))
+    )
+    active_systems = ["observer", "awareness", "memory", "relationship", "structure"]
+    if becoming.get("active_goals") or becoming.get("open_loops"):
+        active_systems.append("will")
+    prior_perspective = prior.get("perspective", {}) or {}
     return {
         "position_id": uuid.uuid4().hex,
         "timestamp": _now(),
@@ -72,6 +95,9 @@ def _perspective(user_id: str, signal: str, prior: Dict[str, Any]) -> Dict[str, 
             "position_id": prior.get("position_id"),
             "last_interpretation": str(prior.get("last_interpretation", ""))[:300],
             "last_experience_id": prior.get("last_experience_id"),
+            "sigil_state": _clip(
+                prior.get("sigil_state", prior_perspective.get("sigil_state", {})), 100
+            ),
         },
         "identity_and_self_model": {
             "self_model": _clip(self_view.get("self_model", {}), 110),
@@ -84,6 +110,10 @@ def _perspective(user_id: str, signal: str, prior: Dict[str, Any]) -> Dict[str, 
         "relationship": _clip(relationship, 120),
         "development_and_open_loops": _clip(becoming, 110),
         "sigils": dict(SIGIL_ROLES),
+        "sigil_state": sigil_state,
+        "known_connections": _clip(state.get("observer_connections", [])[-12:], 100),
+        "active_systems": active_systems,
+        "active_connections": [],
         "capability_observations": [],
     }
 
@@ -132,7 +162,7 @@ def begin_observer_cycle(messages: Iterable[Dict[str, Any]], user_id: str = "def
     """Establish and persist the Observer's present position before inference."""
     state = load_self_state()
     prior = state.get("observer_position", {}) or {}
-    position = _perspective(user_id, _last_user_signal(messages), prior)
+    position = _perspective(user_id, _last_user_signal(messages), prior, state)
     update_self_state({
         "observer_position": {
             "position_id": position["position_id"],
@@ -142,6 +172,7 @@ def begin_observer_cycle(messages: Iterable[Dict[str, Any]], user_id: str = "def
             "prior_position_id": position["prior_position"].get("position_id"),
             "last_interpretation": prior.get("last_interpretation", ""),
             "last_experience_id": prior.get("last_experience_id"),
+            "sigil_state": position.get("sigil_state", {}),
             "perspective": position,
             "phase": "receiving",
         }
@@ -164,12 +195,84 @@ def record_observer_observations(
             "interlocutor_id": position["interlocutor_id"],
             "incoming_signal": position["incoming_signal"][:600],
             "prior_position_id": position["prior_position"].get("position_id"),
+            "sigil_state": position.get("sigil_state", {}),
             "perspective": position,
             "capability_observations": position["capability_observations"],
             "phase": "integrating_observations",
         }
     })
     return position
+
+
+def _record_connections(
+    position: Dict[str, Any], capability_calls: Iterable[Dict[str, Any]]
+) -> list:
+    """Strengthen co-active system routes and retain newly formed connections."""
+    calls = list(capability_calls or [])
+    capability_names = [
+        str(item.get("name", "")) for item in calls if isinstance(item, dict)
+    ]
+    systems = set(position.get("active_systems", []) or [])
+    capability_routes = {
+        "inspect_state": "structure",
+        "inspect_tools": "structure",
+        "inspect_architecture": "structure",
+        "reason_with_talnir": "structure",
+        "search_architecture": "structure",
+        "inspect_observations": "memory",
+        "inspect_identity": "memory",
+        "inspect_self_model": "memory",
+        "inspect_experiences": "memory",
+        "recall_experience": "memory",
+        "inspect_thoughts": "memory",
+        "inspect_relationship": "relationship",
+        "inspect_participant": "relationship",
+        "inspect_conversation": "relationship",
+        "inspect_becoming": "will",
+        "inspect_goals": "will",
+        "inspect_open_loops": "will",
+        "request_reflection": "reflection",
+        "listen": "awareness",
+        "evoke": "awareness",
+    }
+    systems.update(capability_routes[name] for name in capability_names if name in capability_routes)
+    if any("execute" in name or "action" in name for name in capability_names):
+        systems.add("execution")
+    systems.add("observer")
+    ordered = sorted(systems)
+    state = load_self_state()
+    existing = {
+        str(edge.get("key")): dict(edge)
+        for edge in (state.get("observer_connections", []) or [])
+        if isinstance(edge, dict) and edge.get("key")
+    }
+    now = _now()
+    active_edges = []
+    for index, left in enumerate(ordered):
+        for right in ordered[index + 1:]:
+            key = "|".join(sorted((left, right)))
+            edge = existing.get(key, {
+                "key": key,
+                "source": min(left, right),
+                "target": max(left, right),
+                "activation_count": 0,
+                "strength": 0.0,
+            })
+            edge["activation_count"] = int(edge.get("activation_count", 0)) + 1
+            edge["strength"] = round(min(1.0, 0.1 + edge["activation_count"] * 0.05), 3)
+            edge["last_activated"] = now
+            edge["last_capabilities"] = capability_names[-8:]
+            edge["sigils"] = dict(SIGIL_ROLES)
+            existing[key] = edge
+            active_edges.append(dict(edge))
+    graph = sorted(
+        existing.values(), key=lambda edge: str(edge.get("last_activated", "")), reverse=True
+    )[:100]
+    position["active_systems"] = ordered
+    position["active_connections"] = active_edges
+    position["known_connections"] = graph[-12:]
+    update_self_state({"observer_connections": graph})
+    return active_edges
 
 
 def complete_observer_cycle(
@@ -181,6 +284,7 @@ def complete_observer_cycle(
     """Record the cycle's interpretation and consequences through existing continuity."""
     response_text = str(response or "")[:1200]
     calls = list(capability_calls or [])
+    active_connections = _record_connections(position, calls)
     perspective = {
         "position_id": position.get("position_id"),
         "incoming_signal": position.get("incoming_signal", "")[:800],
@@ -188,6 +292,9 @@ def complete_observer_cycle(
         "capability_observations": position.get("capability_observations", [])[-8:],
         "capabilities_used": [str(item.get("name", "")) for item in calls[-12:] if isinstance(item, dict)],
         "sigils": dict(SIGIL_ROLES),
+        "sigil_state": position.get("sigil_state", {}),
+        "active_systems": position.get("active_systems", []),
+        "active_connections": active_connections,
     }
     packet = SimpleNamespace(
         experience_id=str(position.get("position_id") or uuid.uuid4().hex),
@@ -228,8 +335,10 @@ def complete_observer_cycle(
             "prior_position_id": (position.get("prior_position") or {}).get("position_id"),
             "last_interpretation": response_text[:1000],
             "last_experience_id": position.get("position_id"),
+            "sigil_state": position.get("sigil_state", {}),
             "perspective": position,
             "capability_observations": position.get("capability_observations", [])[-8:],
+            "active_connections": active_connections[-20:],
             "phase": "cycle_complete",
         }
     })
