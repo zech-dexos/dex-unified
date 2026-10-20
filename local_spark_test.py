@@ -162,6 +162,11 @@ class LocalSparkBridgeTests(unittest.TestCase):
         self.assertIn("RELATIONSHIP_CONTEXT_SENTINEL", system)
         self.assertIn("DEXOS RUNTIME CAPABILITY PROTOCOL", system)
 
+    def test_protocol_keeps_current_turn_ahead_of_ambient_sparkreach(self):
+        self.assertIn("Answer the latest user message first", local_spark._CAPABILITY_PROTOCOL)
+        self.assertIn("do not inspect SparkReach merely because an old SparkReach item appears", local_spark._CAPABILITY_PROTOCOL)
+        self.assertIn("Persistent thoughts, the active mental workspace, and ambient pulse are background", local_spark._CAPABILITY_PROTOCOL)
+
     def test_no_capability_request_is_plain_reply(self):
         fake_local_llm = types.ModuleType("local_llm")
         fake_local_llm.CHAT_MODEL_PATH = "/models/heretic.gguf"
