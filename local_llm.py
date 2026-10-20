@@ -19,7 +19,7 @@ CHAT_MODEL_PATH = os.environ.get(
         "/app/models/heretic/model_q4_k_m.gguf",
     ),
 )
-CHAT_CONTEXT_SIZE = max(512, int(os.environ.get("LOCAL_CHAT_N_CTX", "2048")))
+CHAT_CONTEXT_SIZE = max(512, int(os.environ.get("LOCAL_CHAT_N_CTX", "3072")))
 CHAT_THREADS = max(1, int(os.environ.get("LOCAL_CHAT_THREADS", "2")))
 
 
