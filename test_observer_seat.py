@@ -71,9 +71,11 @@ class ObserverSeatTests(unittest.TestCase):
 
     @patch("observer_seat.update_self_state")
     @patch("observer_seat.record_experience_context")
+    @patch("observer_seat.load_self_state")
     def test_completed_cycle_records_interpretation_and_persists_position(
-        self, record_experience, update_state
+        self, load_state, record_experience, update_state
     ):
+        load_state.return_value = {}
         record_experience.return_value = {"recorded": True, "experience_id": "cycle-2"}
         position = {
             "position_id": "cycle-2",
@@ -93,7 +95,7 @@ class ObserverSeatTests(unittest.TestCase):
         packet = record_experience.call_args.args[0]
         self.assertEqual(packet.observer_perspective["interpretation"], "Here is my interpretation.")
         self.assertEqual(packet.observer_perspective["sigils"], observer_seat.SIGIL_ROLES)
-        update_state.assert_called_once()
+        self.assertGreaterEqual(update_state.call_count, 2)
 
 
 if __name__ == "__main__":
