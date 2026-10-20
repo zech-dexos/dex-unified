@@ -24,7 +24,7 @@ command -v curl >/dev/null 2>&1 || missing_packages+=(curl)
 command -v gcc >/dev/null 2>&1 || missing_packages+=(build-essential)
 command -v cmake >/dev/null 2>&1 || missing_packages+=(cmake)
 command -v ss >/dev/null 2>&1 || missing_packages+=(iproute2)
-if ! "$PYTHON" -m venv --help >/dev/null 2>&1; then
+if [[ ! -x "$VENV/bin/python" ]]; then
   missing_packages+=(python3-venv)
 fi
 if (( ${#missing_packages[@]} )); then
