@@ -74,7 +74,11 @@ download_model() {
   fi
   local temp="${destination}.download"
   echo "[Dex local] Downloading/resuming $(basename "$destination") (large first-run download)..."
-  curl --fail --location --continue-at - --retry 3 --connect-timeout 20 --output "$temp" "$url"
+  local -a resume_args=()
+  if [[ -s "$temp" ]]; then
+    resume_args=(--continue-at -)
+  fi
+  curl --fail --location "${resume_args[@]}" --retry 3 --connect-timeout 20 --output "$temp" "$url"
   if [[ "$expected_sha" != "none" ]]; then
     if ! echo "$expected_sha  $temp" | sha256sum -c -; then
       rm -f "$temp"
