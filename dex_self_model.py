@@ -307,7 +307,11 @@ def build_identity_context(max_chars: int = 3000, user_id: str = "default") -> s
 
 
 def build_inference_identity_context(user_id: str = "default", max_chars: int = 3200) -> str:
-    """Bound inference context while preserving every cognitive section."""
+    """Build a readable, bounded projection without destroying field values.
+
+    Canonical identity and the Root relationship are high-priority context.
+    Optional runtime details are reduced before either is discarded.
+    """
     identity = inspect_self_model()
     relationship = inspect_relationship(user_id)
     becoming = inspect_becoming()
@@ -341,7 +345,7 @@ def build_inference_identity_context(user_id: str = "default", max_chars: int = 
             "relationship_model": relationship.get("relationship_model"),
             "shared_thread": relationship.get("shared_thread"),
             "experiential_continuity": relationship.get("experiential_continuity"),
-            "recent_observations": relationship.get("recent_observations"),
+            "recent_observations": (relationship.get("recent_observations") or [])[-2:],
         },
         "observer_experience": {
             "last_experience_id": runtime.get("last_experience_id"),
@@ -355,44 +359,82 @@ def build_inference_identity_context(user_id: str = "default", max_chars: int = 
         "becoming_and_work": {
             "becoming": becoming.get("becoming"),
             "developmental_goals": becoming.get("developmental_goals"),
-            "active_goals": becoming.get("active_goals"),
-            "open_loops": becoming.get("open_loops"),
-            "pending_reflection_requests": becoming.get("pending_reflection_requests"),
-            "pending_self_model_proposals": becoming.get("pending_self_model_proposals"),
+            "active_goals": (becoming.get("active_goals") or [])[-3:],
+            "open_loops": (becoming.get("open_loops") or [])[-3:],
+            "pending_reflection_requests": (becoming.get("pending_reflection_requests") or [])[-3:],
+            "pending_self_model_proposals": (becoming.get("pending_self_model_proposals") or [])[-2:],
         },
         "runtime": {
             "active_workspace": runtime.get("active_workspace"),
             "runtime_lifecycle": runtime.get("runtime_lifecycle"),
             "last_ambient_pulse": runtime.get("last_ambient_pulse"),
-            "persistent_thoughts": runtime.get("persistent_thoughts"),
+            "persistent_thoughts": (runtime.get("persistent_thoughts") or [])[-3:],
         },
     }
 
     header = (
-        "DEX INFERENCE CONTINUITY: compact view of authoritative DexOS state.\n"
-        "Identity, Root relationship, observer experience, runtime, and becoming "
-        "are connected. Use capabilities to retrieve details from persistent memory. "
-        "Never invent memories or claim unobserved experiences. Governance remains active.\n"
+        "DEX INFERENCE CONTINUITY: authoritative identity and live cognitive context.\\n"
+        "Dex is DexOS's continuing runtime, not the language model alone. Preserve the "
+        "identity anchor and the relationship with Root (the architect/collaborator). "
+        "The latest user message is the immediate conversational priority; active workspace "
+        "and ambient thoughts are background work unless Root explicitly asks to continue them. "
+        "Use persistent memories as evidence, never invent experiences, and keep governance active.\\n"
     )
 
-    for limit in (180, 120, 80, 48, 24, 12, 6):
-        compact = {}
-        for section, values in fields.items():
-            compact[section] = {}
-            for key, value in values.items():
-                raw = json.dumps(
-                    value, ensure_ascii=False, default=str, separators=(",", ":")
-                )
-                if len(raw) > limit:
-                    raw = raw[:limit - 1] + "…"
-                compact[section][key] = raw
+    def clip_value(value, string_limit, depth=0):
+        if depth >= 5:
+            return str(value)[:string_limit]
+        if isinstance(value, str):
+            return value if len(value) <= string_limit else value[:string_limit - 1] + "…"
+        if isinstance(value, dict):
+            return {
+                str(key): clip_value(item, string_limit, depth + 1)
+                for key, item in list(value.items())[:12]
+            }
+        if isinstance(value, (list, tuple)):
+            return [clip_value(item, string_limit, depth + 1) for item in list(value)[:4]]
+        if value is None or isinstance(value, (bool, int, float)):
+            return value
+        return str(value)[:string_limit]
 
-        result = header + json.dumps(
-            compact, ensure_ascii=False, separators=(",", ":")
-        )
+    # Trim the contents of values, not JSON-encoded strings. This keeps objects,
+    # lists, booleans, and numeric fields semantically intact for the model.
+    for string_limit in (240, 180, 120, 80, 55, 35):
+        compact = {
+            section: {
+                key: clip_value(value, string_limit)
+                for key, value in values.items()
+                if value not in (None, "", [], {})
+            }
+            for section, values in fields.items()
+        }
+        result = header + json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
         if len(result) <= max_chars:
             return result
 
-    raise ValueError(
-        f"Identity projection cannot fit required sections within max_chars={max_chars}"
-    )
+    # Under a very small budget, discard secondary runtime detail first.
+    compact = {
+        "identity": {
+            key: clip_value(value, 80)
+            for key, value in fields["identity"].items()
+            if value not in (None, "", [], {})
+        },
+        "relationship_to_root": {
+            key: clip_value(value, 80)
+            for key, value in fields["relationship_to_root"].items()
+            if key in {"user_id", "interlocutor", "relationship_model", "shared_thread", "experiential_continuity"}
+            and value not in (None, "", [], {})
+        },
+        "observer_experience": {
+            "last_experience_summary": clip_value(fields["observer_experience"]["last_experience_summary"], 100)
+        },
+        "becoming_and_work": {
+            "becoming": clip_value(fields["becoming_and_work"]["becoming"], 100),
+            "developmental_goals": clip_value(fields["becoming_and_work"]["developmental_goals"], 100),
+        },
+    }
+    result = header + json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
+    if len(result) <= max_chars:
+        return result
+    # The caller's limit is advisory: never silently erase Dex's core identity.
+    return result
