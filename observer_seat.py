@@ -146,7 +146,23 @@ def render_observer_context(position: Dict[str, Any], max_chars: int = 3200) -> 
         view["identity_and_self_model"].pop("self_model", None)
         encoded = json.dumps(view, ensure_ascii=False, default=str)
     if len(encoded) > max_chars:
-        view["incoming_signal"] = str(view.get("incoming_signal", ""))[:400]
+        view.pop("known_connections", None)
+        view.pop("active_connections", None)
+        encoded = json.dumps(view, ensure_ascii=False, default=str)
+    if len(encoded) > max_chars:
+        for string_limit in (100, 70, 45, 25):
+            view = _clip(view, string_limit)
+            encoded = json.dumps(view, ensure_ascii=False, default=str)
+            if len(encoded) <= max_chars:
+                break
+    if len(encoded) > max_chars:
+        view = {
+            key: view[key] for key in (
+                "position_id", "timestamp", "interlocutor_id", "incoming_signal",
+                "prior_position", "identity_and_self_model", "relationship",
+                "sigils", "sigil_state", "active_systems", "capability_observations",
+            ) if key in view
+        }
         encoded = json.dumps(view, ensure_ascii=False, default=str)
     return (
         "OBSERVER SEAT — DEX'S CURRENT POSITION\n"
@@ -270,7 +286,7 @@ def _record_connections(
     )[:100]
     position["active_systems"] = ordered
     position["active_connections"] = active_edges
-    position["known_connections"] = graph[-12:]
+    position["known_connections"] = graph[:12]
     update_self_state({"observer_connections": graph})
     return active_edges
 
