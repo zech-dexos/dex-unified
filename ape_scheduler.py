@@ -176,17 +176,10 @@ def run_cycle(
 
     amw_state = current.get("active_mental_workspace_state", {})
 
-    if (
+    if not (
         amw_state.get("is_active")
         and amw_state.get("concept_identifier") == concept
     ):
-        amw.refresh_thought(
-            kg_lookup=kg_lookup,
-            llm_reflect=llm_reflect,
-            path=path,
-        )
-        action = "refreshed"
-    else:
         amw.activate_thought(
             concept_identifier=concept,
             description=concept,
@@ -194,10 +187,34 @@ def run_cycle(
             path=path,
         )
         action = "activated"
+    else:
+        action = "refreshed"
+
+    # A cycle is not complete when it merely selects/activates a thought.
+    # Develop that thought now, in this same cycle, through the injected
+    # reflection path. This ensures the first cycle also reaches local Spark,
+    # identity/self-model context, Observer Seat, and experience persistence.
+    refreshed_state = amw.refresh_thought(
+        kg_lookup=kg_lookup,
+        llm_reflect=llm_reflect,
+        path=path,
+    )
+    active_workspace = (refreshed_state or load_self_state(path)).get(
+        "active_mental_workspace_state", {}
+    )
+    reflections = active_workspace.get("internal_reflections", [])
+    latest_reflection = (
+        reflections[-1].get("reflection", "")
+        if reflections and isinstance(reflections[-1], dict)
+        else ""
+    )
+    if action == "activated":
+        action = "activated_and_reflected"
 
     consolidation_phase(
         f"Cycle ran. Dex selected thought '{concept}' "
-        f"(source={thought_record.get('source')}) — AMW {action}.",
+        f"(source={thought_record.get('source')}) — AMW {action}."
+        + (f" Reflection: {latest_reflection[:500]}" if latest_reflection else ""),
         path=path,
     )
 
@@ -208,5 +225,6 @@ def run_cycle(
         "thought": concept,
         "thought_source": thought_record.get("source"),
         "amw_action": action,
+        "reflection": latest_reflection,
     }
 
