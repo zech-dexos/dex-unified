@@ -29,13 +29,32 @@ def _derive_autonomous_thought(current, ranked):
     state. The LLM is NOT asked what Dex should think about.
 
     Selection order:
-      1. existing active/deferred persistent thoughts
-      2. unresolved goal/subtask
-      3. active workspace needing reconsideration
-      4. current goal as a last-resort cognitive target
+      1. pending explicit reflection requests
+      2. existing active persistent thoughts
+      3. unresolved goal/subtask
+      4. active workspace needing reconsideration
+      5. current goal as a last-resort cognitive target
 
     The returned record is the thing Dex chooses to hold.
     """
+    pending_requests = [
+        item for item in current.get("pending_reflection_requests", [])
+        if isinstance(item, dict) and item.get("status", "pending") == "pending"
+    ]
+    if pending_requests:
+        request = pending_requests[0]
+        focus = str(request.get("focus", "")).strip()
+        if focus:
+            reason = str(request.get("reason", "")).strip()
+            return {
+                "content": (
+                    "Architecture reflection request: " + focus
+                    + (("\\nReason: " + reason) if reason else "")
+                ),
+                "source": "reflection_request",
+                "reflection_request_id": request.get("request_id"),
+            }
+
     thoughts = list(current.get("persistent_thoughts", []))
 
     active = [
@@ -124,6 +143,8 @@ def _persist_autonomous_thought(thought, path):
 
     if thought.get("goal_id"):
         record["goal_id"] = thought["goal_id"]
+    if thought.get("reflection_request_id"):
+        record["reflection_request_id"] = thought["reflection_request_id"]
 
     thoughts.append(record)
 
@@ -210,6 +231,35 @@ def run_cycle(
     )
     if action == "activated":
         action = "activated_and_reflected"
+
+    # Resolve an explicit reflection request only after the reflection has
+    # actually been generated and stored in the active workspace.
+    reflection_request_id = thought_record.get("reflection_request_id")
+    if reflection_request_id and latest_reflection:
+        latest_state = load_self_state(path)
+        pending = list(latest_state.get("pending_reflection_requests", []) or [])
+        recent = list(latest_state.get("recent_reflection_requests", []) or [])
+        updated_pending = []
+        for request in pending:
+            if (
+                isinstance(request, dict)
+                and request.get("request_id") == reflection_request_id
+                and request.get("status", "pending") == "pending"
+            ):
+                completed = dict(request)
+                completed.update({
+                    "status": "completed",
+                    "completed_at": _now_iso(),
+                    "thought_id": thought_id,
+                    "reflection": latest_reflection[:1000],
+                })
+                recent.append(completed)
+            else:
+                updated_pending.append(request)
+        update_self_state({
+            "pending_reflection_requests": updated_pending,
+            "recent_reflection_requests": recent[-20:],
+        }, path=path)
 
     consolidation_phase(
         f"Cycle ran. Dex selected thought '{concept}' "
