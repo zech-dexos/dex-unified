@@ -40,10 +40,39 @@ if (( ${#missing_packages[@]} )); then
 fi
 command -v sha256sum >/dev/null 2>&1 || { echo "Missing sha256sum utility."; exit 1; }
 
-if [[ -n "$(ss -ltn 2>/dev/null | awk -v p=":$PORT" '$4 ~ p"$" {print $4}')" ]]; then
-  echo "[Dex local] Port $PORT is already in use."
-  echo "Stop the existing process on port $PORT, or rerun with PORT=8766 bash run_dex_local.sh"
-  exit 1
+port_in_use() {
+  ss -ltn 2>/dev/null | awk -v p=":$1" '$4 ~ p"$" {found=1} END {exit !found}'
+}
+
+# Reuse an already-running local Dex API when it is healthy and both local
+# model files are present. Otherwise select the next free port automatically,
+# rather than making Root diagnose a stale process or manually choose a port.
+if port_in_use "$PORT"; then
+  health_json="$(curl --silent --show-error --fail --max-time 3 "http://127.0.0.1:$PORT/health" 2>/dev/null || true)"
+  if [[ -n "$health_json" ]] && HEALTH_JSON="$health_json" "$PYTHON" -c '
+import json, os, sys
+try:
+    h = json.loads(os.environ["HEALTH_JSON"])
+    sys.exit(0 if h.get("status") == "live" and h.get("chat_model_file_present") and h.get("ambient_model_file_present") else 1)
+except Exception:
+    sys.exit(1)
+'; then
+    echo "[Dex local] A healthy Dex API with both local models is already running on port $PORT."
+    echo "[Dex local] Connecting Root to the existing runtime; no second API or model download will be started."
+    DEX_API_URL="http://127.0.0.1:$PORT/chat" "$PYTHON" "$ROOT_DIR/dex_chat.py"
+    exit $?
+  fi
+
+  original_port="$PORT"
+  while port_in_use "$PORT"; do
+    PORT=$((PORT + 1))
+    if (( PORT > 65535 )); then
+      echo "[Dex local] No free TCP port found starting from $original_port."
+      exit 1
+    fi
+  done
+  export PORT
+  echo "[Dex local] Port $original_port is occupied by a different or incomplete service; using free port $PORT."
 fi
 
 if [[ ! -x "$VENV/bin/python" ]]; then
