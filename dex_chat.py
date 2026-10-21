@@ -1,8 +1,9 @@
 import json
+import os
 import urllib.request
 import urllib.error
 
-URL = "http://127.0.0.1:8765/chat"
+URL = os.environ.get("DEX_API_URL", f"http://127.0.0.1:{os.environ.get('PORT', '8765')}/chat")
 history = []
 
 print("\nDex local conversation")

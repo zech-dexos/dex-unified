@@ -19,16 +19,8 @@ AMBIENT_PROMPT = (
     "Develop the target briefly: notice a connection, tension, implication, or next useful angle. "
     "Do not resolve the target unless the state clearly supports resolution. "
     "Do not invent goals or open loops. "
-    "If the target exposes a concrete unresolved question that would benefit from bounded computation, "
-    "you may choose a SparkReach. A SparkReach is optional and must be justified by the target. "
-    "When choosing one, provide a short intention, a concrete reach_objective, and small Python code "
-    "that answers that objective. Do not use SparkReach merely because a pulse occurred. "
-    "You may also judge a completed SparkReach returned below. "
-    "Output ONLY valid JSON in this exact format, with optional spark_reach and spark_judgment fields: "
+    "Output ONLY valid JSON with thought, salience, and optional self_model_proposal fields: "
     '{"thought": "brief development of the selected target...", "salience": 0.5, '
-    '"spark_reach": {"intention": "...", "reach_objective": "...", "code": "..."} or null, '
-    '"spark_judgment": {"run_id": "...", "judgment": "accepted|rejected|redirected|deferred", '
-    '"reason": "..."} or null, '
     '"self_model_proposal": {"field": "current_understanding|becoming|developmental_goals|relationship_model", '
     '"proposed_value": "...", "rationale": "...", "evidence": ["experience or observation"]} or null}'
 )
@@ -297,15 +289,6 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         recalled = recall_into_workspace(target["text"], limit=3)
         recalled_ctx = format_recalled_experiences(recalled)
 
-        from spark_reach import pending_spark_reaches
-        pending_reaches = pending_spark_reaches(limit=3)
-        completed_ctx = ""
-        if pending_reaches:
-            completed_ctx = (
-                "\n\nCOMPLETED SPARK REACHES AWAITING YOUR JUDGMENT:\n"
-                + json.dumps(pending_reaches, ensure_ascii=False)
-            )
-
         # Talnir supplies a deterministic structured reading before ambient reasoning.
         talnir_context = ""
         try:
@@ -331,9 +314,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             + f"SELECTED COGNITIVE TARGET ({target['kind']}):\n{target['text']}\n\n"
             + talnir_context
             + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
-            + completed_ctx
-            + "\n\nReturn one small development of that target. "
-              "A SparkReach is optional; only choose it when the unresolved work itself gives you a reason."
+            + "\n\nReturn one small development of that target."
         )
         response_text = await llm_callable(target_prompt)
 
@@ -350,73 +331,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             data = json.loads(clean_text)
             thought_text = data.get("thought", "")
             salience = float(data.get("salience", 0.0))
-            spark_request = data.get("spark_reach")
-            spark_judgment = data.get("spark_judgment")
             self_model_proposal = data.get("self_model_proposal")
-
-            # A completed reach is an observation, not memory. Ambient
-            # cognition must explicitly judge it before integration.
-            if isinstance(spark_judgment, dict) and spark_judgment.get("run_id"):
-                current_state = load_self_state()
-                pending = list(current_state.get("pending_spark_reaches", []))
-                run_id = spark_judgment["run_id"]
-                judgment = str(spark_judgment.get("judgment", "")).lower()
-                if judgment in {"accepted", "rejected", "redirected", "deferred"}:
-                    updated = []
-                    for packet in pending:
-                        if packet.get("run_id") == run_id:
-                            packet = dict(packet)
-                            packet["dex_judgment"] = {
-                                "judgment": judgment,
-                                "reason": str(spark_judgment.get("reason", ""))[:2000],
-                                "judged_at": _now_iso(),
-                            }
-                            packet["awaiting_dex_judgment"] = False
-                            packet["integrated"] = judgment == "accepted"
-                        updated.append(packet)
-
-                    delta = {"pending_spark_reaches": updated[-10:]}
-                    if judgment == "accepted":
-                        matched = next(
-                            (p for p in updated if p.get("run_id") == run_id),
-                            None,
-                        )
-                        if matched:
-                            result = matched.get("spark_result", {})
-                            observation = str(result.get("stdout", "")).strip()
-                            if observation:
-                                ws = dict(current_state.get("active_mental_workspace_state", {}))
-                                reflections = list(ws.get("internal_reflections", []))
-                                reflections.append({
-                                    "timestamp": _now_iso(),
-                                    "source": "spark_reach",
-                                    "run_id": run_id,
-                                    "observation": observation[-4000:],
-                                    "judgment": "accepted",
-                                })
-                                ws["internal_reflections"] = reflections[-10:]
-                                delta["active_mental_workspace_state"] = ws
-                    update_self_state(delta)
-
-            # Choosing a reach is itself a recorded act of cognition. Queue it
-            # only when the ambient result explicitly requests one.
-            spark_result = None
-            if isinstance(spark_request, dict):
-                intention = str(spark_request.get("intention", "")).strip()
-                objective = str(spark_request.get("reach_objective", "")).strip()
-                code = str(spark_request.get("code", ""))
-                if intention and objective and code.strip():
-                    from spark_reach import submit_spark_reach
-                    spark_result = submit_spark_reach(
-                        intention=intention,
-                        reach_objective=objective,
-                        code=code,
-                        selected_context=[
-                            {"kind": target.get("kind"), "id": target.get("id"), "text": target.get("text")}
-                        ],
-                        invocation_origin="self_directed",
-                        initiated_by="ambient_cognition",
-                    )
 
             if thought_text:
                 # Complete a queued reflection request only after usable ambient cognition.
@@ -484,8 +399,6 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                         salience=salience,
                         runtime_trace={
                             "lifecycle_mode": lifecycle_mode,
-                            "spark_reach": spark_result,
-                            "spark_judgment": spark_judgment,
                         },
                     )
                     if isinstance(self_model_proposal, dict):
@@ -524,8 +437,6 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "salience": salience,
                     "source": "ambient_pulse",
                     "target": target,
-                    "spark_reach": spark_result,
-                    "spark_judgment": spark_judgment,
                     "self_model_proposal": (
                         {"status": "queued_for_governance"}
                         if isinstance(self_model_proposal, dict) else None
@@ -537,8 +448,6 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "thought": thought_text,
                     "salience": salience,
                     "target": target,
-                    "spark_reach": spark_result,
-                    "spark_judgment": spark_judgment,
                     "self_model_proposal": (
                         {"status": "queued_for_governance"}
                         if isinstance(self_model_proposal, dict) else None
