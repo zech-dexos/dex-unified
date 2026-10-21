@@ -12,15 +12,21 @@ except ImportError:
     SIGIL_ACTIVE = False
     _memory = None
 try:
-    from pathlib import Path
-    Path("/app/dexos_state").mkdir(exist_ok=True)
-    from github_persistence import pull_from_github, push_to_github
-    pull_from_github()
+    # Do not contact GitHub or overwrite this machine's state during import.
+    # Remote persistence is an explicit opt-in for deployment environments.
+    import os
+    if os.environ.get("DEX_ENABLE_GITHUB_PERSISTENCE", "0") == "1":
+        from pathlib import Path
+        state_dir = Path(os.environ.get("DEXOS_STATE_DIR", str(Path(__file__).resolve().parent / "dexos_state")))
+        state_dir.mkdir(parents=True, exist_ok=True)
+        from github_persistence import pull_from_github
+        pull_from_github()
     from dexos import DexOS
     _dexos = DexOS()
     _dexos.initialize()
     DEXOS_ACTIVE = True
 except Exception as e:
+    print(f"[DexOS] governed runtime initialization unavailable: {type(e).__name__}: {e}")
     DEXOS_ACTIVE = False
     _dexos = None
 def dex_runtime(user_input: str, user_id: str = "default") -> dict:
