@@ -301,10 +301,41 @@ def complete_observer_cycle(
     response_text = str(response or "")[:1200]
     calls = list(capability_calls or [])
     active_connections = _record_connections(position, calls)
+    prior_position = position.get("prior_position") or {}
+    # Preserve the semantic transition between cycles, not just the latest reply.
+    # Provenance is explicit: the incoming signal is observed input; the response
+    # is the runtime's recorded interpretation, not proof of subjective feeling.
+    meaning_record = {
+        "schema": "dexos.meaning.v1",
+        "position_id": position.get("position_id"),
+        "prior_position_id": prior_position.get("position_id"),
+        "source": {
+            "kind": "conversation_signal",
+            "interlocutor_id": str(user_id or "default")[:128],
+            "signal_status": "observed_input",
+        },
+        "content": {
+            "incoming_signal": str(position.get("incoming_signal", ""))[:800],
+            "current_interpretation": response_text,
+            "prior_interpretation": str(prior_position.get("last_interpretation", ""))[:1000],
+            "capability_observations": position.get("capability_observations", [])[-8:],
+        },
+        "continuity": {
+            "prior_experience_id": prior_position.get("last_experience_id"),
+            "current_experience_id": position.get("position_id"),
+            "revisable": True,
+        },
+        "status": {
+            "persisted_with_experience": True,
+            "independent_subjective_experience_claim": False,
+        },
+    }
+    position["meaning_record"] = meaning_record
     perspective = {
         "position_id": position.get("position_id"),
         "incoming_signal": position.get("incoming_signal", "")[:800],
         "interpretation": response_text,
+        "meaning_record": meaning_record,
         "capability_observations": position.get("capability_observations", [])[-8:],
         "capabilities_used": [str(item.get("name", "")) for item in calls[-12:] if isinstance(item, dict)],
         "sigils": dict(SIGIL_ROLES),
