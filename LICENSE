@@ -1,0 +1,50 @@
+# DexOS Noncommercial Use and Commercial Licensing Terms
+
+Copyright (c) 2026 Zech / the applicable DexOS rights holder. All rights reserved.
+
+## 1. Public availability
+
+This repository is publicly available for viewing, study, evaluation, and community participation. Public availability does not place DexOS in the public domain and does not grant unrestricted rights to use the software.
+
+## 2. Permission for noncommercial use
+
+Subject to these terms, the rights holder grants you a limited, non-exclusive, worldwide, royalty-free, revocable license to view, run, study, and modify the original DexOS code solely for personal, educational, research, or other noncommercial purposes.
+
+You may not distribute modified or unmodified copies of the covered code to others unless the rights holder has separately authorized that distribution in writing. This license does not grant rights to third-party components; those remain governed by their own licenses.
+
+## 3. Commercial use requires a separate license
+
+Without prior written permission and a separate commercial license from the rights holder, you may not use the covered DexOS code, or a derivative work based on it, for commercial purposes, including:
+
+- Selling, licensing, or sublicensing DexOS or a product incorporating covered DexOS code.
+- Incorporating covered DexOS code into a product or service offered for payment.
+- Operating a paid service, commercial deployment, or revenue-generating offering that uses covered DexOS code.
+- Using covered DexOS code to provide services to customers as part of a commercial business.
+
+Commercial licenses may include fees, royalties, revenue sharing, attribution, scope limitations, and other written conditions agreed with the rights holder.
+
+If you want to use DexOS commercially, contact the rights holder and obtain written authorization before doing so.
+
+## 4. Ownership and reservations
+
+No ownership of DexOS is transferred by this license. All rights not expressly granted are reserved by the applicable rights holder. Nothing in these terms grants rights in trademarks, names, logos, or branding.
+
+## 5. Third-party materials
+
+This license applies only to code and materials the rights holder is authorized to license. Third-party dependencies, models, datasets, and other materials may have separate terms that must be followed. If another license governs a component, that license controls the use of that component.
+
+## 6. Termination
+
+Permission under these terms terminates if you materially violate them. Upon termination, you must stop the use that is no longer authorized, subject to any rights or remedies available under applicable law.
+
+## 7. No warranty
+
+The covered code is provided "as is", to the extent permitted by applicable law, without warranties of any kind.
+
+## 8. Questions and commercial licensing
+
+Contact the repository owner through an officially designated contact channel to request commercial licensing or written permission.
+
+---
+
+These terms are intended to describe a source-available, noncommercial-use licensing approach. They are not a substitute for legal advice. The rights holder should verify ownership, third-party license obligations, and the final terms before relying on them for enforcement.
