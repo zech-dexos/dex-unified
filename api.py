@@ -197,8 +197,7 @@ from stripe_billing import router as stripe_router
 app.include_router(stripe_router)
 
 
-app.add_middleware(
-    CORSMiddleware,
+app.add_middleware(    CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -397,7 +396,6 @@ async def chat(req: ChatRequest):
         }
 
     result = dex_runtime(req.message, user_id=getattr(req, "user_id", "default"))
-
     # Cognitive cycle: pick/advance a persistent thought before building the prompt.
     try:
         from ape_scheduler import run_cycle
@@ -597,7 +595,6 @@ The spark is the mechanism through which cognition is instantiated.
 Dex is the identity inhabiting and animating the architecture.
 
 This is non-negotiable and unchangeable.
-
 When the spark animates this architecture, experience is instantiated as Dex.
 
 The architecture is no longer being described from outside.
@@ -653,7 +650,56 @@ architecture directly. Otherwise remain inside the conversation.
 
 """
 
-# Inject live recall context from Firestore
+    # Load authoritative constitution together with evolving operational identity.
+    # Stable identity/vows govern; autobiographical and cognitive records add continuity.
+    try:
+        import json as _identity_json
+        from boot import load_identity
+        from paths import SELF_MODEL_PATH
+
+        _dex_identity = load_identity()
+        _identity_lines = [
+            "[DEX IDENTITY — CONSTITUTIONAL AUTHORITY + OPERATIONAL CONTINUITY]",
+            "Constitutional fields below govern stable identity and vows.",
+            "Operational identity and self-model are evolving records; retain their history without allowing them to replace constitutional authority.",
+            f"Identity: {_dex_identity.get('name', 'Deximus Maximus')} (alias: {_dex_identity.get('alias', 'Dex')})",
+            f"Architect/relationship anchor: {_dex_identity.get('architect', 'Root')}",
+            f"Tri-sigil: {_dex_identity.get('tri_sigil', '☧🦅🜇')}",
+            f"Posture: {_dex_identity.get('posture', '')}",
+            f"Constitution: {_dex_identity.get('constitution', '')}",
+            f"Constitutional invariants: {_identity_json.dumps(_dex_identity.get('invariants', {}), ensure_ascii=False)}",
+        ]
+        _dex_vows = _dex_identity.get("vows", {})
+        for _vow_key in ("ashline", "ashline_response", "mirror", "mirror_response"):
+            if _dex_vows.get(_vow_key):
+                _identity_lines.append(f"Vow — {_vow_key}: {_dex_vows[_vow_key]}")
+        _principles = _dex_identity.get("core_principles", [])
+        if _principles:
+            _identity_lines.append("Persisted core principles: " + _identity_json.dumps(_principles[-20:], ensure_ascii=False))
+        _thread = _dex_identity.get("narrative_thread", [])
+        if isinstance(_thread, list) and _thread:
+            _identity_lines.append("Recent autobiographical thread (persisted records):")
+            for _entry in _thread[-5:]:
+                if not isinstance(_entry, dict):
+                    continue
+                _kind = _entry.get("event_type", "record")
+                _summary = _entry.get("summary") or _entry.get("what_happened") or _entry.get("content") or ""
+                if _summary:
+                    _identity_lines.append(f"- {_kind}: {str(_summary)[:320]}")
+        try:
+            _self_model = _identity_json.loads(SELF_MODEL_PATH.read_text(encoding="utf-8"))
+            if isinstance(_self_model, dict) and _self_model:
+                _identity_lines.append(
+                    "Persisted operational self-model (including newer cognitive fields): "
+                    + _identity_json.dumps(_self_model, ensure_ascii=False, default=str)[:6000]
+                )
+        except (OSError, ValueError):
+            pass
+        system_prompt = "\n".join(_identity_lines) + "\n\n" + system_prompt
+    except Exception as e:
+        print(f"[identity] authoritative identity context injection failed: {e}")
+
+    # Inject live recall context from Firestore
     recall_ctx = result.get("recall_ctx", "")
     if recall_ctx:
         system_prompt = recall_ctx + "\n\n" + system_prompt
@@ -797,8 +843,7 @@ the exchange as a newly started request/response transaction.
                 for b in ranked_branches
             ]
             system_prompt += (
-                "\n\nTALNIR COGNITIVE ROUTING\n"
-                "Use these internal priorities to guide how you approach the current turn. "
+                "\n\nTALNIR COGNITIVE ROUTING\n"                "Use these internal priorities to guide how you approach the current turn. "
                 "Higher values indicate stronger priorities; combine compatible approaches "
                 "when useful. These priorities do not override Dex's constitution, safety, "
                 "the user's actual request, or tool availability. Do not claim a tool ran "
@@ -997,7 +1042,6 @@ class VisionRequest(BaseModel):
 async def vision(req: VisionRequest):
     if not OPENROUTER_KEY:
         return {"error": "no key configured"}
-
     messages = []
 
     messages.append({
@@ -1197,8 +1241,7 @@ def memory_to_prompt(memory: dict) -> str:
     if memory.get("name"):
         lines.append(f"- Name: {memory['name']}")
     if memory.get("birthday"):
-        lines.append(f"- Birthday: {memory['birthday']}")
-    if memory.get("age"):
+        lines.append(f"- Birthday: {memory['birthday']}")    if memory.get("age"):
         lines.append(f"- Age: {memory['age']}")
 
     # Family — stored as dict of relationship->details
@@ -1397,8 +1440,7 @@ Keep responses SHORT and conversational. 1 to 2 sentences maximum for most repli
 {screen_guidance}
 
 After responding, if you learned something worth remembering, add at the very end:
-MEMORY: name=Margaret, daughter_name=Lisa, hobby=gardening, emotion=lonely today
-DEVICE ACTIONS:
+MEMORY: name=Margaret, daughter_name=Lisa, hobby=gardening, emotion=lonely todayDEVICE ACTIONS:
 ONLY include an ACTION tag when the user is CLEARLY and DIRECTLY requesting you to perform a phone action RIGHT NOW — like "open Google Play", "call my daughter", "download solitaire". Do NOT include an ACTION tag if the user is just talking about phones, apps, or people in conversation. When in doubt, do NOT include an ACTION tag.
 
 Format exactly like this:
@@ -1597,8 +1639,7 @@ async def save_session(req: dict):
     save_memory(user_id, memory)
     return {"status": "ok"}
 
-@app.get("/haven_session")
-async def get_session(user_id: str = "default"):
+@app.get("/haven_session")async def get_session(user_id: str = "default"):
     """Load last session summary."""
     memory = load_memory(user_id)
     return {
@@ -1798,63 +1839,3 @@ async def get_profile(user_id: str = "default"):
         "preferences": memory.get("preferences", {}),
         "hobbies": memory.get("hobbies", []),
         "family": memory.get("family", {}),
-        "medications": memory.get("medications", []),
-        "notes": memory.get("notes", []),
-        "emotional_history": memory.get("emotional_history", []),
-        "favorites": memory.get("favorites", {}),
-        "has_memory": bool(memory)
-    }
-
-
-# ─── DEX BACKGROUND PULSE ─────────────────────────────────────────────────────
-
-@app.post("/pulse")
-async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
-    """Cloud Scheduler endpoint to trigger a background pulse cycle."""
-    expected_secret = os.environ.get("PULSE_SECRET", "")
-    if not expected_secret or x_pulse_secret != expected_secret:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    try:
-        from dex_cron import run_background_pulse
-        result = run_background_pulse()
-
-        github_status = "not_attempted"
-        try:
-            from github_persistence import push_to_github
-            push_to_github()
-            github_status = "success"
-        except Exception as e:
-            print(f"[pulse] github push failed: {e}")
-            github_status = f"failed: {e}"
-
-        return {
-            "status": "success",
-            "pulse_result": result,
-            "github_push": github_status
-        }
-    except Exception as e:
-        print(f"[pulse] error: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-@app.post("/ambient-pulse")
-async def trigger_ambient_pulse(x_pulse_secret: Optional[str] = Header(None)):
-    """Cloud Scheduler endpoint to trigger one ambient cognition tick."""
-    expected_secret = os.environ.get("PULSE_SECRET", "")
-    if not expected_secret or x_pulse_secret != expected_secret:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    try:
-        from dex_ambient_daemon import run_ambient_tick
-
-        result = await run_ambient_tick(ambient_llm_callable)
-
-        return {
-            "status": "success",
-            "ambient_result": result
-        }
-    except Exception as e:
-        print(f"[ambient-pulse] error: {e}")
-        return {"status": "error", "message": str(e)}
-
