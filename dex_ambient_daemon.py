@@ -324,7 +324,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             integrated_model = refresh_self_model("ambient_cognition_context")
             context = integrated_model.get("integration", {}).get("current_context", {})
             self_model_context = (
-                "\\n\\nWHO AI AM — CURRENT CONTINUITY CONTEXT:\\n"
+                "\n\nWHO AI AM — CURRENT CONTINUITY CONTEXT:\n"
                 + json.dumps({
                     "name": integrated_model.get("name"),
                     "architect": integrated_model.get("architect"),
@@ -339,13 +339,13 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             print(f"[Who AI Am] ambient context unavailable: {exc}")
 
         target_prompt = (
-            f"{AMBIENT_PROMPT}\\n\\n"
-            f"SELECTED COGNITIVE TARGET ({target['kind']}):\\n{target['text']}\\n\\n"
+            f"{AMBIENT_PROMPT}\n\n"
+            f"SELECTED COGNITIVE TARGET ({target['kind']}):\n{target['text']}\n\n"
             + self_model_context
             + talnir_context
-            + (f"{recalled_ctx}\\n\\n" if recalled_ctx else "")
+            + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
             + completed_ctx
-            + "\\n\\nReturn one small development of that target. "
+            + "\n\nReturn one small development of that target. "
               "A SparkReach is optional; only choose it when the unresolved work itself gives you a reason."
         )
         response_text = await llm_callable(target_prompt)
