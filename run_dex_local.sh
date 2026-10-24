@@ -80,6 +80,7 @@ find_model() {
   [[ -d "$ROOT/models" ]] && roots+=("$ROOT/models")
   [[ -d "$HOME/dev/haven/dex-unified-self-model-integration/models" ]] && roots+=("$HOME/dev/haven/dex-unified-self-model-integration/models")
   [[ -d "$HOME/dev/haven/dex-unified-self-model-integration" ]] && roots+=("$HOME/dev/haven/dex-unified-self-model-integration")
+  [[ -d "$HOME/dev/haven" ]] && roots+=("$HOME/dev/haven")
   [[ -d "$ROOT" ]] && roots+=("$ROOT")
   [[ -d "$HOME/models" ]] && roots+=("$HOME/models")
   [[ -d /app/models ]] && roots+=(/app/models)
@@ -135,7 +136,7 @@ start_runtime() {
   say "Starting independent ambient process; it preloads the pulse GGUF before its loop."
   (
     cd "$ROOT"
-    nohup env -u GITHUB_TOKEN -u LOCAL_CHAT_BASE_URL DEX_LOCAL_RUNTIME=1 DEXOS_STATE_DIR="$ROOT" LOCAL_CHAT_MODEL_PATH="$CHAT_MODEL" DEX_CHAT_MODEL_PATH="$CHAT_MODEL" LOCAL_SLM_PATH="$AMBIENT_MODEL" "$PYTHON" "$ROOT/dex_local_ambient.py" >>"$AMBIENT_LOG" 2>&1 < /dev/null &
+    nohup env -u GITHUB_TOKEN -u LOCAL_CHAT_BASE_URL DEX_LOCAL_RUNTIME=1 DEXOS_STATE_DIR="$ROOT" DEX_AMBIENT_STATUS_FILE="$RUNTIME_DIR/ambient.loaded" LOCAL_CHAT_MODEL_PATH="$CHAT_MODEL" DEX_CHAT_MODEL_PATH="$CHAT_MODEL" LOCAL_SLM_PATH="$AMBIENT_MODEL" "$PYTHON" "$ROOT/dex_local_ambient.py" >>"$AMBIENT_LOG" 2>&1 < /dev/null &
     echo "$!" > "$AMBIENT_PID"
   )
 
