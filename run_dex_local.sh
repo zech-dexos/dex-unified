@@ -114,16 +114,86 @@ check_dependencies() {
   "$PYTHON" -c 'import fastapi, uvicorn, llama_cpp, gtts, firebase_admin, stripe'
 }
 
+install_dex_command() {
+  local target="$HOME/.local/bin/dex" backup
+  mkdir -p "$HOME/.local/bin"
+  if [[ -e "$target" && ! -L "$target" ]]; then
+    backup="$RUNTIME_DIR/state-backups/dex-launcher-before-supervisor-$(date +%Y%m%d-%H%M%S)"
+    cp -a "$target" "$backup"
+    say "Saved previous dex command to $backup"
+  fi
+  cat > "$target" <<EOF
+#!/usr/bin/env bash
+exec bash "$ROOT/run_dex_local.sh" "\$@"
+EOF
+  chmod +x "$target"
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) say "Add $HOME/.local/bin to PATH to use the dex shortcut in this terminal." ;;
+  esac
+}
+
+adopt_existing_api_if_safe() {
+  local listener_output pid process_cwd command_line found=0
+  listener_output="$(ss -ltnpH "sport = :$PORT" 2>/dev/null || true)"
+  [[ -n "$listener_output" ]] || return 0
+
+  while read -r pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    [[ -r "/proc/$pid/cmdline" ]] || continue
+    process_cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)"
+    command_line="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+    if [[ "$process_cwd" == "$ROOT" && "$command_line" == *uvicorn* && "$command_line" == *api:app* ]]; then
+      found=1
+      say "Found an older Dex API on port $PORT (PID $pid); safely replacing it with the supervised runtime."
+      kill "$pid" 2>/dev/null || true
+      for _ in {1..15}; do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 1
+      done
+      if kill -0 "$pid" 2>/dev/null; then
+        say "Old Dex API did not exit cleanly; sending SIGKILL to its confirmed PID $pid."
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    else
+      say "Port $PORT is occupied by a process this launcher cannot safely replace."
+      say "PID: $pid | working directory: ${process_cwd:-unknown} | command: ${command_line:-unavailable}"
+      say "No process was stopped. Set DEX_PORT to a free port, or stop that process yourself."
+      return 1
+    fi
+  done < <(printf '%s\n' "$listener_output" | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u)
+
+  if [[ "$found" -eq 0 ]]; then
+    say "Port $PORT is occupied, but its owner could not be identified safely."
+    say "No process was stopped. Set DEX_PORT to a free port or inspect the listener."
+    return 1
+  fi
+
+  for _ in {1..10}; do
+    if ! curl -fsS --max-time 1 "http://$HOST:$PORT/health" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  if curl -fsS --max-time 1 "http://$HOST:$PORT/health" >/dev/null 2>&1; then
+    say "Port $PORT is still serving an API after replacing the confirmed old Dex process."
+    return 1
+  fi
+  return 0
+}
+
 start_runtime() {
   sync_code
+  install_dex_command
   check_dependencies
   resolve_models
   if alive "$API_PID" || alive "$AMBIENT_PID"; then
     say "A process is already running. Use restart to replace both."; return 1
   fi
   if curl -fsS --max-time 2 "http://$HOST:$PORT/health" >/dev/null 2>&1; then
-    say "Port $PORT is already serving an API not managed by this launcher. Choose DEX_PORT or stop it."
-    return 1
+    adopt_existing_api_if_safe || return 1
+  elif ss -ltnH "sport = :$PORT" 2>/dev/null | grep -q LISTEN; then
+    adopt_existing_api_if_safe || return 1
   fi
   : > "$API_LOG"; : > "$AMBIENT_LOG"; rm -f "$RUNTIME_DIR/ambient.loaded"
 
