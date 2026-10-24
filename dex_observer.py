@@ -104,5 +104,16 @@ async def persist_observation(trace, user_id="default"):
         "lineage_hash": entry.get("entry_hash"), "stages": stages,
         "runtime": trace.get("runtime", {}),
     })
+    # Feed the observed cycle into the shared Who AI Am projection.
+    try:
+        from who_ai_am import refresh_self_model
+        refresh_self_model("tri_sigil_observation", {
+            "event_type": "tri_sigil_observation",
+            "observation_id": trace.get("observation_id"),
+            "experience_id": trace.get("experience_id"),
+            "summary": "Tri-sigil observer evidence was persisted for ongoing cognition.",
+        })
+    except Exception as exc:
+        print(f"[Who AI Am] observer integration failed: {exc}")
     return {"entry_hash": entry.get("entry_hash"), "observation_id": trace.get("observation_id"),
             "queued_for_cognition": True}
