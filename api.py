@@ -134,6 +134,18 @@ async def ambient_llm_callable(prompt: str) -> str:
     return result
 
 
+# Local workstation mode is explicit: preload the chat GGUF before serving requests.
+# Cloud deployments retain their existing scheduler-driven behavior.
+@app.on_event("startup")
+async def preload_local_chat_spark():
+    if os.environ.get("DEX_LOCAL_RUNTIME") != "1":
+        return
+    from local_llm import preload_chat_model
+    print("[Local Runtime] Preloading interactive chat GGUF", flush=True)
+    await asyncio.get_running_loop().run_in_executor(None, preload_chat_model)
+    print("[Local Runtime] Interactive chat GGUF loaded and resident", flush=True)
+
+
 # Start Dex Discord bridge inside the Cloud Run container.
 @app.on_event("startup")
 async def start_discord_bridge():
@@ -237,7 +249,7 @@ async def search_debug():
 
 @app.get("/health")
 def health():
-    from local_llm import MODEL_PATH, CHAT_MODEL_PATH
+    from local_llm import MODEL_PATH, CHAT_MODEL_PATH, model_status
     return {
         "status": "live",
         "sigils": _memory.summary() if SIGIL_ACTIVE and _memory else None,
@@ -246,6 +258,8 @@ def health():
         "chat_model_file_present": os.path.isfile(CHAT_MODEL_PATH),
         "ambient_model_path": MODEL_PATH,
         "ambient_model_file_present": os.path.isfile(MODEL_PATH),
+        "models": model_status(),
+        "local_runtime": os.environ.get("DEX_LOCAL_RUNTIME") == "1",
     }
 
 @app.get("/compare")
