@@ -451,25 +451,6 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                         "recent_reflection_requests": completed[-10:],
                     })
 
-                # Acknowledge observer intake only after a usable cognition result.
-                if target.get("kind") == "tri_sigil_observation":
-                    current_state = load_self_state()
-                    pending = list(current_state.get("pending_cognitive_observations", []) or [])
-                    recent = list(current_state.get("recent_cognitive_observations", []) or [])
-                    observed_id = target.get("id")
-                    updated = []
-                    for item in pending:
-                        if item.get("observation_id") == observed_id:
-                            item = dict(item)
-                            item["status"] = "processed"
-                            item["processed_at"] = _now_iso()
-                            item["ambient_thought"] = str(thought_text)[:1000]
-                            recent.append(item)
-                        updated.append(item)
-                    update_self_state({
-                        "pending_cognitive_observations": updated[-20:],
-                        "recent_cognitive_observations": recent[-10:],
-                    })
                 add_thought(thought_text, salience)
 
                 next_attention = (
@@ -500,8 +481,8 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                             "spark_judgment": spark_judgment,
                         },
                     )
-                    # Close the loop: the experience just recorded becomes
-                    # available to Who AI Am and to the next cognition cycle.
+                    # Close the loop: the persisted experience becomes
+                    # available to Who AI Am and the next cognition cycle.
                     try:
                         from who_ai_am import refresh_self_model
                         refresh_self_model("ambient_experience", {
@@ -512,6 +493,31 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                         })
                     except Exception as exc:
                         print(f"[Who AI Am] ambient experience integration failed: {exc}")
+
+                    # Acknowledge observer intake only after the first-person
+                    # experience and participant continuity have been persisted.
+                    if target.get("kind") == "tri_sigil_observation":
+                        current_state = load_self_state()
+                        pending = list(
+                            current_state.get("pending_cognitive_observations", []) or []
+                        )
+                        recent = list(
+                            current_state.get("recent_cognitive_observations", []) or []
+                        )
+                        observed_id = target.get("id")
+                        updated = []
+                        for item in pending:
+                            if item.get("observation_id") == observed_id:
+                                item = dict(item)
+                                item["status"] = "processed"
+                                item["processed_at"] = _now_iso()
+                                item["ambient_thought"] = str(thought_text)[:1000]
+                                recent.append(item)
+                            updated.append(item)
+                        update_self_state({
+                            "pending_cognitive_observations": updated[-20:],
+                            "recent_cognitive_observations": recent[-10:],
+                        })
                     if target.get("kind") == "conversation":
                         conversation = load_conversation("default")
                         conversation["last_ambient_at"] = _now_iso()
