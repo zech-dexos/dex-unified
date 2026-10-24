@@ -260,6 +260,7 @@ def health():
         "ambient_model_file_present": os.path.isfile(MODEL_PATH),
         "models": model_status(),
         "local_runtime": os.environ.get("DEX_LOCAL_RUNTIME") == "1",
+        "ambient_process_loaded": bool(os.environ.get("DEX_AMBIENT_STATUS_FILE") and os.path.isfile(os.environ.get("DEX_AMBIENT_STATUS_FILE", ""))),
     }
 
 @app.get("/compare")
