@@ -6,7 +6,7 @@ from pathlib import Path
 from lineage import create_entry, verify_chain, get_recent
 from paths import IDENTITY_PATH, SELF_MODEL_PATH
 
-CONSTITUTION_PATH = IDENTITY_PATH.parent / "identity_constitution.json"
+CONSTITUTION_PATH = Path(__file__).resolve().parent / "identity_constitution.json"
 
 
 def _read_json(path, default):
@@ -47,8 +47,14 @@ def apply_identity_authority(identity, constitution=None):
 
 def load_identity():
     constitution = load_constitution()
-    identity = _read_json(IDENTITY_PATH, {})
-    if not identity:
+    if IDENTITY_PATH.exists():
+        try:
+            identity = json.loads(IDENTITY_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"Operational identity cannot be read; refusing to replace it: {exc}") from exc
+        if not isinstance(identity, dict):
+            raise ValueError("Operational identity must be a JSON object; refusing to replace it")
+    else:
         identity = {"version": 1, "created": time.time(), "narrative_thread": [], "core_principles": [], "vows": {}}
         IDENTITY_PATH.write_text(json.dumps(identity, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return apply_identity_authority(identity, constitution)
