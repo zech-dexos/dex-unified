@@ -4,8 +4,15 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON="${DEX_PYTHON:-$ROOT/venv/bin/python}"
 HOST="${DEX_HOST:-127.0.0.1}"
-PORT="${DEX_PORT:-8765}"
 RUNTIME_DIR="${DEX_RUNTIME_DIR:-$HOME/.local/state/dex-unified}"
+ACTIVE_PORT_FILE="$RUNTIME_DIR/active.port"
+if [[ -n "${DEX_PORT:-}" ]]; then
+  PORT="$DEX_PORT"
+elif [[ -s "$ACTIVE_PORT_FILE" ]] && grep -Eq "^[0-9]{1,5}$" "$ACTIVE_PORT_FILE"; then
+  PORT="$(cat "$ACTIVE_PORT_FILE")"
+else
+  PORT=8765
+fi
 PID_DIR="$RUNTIME_DIR/pids"
 LOG_DIR="$RUNTIME_DIR/logs"
 API_PID="$PID_DIR/api.pid"
@@ -101,7 +108,7 @@ find_free_port() {
   while [[ "$candidate" -lt 65535 ]]; do
     candidate=$((candidate + 1))
     if ! ss -ltnH "sport = :$candidate" 2>/dev/null | grep -q LISTEN; then
-      printf '%s\\n' "$candidate"
+      printf '%s\n' "$candidate"
       return 0
     fi
   done
@@ -210,6 +217,7 @@ start_runtime() {
       say "Keeping the existing listener untouched; automatically moving this Dex runtime from port $old_port to $PORT."
     fi
   fi
+  printf "%s\n" "$PORT" > "$ACTIVE_PORT_FILE"
   : > "$API_LOG"; : > "$AMBIENT_LOG"; rm -f "$RUNTIME_DIR/ambient.loaded"
 
   say "Starting API; it preloads the interactive GGUF before serving chat."
@@ -258,8 +266,8 @@ status_runtime() {
 
 case "${1:-start}" in
   start) start_runtime ;;
-  stop) stop_one "$AMBIENT_PID" ambient; stop_one "$API_PID" API; say "Stopped." ;;
-  restart) stop_one "$AMBIENT_PID" ambient; stop_one "$API_PID" API; start_runtime ;;
+  stop) stop_one "$AMBIENT_PID" ambient; stop_one "$API_PID" API; rm -f "$ACTIVE_PORT_FILE"; say "Stopped." ;;
+  restart) stop_one "$AMBIENT_PID" ambient; stop_one "$API_PID" API; rm -f "$ACTIVE_PORT_FILE"; start_runtime ;;
   status) status_runtime ;;
   logs) touch "$API_LOG" "$AMBIENT_LOG"; tail -n 80 -F "$API_LOG" "$AMBIENT_LOG" ;;
   update) sync_code ;;
