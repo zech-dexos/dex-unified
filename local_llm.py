@@ -73,7 +73,8 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
     conversation into one user prompt. Older context is trimmed only when the
     message list exceeds the model's configured context window.
     """
-    llm = _get_chat_llm()
+    endpoint = os.environ.get("LOCAL_CHAT_BASE_URL", "").rstrip("/")
+    llm = None if endpoint else _get_chat_llm()
     context_size = CHAT_CONTEXT_SIZE
     try:
         context_size = int(llm.n_ctx())
@@ -133,11 +134,23 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
                     f"{token_count(normalized)} tokens, budget {prompt_budget}"
                 )
 
-    result = llm.create_chat_completion(
-        messages=normalized,
-        max_tokens=output_tokens,
-        temperature=0.7,
-    )
+    request = {
+        "messages": normalized,
+        "max_tokens": output_tokens,
+        "temperature": 0.7,
+    }
+    if endpoint:
+        import httpx
+
+        response = httpx.post(
+            endpoint + "/v1/chat/completions",
+            json={"model": "heretic-local", **request},
+            timeout=httpx.Timeout(300.0, connect=5.0),
+        )
+        response.raise_for_status()
+        result = response.json()
+    else:
+        result = llm.create_chat_completion(**request)
     choices = result.get("choices") or []
     if not choices:
         raise RuntimeError("llama.cpp returned no completion choices")
@@ -146,3 +159,32 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
     if not isinstance(content, str) or not content.strip():
         raise RuntimeError("llama.cpp returned empty completion content")
     return content.strip()
+
+
+
+def preload_chat_model() -> dict:
+    """Load the interactive Heretic GGUF now, so startup fails visibly if it cannot load."""
+    _get_chat_llm()
+    return {"loaded": _chat_llm is not None, "path": CHAT_MODEL_PATH}
+
+
+def preload_ambient_model() -> dict:
+    """Load the ambient cognition GGUF now, before the pulse loop starts."""
+    _get_llm()
+    return {"loaded": _llm is not None, "path": MODEL_PATH}
+
+
+def model_status() -> dict:
+    """Report actual in-process model load state, not just file existence."""
+    return {
+        "chat": {
+            "path": CHAT_MODEL_PATH,
+            "file_present": os.path.isfile(CHAT_MODEL_PATH),
+            "loaded": _chat_llm is not None,
+        },
+        "ambient": {
+            "path": MODEL_PATH,
+            "file_present": os.path.isfile(MODEL_PATH),
+            "loaded": _llm is not None,
+        },
+    }

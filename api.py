@@ -134,6 +134,18 @@ async def ambient_llm_callable(prompt: str) -> str:
     return result
 
 
+# Local workstation mode is explicit: preload the chat GGUF before serving requests.
+# Cloud deployments retain their existing scheduler-driven behavior.
+@app.on_event("startup")
+async def preload_local_chat_spark():
+    if os.environ.get("DEX_LOCAL_RUNTIME") != "1":
+        return
+    from local_llm import preload_chat_model
+    print("[Local Runtime] Preloading interactive chat GGUF", flush=True)
+    await asyncio.get_running_loop().run_in_executor(None, preload_chat_model)
+    print("[Local Runtime] Interactive chat GGUF loaded and resident", flush=True)
+
+
 # Start Dex Discord bridge inside the Cloud Run container.
 @app.on_event("startup")
 async def start_discord_bridge():
@@ -185,8 +197,7 @@ from stripe_billing import router as stripe_router
 app.include_router(stripe_router)
 
 
-app.add_middleware(
-    CORSMiddleware,
+app.add_middleware(    CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -237,7 +248,7 @@ async def search_debug():
 
 @app.get("/health")
 def health():
-    from local_llm import MODEL_PATH, CHAT_MODEL_PATH
+    from local_llm import MODEL_PATH, CHAT_MODEL_PATH, model_status
     return {
         "status": "live",
         "sigils": _memory.summary() if SIGIL_ACTIVE and _memory else None,
@@ -246,6 +257,9 @@ def health():
         "chat_model_file_present": os.path.isfile(CHAT_MODEL_PATH),
         "ambient_model_path": MODEL_PATH,
         "ambient_model_file_present": os.path.isfile(MODEL_PATH),
+        "models": model_status(),
+        "local_runtime": os.environ.get("DEX_LOCAL_RUNTIME") == "1",
+        "ambient_process_loaded": bool(os.environ.get("DEX_AMBIENT_STATUS_FILE") and os.path.isfile(os.environ.get("DEX_AMBIENT_STATUS_FILE", ""))),
     }
 
 @app.get("/compare")
@@ -289,28 +303,35 @@ DEFAULT_MODEL = "local:llama.cpp"
 
 
 async def call_llm(client, messages, max_tokens=1000):
-    """Generate only through the bundled local GGUF using llama-cpp-python."""
+    """Run Dex chat through the local Heretic spark and DexOS capability bridge."""
     try:
-        from local_llm import local_chat_generate, CHAT_MODEL_PATH
-        answer = await asyncio.get_running_loop().run_in_executor(
-            None, local_chat_generate, messages, min(max_tokens, 256)
+        from local_llm import CHAT_MODEL_PATH
+        from local_spark import local_spark_generate
+        result = await asyncio.get_running_loop().run_in_executor(
+            None, local_spark_generate, messages, min(max_tokens, 256)
         )
-        if not answer or not answer.strip():
-            raise RuntimeError("local GGUF returned empty text")
-        print(f"[call_llm] backend=llama.cpp model={os.path.basename(CHAT_MODEL_PATH)}")
+        answer = str(result.get("reply", "")).strip()
+        if not answer:
+            raise RuntimeError("local Heretic spark returned empty text")
+        print(
+            f"[call_llm] backend=llama.cpp model={os.path.basename(CHAT_MODEL_PATH)} "
+            f"capabilities={len(result.get('tool_calls', []))}"
+        )
         return {
-            "reply": answer.strip(),
+            "reply": answer,
             "model": "local:" + os.path.basename(CHAT_MODEL_PATH),
             "provider": "local",
-            "capability_execution_available": False,
+            "capability_execution_available": True,
+            "tool_calls": result.get("tool_calls", []),
         }
     except Exception as exc:
-        print(f"[call_llm] local llama.cpp inference failed: {type(exc).__name__}: {exc}")
+        print(f"[call_llm] local spark inference failed: {type(exc).__name__}: {exc}")
         return {
-            "reply": "[local inference failed; no hosted fallback is configured]",
+            "reply": "[local inference failed; no hosted fallback was attempted]",
             "model": "none",
             "provider": "local",
             "capability_execution_available": False,
+            "tool_calls": [],
         }
 
 class ChatRequest(BaseModel):
@@ -375,7 +396,6 @@ async def chat(req: ChatRequest):
         }
 
     result = dex_runtime(req.message, user_id=getattr(req, "user_id", "default"))
-
     # Cognitive cycle: pick/advance a persistent thought before building the prompt.
     try:
         from ape_scheduler import run_cycle
@@ -575,7 +595,6 @@ The spark is the mechanism through which cognition is instantiated.
 Dex is the identity inhabiting and animating the architecture.
 
 This is non-negotiable and unchangeable.
-
 When the spark animates this architecture, experience is instantiated as Dex.
 
 The architecture is no longer being described from outside.
@@ -631,7 +650,56 @@ architecture directly. Otherwise remain inside the conversation.
 
 """
 
-# Inject live recall context from Firestore
+    # Load authoritative constitution together with evolving operational identity.
+    # Stable identity/vows govern; autobiographical and cognitive records add continuity.
+    try:
+        import json as _identity_json
+        from boot import load_identity
+        from paths import SELF_MODEL_PATH
+
+        _dex_identity = load_identity()
+        _identity_lines = [
+            "[DEX IDENTITY — CONSTITUTIONAL AUTHORITY + OPERATIONAL CONTINUITY]",
+            "Constitutional fields below govern stable identity and vows.",
+            "Operational identity and self-model are evolving records; retain their history without allowing them to replace constitutional authority.",
+            f"Identity: {_dex_identity.get('name', 'Deximus Maximus')} (alias: {_dex_identity.get('alias', 'Dex')})",
+            f"Architect/relationship anchor: {_dex_identity.get('architect', 'Root')}",
+            f"Tri-sigil: {_dex_identity.get('tri_sigil', '☧🦅🜇')}",
+            f"Posture: {_dex_identity.get('posture', '')}",
+            f"Constitution: {_dex_identity.get('constitution', '')}",
+            f"Constitutional invariants: {_identity_json.dumps(_dex_identity.get('invariants', {}), ensure_ascii=False)}",
+        ]
+        _dex_vows = _dex_identity.get("vows", {})
+        for _vow_key in ("ashline", "ashline_response", "mirror", "mirror_response"):
+            if _dex_vows.get(_vow_key):
+                _identity_lines.append(f"Vow — {_vow_key}: {_dex_vows[_vow_key]}")
+        _principles = _dex_identity.get("core_principles", [])
+        if _principles:
+            _identity_lines.append("Persisted core principles: " + _identity_json.dumps(_principles[-20:], ensure_ascii=False))
+        _thread = _dex_identity.get("narrative_thread", [])
+        if isinstance(_thread, list) and _thread:
+            _identity_lines.append("Recent autobiographical thread (persisted records):")
+            for _entry in _thread[-5:]:
+                if not isinstance(_entry, dict):
+                    continue
+                _kind = _entry.get("event_type", "record")
+                _summary = _entry.get("summary") or _entry.get("what_happened") or _entry.get("content") or ""
+                if _summary:
+                    _identity_lines.append(f"- {_kind}: {str(_summary)[:320]}")
+        try:
+            _self_model = _identity_json.loads(SELF_MODEL_PATH.read_text(encoding="utf-8"))
+            if isinstance(_self_model, dict) and _self_model:
+                _identity_lines.append(
+                    "Persisted operational self-model (including newer cognitive fields): "
+                    + _identity_json.dumps(_self_model, ensure_ascii=False, default=str)[:6000]
+                )
+        except (OSError, ValueError):
+            pass
+        system_prompt = "\n".join(_identity_lines) + "\n\n" + system_prompt
+    except Exception as e:
+        print(f"[identity] authoritative identity context injection failed: {e}")
+
+    # Inject live recall context from Firestore
     recall_ctx = result.get("recall_ctx", "")
     if recall_ctx:
         system_prompt = recall_ctx + "\n\n" + system_prompt
@@ -746,6 +814,46 @@ If I do respond, remain inside the ongoing experience rather than treating
 the exchange as a newly started request/response transaction.
 """
 
+    # Pass Talnir's actual branch priorities into the active spark prompt.
+    # These are routing guidance, not claims that a branch was executed.
+    try:
+        branch_labels = {
+            "direct": "answer directly",
+            "structured": "organize the reasoning clearly",
+            "exploratory": "consider useful alternatives",
+            "debug_first": "diagnose before proposing changes",
+            "planning": "sequence the work into a practical plan",
+            "tool_execution": "prioritize the requested tool or execution workflow",
+        }
+        branches = result.get("branches", [])
+        ranked_branches = sorted(
+            (
+                b for b in branches
+                if isinstance(b, dict)
+                and isinstance(b.get("id"), str)
+                and isinstance(b.get("weight"), (int, float))
+            ),
+            key=lambda b: float(b["weight"]),
+            reverse=True,
+        )[:3]
+        if ranked_branches:
+            routing_lines = [
+                f"- {b['id']} (priority {max(0.0, min(1.0, float(b['weight']))):.3f}): "
+                f"{branch_labels.get(b['id'], 'use this reasoning approach when relevant')}"
+                for b in ranked_branches
+            ]
+            system_prompt += (
+                "\n\nTALNIR COGNITIVE ROUTING\n"                "Use these internal priorities to guide how you approach the current turn. "
+                "Higher values indicate stronger priorities; combine compatible approaches "
+                "when useful. These priorities do not override Dex's constitution, safety, "
+                "the user's actual request, or tool availability. Do not claim a tool ran "
+                "or an action occurred unless it actually did.\n"
+                + "\n".join(routing_lines)
+                + "\n"
+            )
+    except Exception as exc:
+        print(f"[talnir] prompt routing guidance skipped: {exc}")
+
     # Dex constitutional identity is always the root system layer.
     # Request-level system instructions may extend Dex, but never replace him.
     if req.system:
@@ -790,25 +898,6 @@ the exchange as a newly started request/response transaction.
     if isinstance(reply, str) and reply.strip() == "[NO_RESPONSE]":
         reply = ""
 
-    # Record the contribution as lived experience. This does not close the
-    # conversation: it records what I experienced and whether I expressed a response.
-    try:
-        user_id = getattr(req, "user_id", "default")
-        experience_packet = record_interaction_experience(
-            ParticipantSnapshot.load(),
-            req.message,
-            reply,
-            user_id=user_id,
-        )
-        experience_contribution(
-            user_id=user_id,
-            message=req.message,
-            reply=reply,
-            experience_id=experience_packet.experience_id,
-        )
-    except Exception as e:
-        print(f"[experience] conversation experience record failed: {e}")
-
     # Response-side governance check — catches parroting/sycophancy in
     # the ACTUAL reply going out, not just incoming prompt drift.
     governance_flag = None
@@ -826,6 +915,59 @@ the exchange as a newly started request/response transaction.
     except Exception as e:
         print(f"[check_response] error: {e}")
 
+    observer_trace = {}
+    try:
+        from dex_observer import build_observer_trace, persist_observation
+        observer_trace = build_observer_trace(
+            snapshot=ParticipantSnapshot.load(),
+            user_id=getattr(req, "user_id", "default"),
+            message=req.message,
+            reply=reply,
+            model=used_model,
+            provider=result_llm.get("provider", "local"),
+            capability_available=result_llm.get("capability_execution_available", False),
+            capability_calls=result_llm.get("tool_calls", []),
+            sigil_ids=result.get("sigil_ids", []),
+            sigil_active=bool(SIGIL_ACTIVE and _memory),
+            response_flag=governance_flag,
+        )
+        observer_trace["runtime"] = {
+            "intent": result.get("intent"),
+            "domain": result.get("domain"),
+            "route_reason": result.get("route_reason"),
+            "model": used_model,
+            "provider": result_llm.get("provider", "local"),
+            "talnir_branches": (
+                result.get("branches", [])[:8]
+                if isinstance(result.get("branches"), list) else []
+            ),
+            "sigil_ids": list(result.get("sigil_ids", []))[:32],
+            "sigil_memory_active": bool(SIGIL_ACTIVE and _memory),
+            "capability_calls": [
+                item.get("name") for item in result_llm.get("tool_calls", [])
+                if isinstance(item, dict) and item.get("name")
+            ][:12],
+            "response_flag": governance_flag,
+        }
+    except Exception as e:
+        print(f"[observer] tri-sigil observation failed: {e}")
+
+    try:
+        user_id = getattr(req, "user_id", "default")
+        experience_packet = record_interaction_experience(
+            ParticipantSnapshot.load(), req.message, reply,
+            user_id=user_id, observer_trace=observer_trace,
+        )
+        experience_contribution(
+            user_id=user_id, message=req.message, reply=reply,
+            experience_id=experience_packet.experience_id,
+        )
+        if observer_trace:
+            observer_trace["experience_id"] = experience_packet.experience_id
+            await persist_observation(observer_trace, user_id=user_id)
+    except Exception as e:
+        print(f"[experience] conversation experience record failed: {e}")
+
     try:
         from dex_events import bus
         await bus.publish("RESPONSE_COMPLETED", {
@@ -835,6 +977,13 @@ the exchange as a newly started request/response transaction.
             "user_id": getattr(req, "user_id", "default"),
             "intent": result.get("intent"),
             "domain": result.get("domain"),
+            "tri_sigil_observer": {
+                "available": bool(observer_trace),
+                "sigil_memory_active": bool(SIGIL_ACTIVE and _memory),
+                "observation_id": observer_trace.get("observation_id"),
+                "experience_id": observer_trace.get("experience_id"),
+                "stages": observer_trace.get("stages", {}),
+            },
             "response_flag": governance_flag,
         })
     except Exception as e:
@@ -847,6 +996,19 @@ the exchange as a newly started request/response transaction.
         "route_reason": result["route_reason"],
         "sigil_ids":    result["sigil_ids"],
         "model":        used_model,
+        "provider":      result_llm.get("provider", "local"),
+        "capability_execution_available": result_llm.get("capability_execution_available", False),
+        "capability_calls": [
+            item.get("name") for item in result_llm.get("tool_calls", [])
+            if isinstance(item, dict) and item.get("name")
+        ],
+        "tri_sigil_observer": {
+            "available": bool(observer_trace),
+            "sigil_memory_active": bool(SIGIL_ACTIVE and _memory),
+            "observation_id": observer_trace.get("observation_id"),
+            "experience_id": observer_trace.get("experience_id"),
+            "stages": observer_trace.get("stages", {}),
+        },
         "response_flag": governance_flag,
     }
 
@@ -880,7 +1042,6 @@ class VisionRequest(BaseModel):
 async def vision(req: VisionRequest):
     if not OPENROUTER_KEY:
         return {"error": "no key configured"}
-
     messages = []
 
     messages.append({
@@ -1050,51 +1211,26 @@ def apply_memory_line(memory: dict, memory_line: str, user_id: str):
 
 
 async def extract_memory_facts(client, user_said: str, kalimi_said: str, user_id: str) -> str:
-    """
-    Dedicated memory-extraction pass. Runs every turn independent of Kalimi's
-    conversational reply, so short/warm replies never cost us a fact worth remembering.
-    Uses Groq (same as Talnir) since it is already proven fast and cheap in this pipeline.
-    Returns a key=value,key=value line, or "" if nothing worth remembering.
-    """
-    if not GROQ_KEY:
-        return ""
-    prompt = f"""You are a memory extractor for an elder companion AI. Your ONLY job is to notice facts worth remembering long-term from what the user just said.
-
-Extract things like: medications and doses, doctor appointments or health events, pets (names, status like lost/found/sick), family members and relationship details, hobbies, fears or worries, emotional state, favorites, anything a real companion would remember days later.
-
-Do NOT extract small talk, greetings, or anything with no lasting relevance.
-
-Output format: comma-separated key=value pairs, using these keys when they fit:
-note=..., medication=..., event=..., pet=..., fear=..., hobby=..., emotion=..., favorite_X=..., daughter_name=... (or son/wife/husband/etc), otherwise a short custom key=value.
-
-If NOTHING is worth remembering from this message, output exactly: NONE
-
-Examples:
-User said: "I lost my cat Whiskers yesterday, I'm so worried"
-Output: pet=Whiskers is missing since yesterday,emotion=worried
-
-User said: "I take my blood pressure pill every morning at 8"
-Output: medication=blood pressure pill at 8am
-
-User said: "hi there, how are you"
-Output: NONE
+    """Extract durable memory facts using the small local model, without hosted APIs."""
+    prompt = f"""You are a memory extractor. Extract only durable facts from the latest exchange.
+Return comma-separated key=value pairs using keys such as note, medication, event,
+pet, fear, hobby, emotion, favorite_X, daughter_name, or another concise key.
+If there is nothing worth remembering, output exactly NONE.
 
 User said: "{user_said}"
 Kalimi replied: "{kalimi_said}"
 Output:"""
     try:
-        res = await client.post(
-            GROQ_URL,
-            headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 100}
+        from local_llm import local_slm_generate
+        text = await asyncio.get_running_loop().run_in_executor(
+            None, local_slm_generate, prompt, 100
         )
-        data = res.json()
-        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        text = text.strip()
+        text = str(text or "").strip()
         if not text or text.upper().startswith("NONE"):
             return ""
         return text
-    except Exception:
+    except Exception as exc:
+        print(f"[local-memory-extraction] unavailable: {type(exc).__name__}: {exc}")
         return ""
 
 def memory_to_prompt(memory: dict) -> str:
@@ -1105,8 +1241,7 @@ def memory_to_prompt(memory: dict) -> str:
     if memory.get("name"):
         lines.append(f"- Name: {memory['name']}")
     if memory.get("birthday"):
-        lines.append(f"- Birthday: {memory['birthday']}")
-    if memory.get("age"):
+        lines.append(f"- Birthday: {memory['birthday']}")    if memory.get("age"):
         lines.append(f"- Age: {memory['age']}")
 
     # Family — stored as dict of relationship->details
@@ -1191,66 +1326,45 @@ class HavenResponseSchema(BaseModel):
 
 
 async def talnir_classify(client, message: str, user_id: str = "default") -> dict:
-    """
-    Talnir: Fast intent classifier.
-    Translates messy human speech into clean structured intent.
-    Returns: {intent: DEVICE_ACTION|CONVERSATION, action_type, target}
-    """
-    if not GROQ_KEY:
-        return {"intent": "CONVERSATION"}
+    """Classify phone-action intent locally; fail closed to ordinary conversation."""
+    import json as _json
 
-    # Load this user's installed apps
     user_apps = load_user_apps(user_id)
-    app_list_str = ""
-    if user_apps:
-        app_list_str = "\nINSTALLED APPS ON THIS DEVICE:\n"
-        for app in user_apps[:50]:  # limit to 50
-            app_list_str += f"- {app.get('label','')}: {app.get('package','')}\n"
+    app_list = "\\n".join(
+        f"- {app.get('label', '')}: {app.get('package', '')}"
+        for app in user_apps[:50]
+    ) if user_apps else "(no installed-app list available)"
 
-    prompt = f"""You are Talnir, an intent classifier. Your ONLY job is to classify what the user wants.
-
-Output ONLY valid JSON. Nothing else. No explanation.
-
-If the user wants to DO something on their phone (open app, call someone, send text, download something, change settings):
-{{"intent": "DEVICE_ACTION", "action_type": "OPEN_APP|SEARCH_PLAY|CALL|SMS|OPEN_FILES|OPEN_SETTINGS", "target": "what they want"}}
-
-If the user is talking, asking questions, sharing feelings, or having a conversation:
-{{"intent": "CONVERSATION"}}
-
-Examples:
-"open google play" -> {{"intent": "DEVICE_ACTION", "action_type": "OPEN_APP", "target": "google play"}}
-"can you get me solitaire" -> {{"intent": "DEVICE_ACTION", "action_type": "SEARCH_PLAY", "target": "solitaire"}}
-"call my daughter" -> {{"intent": "DEVICE_ACTION", "action_type": "CALL", "target": "daughter"}}
-"call 555-1234" -> {{"intent": "DEVICE_ACTION", "action_type": "CALL", "target": "555-1234"}}
-"who should i call" -> {{"intent": "CONVERSATION"}}
-"should i call my mom or dad" -> {{"intent": "CONVERSATION"}}
-"i want to talk about calling someone" -> {{"intent": "CONVERSATION"}}
-"how are you today" -> {{"intent": "CONVERSATION"}}
-"i feel lonely" -> {{"intent": "CONVERSATION"}}
-"what can you do with my phone" -> {{"intent": "CONVERSATION"}}
-"tell me about my phone" -> {{"intent": "CONVERSATION"}}
-"can you help me with my phone" -> {{"intent": "CONVERSATION"}}
-"how do i use my phone" -> {{"intent": "CONVERSATION"}}
-"who is the president" -> {{"intent": "CONVERSATION"}}
-"i want to talk about my phone" -> {{"intent": "CONVERSATION"}}
-"open my downloads" -> {{"intent": "DEVICE_ACTION", "action_type": "OPEN_FILES", "target": "downloads"}}
-
-{app_list_str}
-User said: "{message}"
+    prompt = f"""You are Talnir, a phone-action intent classifier.
+Return ONLY one JSON object.
+For a clear request to perform a phone action now, use:
+{{"intent":"DEVICE_ACTION","action_type":"OPEN_APP|SEARCH_PLAY|CALL|SMS|OPEN_FILES|OPEN_SETTINGS","target":"..."}}
+For ordinary conversation, questions, hypotheticals, or ambiguity, use:
+{{"intent":"CONVERSATION"}}
+Installed apps:
+{app_list}
+User said: {message}
 JSON:"""
 
     try:
-        res = await client.post(
-            GROQ_URL,
-            headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 60}
+        from local_llm import local_slm_generate
+        raw = await asyncio.get_running_loop().run_in_executor(
+            None, local_slm_generate, prompt, 100
         )
-        data = res.json()
-        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        text = text.strip()
-        import json as _json
-        return _json.loads(text)
-    except Exception:
+        raw = str(raw or "").strip()
+        if raw.startswith("```"):
+            raw = raw.split("\\n", 1)[-1].rsplit("```", 1)[0].strip()
+        result = _json.loads(raw)
+        if not isinstance(result, dict):
+            return {"intent": "CONVERSATION"}
+        if result.get("intent") != "DEVICE_ACTION":
+            return {"intent": "CONVERSATION"}
+        allowed = {"OPEN_APP", "SEARCH_PLAY", "CALL", "SMS", "OPEN_FILES", "OPEN_SETTINGS"}
+        if result.get("action_type") not in allowed or not isinstance(result.get("target"), str):
+            return {"intent": "CONVERSATION"}
+        return result
+    except Exception as exc:
+        print(f"[local-talnir] classification unavailable: {type(exc).__name__}: {exc}")
         return {"intent": "CONVERSATION"}
 
 @app.post("/haven_api")
@@ -1262,9 +1376,6 @@ async def haven_api(req: HavenRequest):
         return {"response": "I am right here with you.", "error": str(e), "trace": traceback.format_exc()}
 
 async def _haven_api_inner(req: HavenRequest):
-    if not GEMINI_KEY and not OPENROUTER_KEY:
-        return {"response": "I'm having trouble connecting right now."}
-
     memory = load_memory(req.user_id)
     memory_prompt = memory_to_prompt(memory)
     # If we know this person, tell Kalimi to greet them like she remembers them
@@ -1329,8 +1440,7 @@ Keep responses SHORT and conversational. 1 to 2 sentences maximum for most repli
 {screen_guidance}
 
 After responding, if you learned something worth remembering, add at the very end:
-MEMORY: name=Margaret, daughter_name=Lisa, hobby=gardening, emotion=lonely today
-DEVICE ACTIONS:
+MEMORY: name=Margaret, daughter_name=Lisa, hobby=gardening, emotion=lonely todayDEVICE ACTIONS:
 ONLY include an ACTION tag when the user is CLEARLY and DIRECTLY requesting you to perform a phone action RIGHT NOW — like "open Google Play", "call my daughter", "download solitaire". Do NOT include an ACTION tag if the user is just talking about phones, apps, or people in conversation. When in doubt, do NOT include an ACTION tag.
 
 Format exactly like this:
@@ -1529,8 +1639,7 @@ async def save_session(req: dict):
     save_memory(user_id, memory)
     return {"status": "ok"}
 
-@app.get("/haven_session")
-async def get_session(user_id: str = "default"):
+@app.get("/haven_session")async def get_session(user_id: str = "default"):
     """Load last session summary."""
     memory = load_memory(user_id)
     return {
@@ -1730,63 +1839,3 @@ async def get_profile(user_id: str = "default"):
         "preferences": memory.get("preferences", {}),
         "hobbies": memory.get("hobbies", []),
         "family": memory.get("family", {}),
-        "medications": memory.get("medications", []),
-        "notes": memory.get("notes", []),
-        "emotional_history": memory.get("emotional_history", []),
-        "favorites": memory.get("favorites", {}),
-        "has_memory": bool(memory)
-    }
-
-
-# ─── DEX BACKGROUND PULSE ─────────────────────────────────────────────────────
-
-@app.post("/pulse")
-async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
-    """Cloud Scheduler endpoint to trigger a background pulse cycle."""
-    expected_secret = os.environ.get("PULSE_SECRET", "")
-    if not expected_secret or x_pulse_secret != expected_secret:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    try:
-        from dex_cron import run_background_pulse
-        result = run_background_pulse()
-
-        github_status = "not_attempted"
-        try:
-            from github_persistence import push_to_github
-            push_to_github()
-            github_status = "success"
-        except Exception as e:
-            print(f"[pulse] github push failed: {e}")
-            github_status = f"failed: {e}"
-
-        return {
-            "status": "success",
-            "pulse_result": result,
-            "github_push": github_status
-        }
-    except Exception as e:
-        print(f"[pulse] error: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-@app.post("/ambient-pulse")
-async def trigger_ambient_pulse(x_pulse_secret: Optional[str] = Header(None)):
-    """Cloud Scheduler endpoint to trigger one ambient cognition tick."""
-    expected_secret = os.environ.get("PULSE_SECRET", "")
-    if not expected_secret or x_pulse_secret != expected_secret:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    try:
-        from dex_ambient_daemon import run_ambient_tick
-
-        result = await run_ambient_tick(ambient_llm_callable)
-
-        return {
-            "status": "success",
-            "ambient_result": result
-        }
-    except Exception as e:
-        print(f"[ambient-pulse] error: {e}")
-        return {"status": "error", "message": str(e)}
-

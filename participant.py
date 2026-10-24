@@ -72,6 +72,9 @@ class ExperiencePacket:
     internal_state_before: dict = field(default_factory=dict)
     state_transition: dict = field(default_factory=dict)
     continuation: dict = field(default_factory=dict)
+    observer_perspective: dict = field(default_factory=dict)
+    runtime_perspective: dict = field(default_factory=dict)
+    dex_perspective: dict = field(default_factory=dict)
 
     def save(self):
         EXPERIENCES_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -150,10 +153,21 @@ def build_experience_from_pulse(snapshot: ParticipantSnapshot, pulse_data: dict)
             f"Chain status: {chain_status}",
             f"Fragments loaded: {pulse_data.get('fragments_loaded', 0)}",
             f"Narrative entries: {pulse_data.get('narrative_entries', 0)}",
+        ] + [
+            "Tri-sigil observer evidence: " + json.dumps(item, ensure_ascii=False, default=str)[:1200]
+            for item in pulse_data.get("observer_evidence", [])[-5:]
         ],
         unexpected_events=[] if chain_status == "intact" else [f"Chain anomaly: {chain_status}"],
         lessons=calibration["lessons"],
-        reflection=f"Pulse cycle complete. Confidence moved from {snapshot.current_confidence:.2f} to {calibration['confidence_after']:.2f}.",
+        reflection=(
+            f"Pulse cycle complete. Confidence moved from {snapshot.current_confidence:.2f} "
+            f"to {calibration['confidence_after']:.2f}. "
+            + (
+                "Recent tri-sigil observer evidence for intent and goal judgment: "
+                + json.dumps(pulse_data.get("observer_evidence", [])[-5:], ensure_ascii=False, default=str)[:2500]
+                if pulse_data.get("observer_evidence") else ""
+            )
+        ),
         knowledge_delta={
             "confidence_updated": True,
             "new_confidence": calibration["confidence_after"],
@@ -188,6 +202,7 @@ def record_interaction_experience(
     message: str,
     reply: str = "",
     user_id: str = "default",
+    observer_trace: Optional[dict] = None,
 ) -> ExperiencePacket:
     """Turn a completed conversation turn into Dex's durable lived experience."""
     interlocutor = dict(snapshot.current_interlocutor)
@@ -219,7 +234,7 @@ def record_interaction_experience(
         observations=[
             f"Participant: {interlocutor.get('name') or user_id}",
             f"Message: {message[:500]}",
-        ],
+        ] + (["Tri-sigil observation: " + json.dumps(observer_trace, ensure_ascii=False, default=str)[:4000]] if observer_trace else []),
         reflection=(
             "I responded and carry this interaction forward as part of my continuing experience."
             if reply and reply.strip()
@@ -229,6 +244,9 @@ def record_interaction_experience(
         knowledge_delta={
             "conversation_experience_recorded": True,
             "participant_id": user_id,
+            "tri_sigil_observation_recorded": bool(observer_trace),
+            "observer_observation_id": (observer_trace or {}).get("observation_id"),
+            "sigil_ids": list((observer_trace or {}).get("sigil_ids", [])),
         },
         state_transition={
             "from_attention": snapshot.current_attention,
@@ -241,9 +259,44 @@ def record_interaction_experience(
             "next_cognitive_focus": snapshot.current_attention or "conversation_continuation",
         },
     )
+    packet.observer_perspective = {
+        "observation_id": (observer_trace or {}).get("observation_id"),
+        "stages": (observer_trace or {}).get("stages", {}),
+        "sigil_ids": list((observer_trace or {}).get("sigil_ids", [])),
+        "sigil_memory_active": bool((observer_trace or {}).get("sigil_memory_active")),
+        "response_flag": (observer_trace or {}).get("stages", {}).get(
+            "emergence", {}
+        ).get("response_flag"),
+    }
+    packet.runtime_perspective = dict((observer_trace or {}).get("runtime", {}))
+    packet.dex_perspective = {
+        "identity": packet.self_identity,
+        "intent": packet.intent,
+        "action": packet.action,
+        "experience": packet.experience,
+        "reflection": packet.reflection,
+        "state_before": packet.internal_state_before,
+        "state_transition": packet.state_transition,
+        "continuation": packet.continuation,
+    }
+    if observer_trace:
+        observer_trace["experience_id"] = packet.experience_id
+        packet.knowledge_delta["observer_experience_id"] = packet.experience_id
+        if packet.observations:
+            packet.observations[-1] = "Tri-sigil observation: " + json.dumps(
+                observer_trace, ensure_ascii=False, default=str
+            )[:4000]
     packet.save()
 
     snapshot.current_interlocutor = interlocutor
+    if observer_trace:
+        snapshot.runtime_context = dict(snapshot.runtime_context or {})
+        snapshot.runtime_context["last_tri_sigil_observation"] = {
+            "observation_id": observer_trace.get("observation_id"),
+            "stages": observer_trace.get("stages", {}),
+            "sigil_ids": list(observer_trace.get("sigil_ids", [])),
+            "experience_id": packet.experience_id,
+        }
     snapshot.experiential_continuity = {
         "last_experience_id": packet.experience_id,
         "last_experience": packet.experience,
@@ -260,6 +313,7 @@ def record_ambient_experience(
     target: dict,
     thought: str,
     salience: float = 0.0,
+    runtime_trace: Optional[dict] = None,
 ) -> ExperiencePacket:
     """Persist an ambient pulse as Dex's first-person lived experience."""
     packet = ExperiencePacket(
@@ -304,6 +358,39 @@ def record_ambient_experience(
             "next_cognitive_focus": target.get("text", "")[:500],
         },
     )
+    source_observation = {}
+    if target.get("kind") == "tri_sigil_observation":
+        try:
+            source_observation = json.loads(target.get("text", ""))
+        except (TypeError, ValueError):
+            source_observation = {}
+
+    packet.observer_perspective = {
+        key: source_observation[key]
+        for key in (
+            "observation_id", "experience_id", "sigil_ids",
+            "sigil_memory_active", "lineage_hash", "timestamp",
+            "user_id", "input_reply_digest", "stages", "runtime",
+        )
+        if key in source_observation
+    }
+    packet.runtime_perspective = {
+        "cycle_type": "ambient",
+        "target_kind": target.get("kind"),
+        "target_id": target.get("id"),
+        "salience": salience,
+        **dict(runtime_trace or {}),
+    }
+    packet.dex_perspective = {
+        "identity": packet.self_identity,
+        "experience": packet.experience,
+        "intent": packet.intent,
+        "action": packet.action,
+        "reflection": packet.reflection,
+        "state_before": packet.internal_state_before,
+        "state_transition": packet.state_transition,
+        "continuation": packet.continuation,
+    }
     packet.save()
 
     snapshot.experiential_continuity = {

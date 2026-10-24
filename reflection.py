@@ -185,6 +185,15 @@ def write_reflection(reflection: dict):
             "open_questions": reflection["open_questions"],
         },
     )
+    try:
+        from who_ai_am import refresh_self_model
+        refresh_self_model("reflection", {
+            "event_type": "reflection",
+            "event_id": reflection.get("timestamp"),
+            "summary": "; ".join(reflection.get("observations", [])[:3]),
+        })
+    except Exception as exc:
+        print(f"[Who AI Am] reflection integration failed: {exc}")
 
 
 def propose_amendment(vow_name: str, current_text: str, proposed_text: str, reason: str):
