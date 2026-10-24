@@ -86,7 +86,7 @@ def refresh_self_model(
         "architect": identity.get("architect", model.get("architect", "Root")),
         "tri_sigil": identity.get("tri_sigil", model.get("tri_sigil", "☧🦅🜇")),
         "chain_status": identity.get("chain_status", model.get("chain_status", "unknown")),
-        "chain_entries": len(lineage) if lineage else model.get("chain_entries", 0),
+        "chain_entries": identity.get("chain_entries", model.get("chain_entries", 0)),
         "vows_active": identity.get("vows_active", model.get("vows_active", [])),
         "ready": True,
         "integration": {
@@ -95,8 +95,8 @@ def refresh_self_model(
             "trigger": str(trigger)[:100],
             "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "sources": {
-                "identity": str(IDENTITY_PATH),
-                "participant_state": str(PARTICIPANT_PATH),
+                "identity": IDENTITY_PATH.name,
+                "participant_state": PARTICIPANT_PATH.name,
                 "experiences": len(experiences),
                 "reflections": len(reflections),
                 "lineage_entries_loaded": len(lineage),
