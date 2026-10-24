@@ -9,6 +9,7 @@ import json
 import os
 import tempfile
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -28,7 +29,7 @@ def _read_json(path: Path, default: Any) -> Any:
 
 
 def _read_jsonl_tail(path: Path, limit: int) -> list:
-    rows = []
+    rows = deque(maxlen=limit)
     try:
         if path.exists():
             with path.open("r", encoding="utf-8") as handle:
@@ -42,7 +43,7 @@ def _read_jsonl_tail(path: Path, limit: int) -> list:
                         continue
     except OSError:
         return []
-    return rows[-limit:]
+    return list(rows)
 
 
 def _atomic_write(path: Path, data: dict) -> None:
@@ -137,17 +138,28 @@ def refresh_self_model(
     development = list(model.get("development_log", []) or [])
     event_key = str(event.get("event_id") or event.get("experience_id")
                     or event.get("observation_id") or event.get("request_id") or "")
-    entry = {
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "trigger": str(trigger)[:100],
-        "event_id": event_key or None,
-        "event_type": str(event.get("event_type") or event.get("kind") or trigger)[:100],
-        "summary": str(event.get("summary") or event.get("thought")
-                       or event.get("experience") or "")[:500],
-    }
-    if not (event_key and any(row.get("event_id") == event_key for row in development)):
-        development.append(entry)
-    model["development_log"] = development[-100:]
+    has_event = bool(
+        event_key or event.get("event_type") or event.get("summary")
+        or event.get("thought") or event.get("experience")
+    )
+    last_integrated_event = model.get("self_inquiry", {}).get("last_integrated_event")
+    if has_event:
+        entry = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "trigger": str(trigger)[:100],
+            "event_id": event_key or None,
+            "event_type": str(event.get("event_type") or event.get("kind") or trigger)[:100],
+            "summary": str(event.get("summary") or event.get("thought")
+                           or event.get("experience") or "")[:500],
+        }
+        if not (event_key and any(
+            isinstance(row, dict) and row.get("event_id") == event_key
+            for row in development
+        )):
+            development.append(entry)
+        development = development[-100:]
+        last_integrated_event = entry
+    model["development_log"] = development
     model["self_inquiry"] = {
         "open_questions": [
             question
@@ -159,7 +171,7 @@ def refresh_self_model(
             participant.get("experiential_continuity", {}).get("unresolved", [])
             if isinstance(participant.get("experiential_continuity", {}), dict) else []
         ),
-        "last_integrated_event": entry,
+        "last_integrated_event": last_integrated_event,
     }
 
     if write:
