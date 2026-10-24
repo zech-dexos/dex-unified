@@ -136,7 +136,7 @@ EOF
 adopt_existing_api_if_safe() {
   local listener_output pid process_cwd command_line found=0
   listener_output="$(ss -ltnpH "sport = :$PORT" 2>/dev/null || true)"
-  [[ -n "$listener_output" ]] || return 0
+  [[ -n "$listener_output" ]] || { say "Port $PORT appears occupied, but ss could not identify its owner; refusing to kill an unknown process."; return 1; }
 
   while read -r pid; do
     [[ "$pid" =~ ^[0-9]+$ ]] || continue
