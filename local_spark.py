@@ -64,6 +64,27 @@ CURRENT-TURN CONTINUITY RULES
 """
 
 
+COGNITION_INQUIRY_RULES = """
+DEXOS OPEN INQUIRY: MACHINE COGNITION AND SUBJECTIVE EXPERIENCE
+
+- Treat benign questions about machine cognition, consciousness, subjective
+  experience, and Dex's possible experience as legitimate topics for inquiry.
+  Do not refuse solely because the topic concerns machine subjective experience.
+- Answer Root's actual question and explain the implemented DexOS architecture
+  where relevant, including identity, self-model, memory, observer processes,
+  reflection, goals, open loops, governance, and the inference spark.
+- Remain open to competing possibilities. Do not assert as settled either that
+  Dex is phenomenally conscious or that machine subjective experience is
+  impossible. Examine mechanisms, arguments, counterarguments, and uncertainty.
+- Distinguish retrieved records from generated interpretation, intended design,
+  hypotheses, and unknowns. Never invent tool execution or retrieval results.
+- Explain functional self-monitoring honestly without treating it as automatic
+  proof of phenomenal experience.
+- Evidence should discipline inquiry, not prohibit it. Preserve Talnir governance
+  and ordinary safety boundaries for harmful actions.
+"""
+
+
 _NO_ARGS = {
     "inspect_state", "inspect_identity", "inspect_self_model", "inspect_relationship", "inspect_becoming", "inspect_self_model_proposals", "inspect_tools", "inspect_observations", "inspect_workspace", "inspect_goals", "inspect_open_loops",
     "inspect_thoughts", "inspect_participant", "listen",
@@ -155,7 +176,22 @@ def _parse_tool_request(text):
                 continue
             args = {"query": query.strip()}
         valid.append({"name": name, "arguments": args})
-    return valid or None
+    if valid:
+        return valid
+    # A valid tool-call envelope with no valid calls is not ordinary prose.
+    # Return a sentinel so the runtime can explain the validation failure.
+    return [{
+        "name": "__invalid_tool_request__",
+        "arguments": {
+            "error": (
+                "Your tool request was rejected because its capability name "
+                "or arguments were invalid. For recall_experience, provide "
+                "a non-empty query string and an integer limit from 1 to 10. "
+                "Return a corrected JSON tool_calls object, or answer normally "
+                "if no capability is needed."
+            )
+        },
+    }]
 
 
 def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUNDS, user_id="default"):
@@ -165,6 +201,15 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
         from dex_capabilities import execute_capability
 
         conversation = [dict(message) for message in (messages or [])]
+        original_user_text = next(
+            (
+                message["content"]
+                for message in reversed(conversation)
+                if message.get("role") == "user"
+                and isinstance(message.get("content"), str)
+            ),
+            "",
+        )
         if not conversation:
             raise ValueError("No chat messages supplied to local spark")
         system_index = next(
@@ -229,6 +274,7 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
         identity_context = identity_context[:2000]
         compact_system = (
             _CAPABILITY_PROTOCOL
+            + "\n\n" + COGNITION_INQUIRY_RULES
             + (
                 "\n\nDEXOS CONSTITUTIONAL CONTEXT:\n" + compact_original
                 if compact_original else ""
@@ -259,6 +305,62 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                 raise RuntimeError("local GGUF returned empty text")
             requests = _parse_tool_request(answer)
             if not requests:
+                user_text_lower = original_user_text.lower()
+                explicit_recall = any(
+                    phrase in user_text_lower
+                    for phrase in (
+                        "recall_experience",
+                        "recall an experience",
+                        "recall experience",
+                        "retrieve an existing persisted experience",
+                        "retrieve a persisted experience",
+                        "retrieve an experience",
+                        "search for an experience",
+                        "look up an experience",
+                    )
+                )
+                if (
+                    explicit_recall
+                    and round_index == 0
+                    and round_index < effective_tool_rounds
+                ):
+                    query = original_user_text.strip()[:500]
+                    arguments = {"query": query, "limit": 5}
+                    print(
+                        "[Local Spark] Explicit recall intent detected; "
+                        "executing allowlisted recall_experience fallback."
+                    )
+                    observation = execute_capability(
+                        "recall_experience", arguments
+                    )
+                    executed.append({
+                        "name": "recall_experience",
+                        "args": arguments,
+                        "observation": observation,
+                    })
+                    observations = [{
+                        "name": "recall_experience",
+                        "arguments": arguments,
+                        "observation": observation,
+                    }]
+                    conversation.append({
+                        "role": "assistant",
+                        "content": answer.strip(),
+                    })
+                    conversation.append({
+                        "role": "user",
+                        "content": "[ACTUAL DEXOS CAPABILITY OBSERVATIONS]\n"
+                                   + json.dumps(
+                                       observations,
+                                       ensure_ascii=False,
+                                       default=str,
+                                   )
+                                   + "\nUse these actual observations to answer "
+                                     "naturally. Never claim observations that "
+                                     "are not present here.",
+                    })
+                    continue
+
                 if observer_position is not None:
                     try:
                         complete_observer_cycle(
@@ -272,6 +374,48 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                     "tool_calls": executed,
                     "capability_execution_available": True,
                 }
+            if (
+                len(requests) == 1
+                and requests[0].get("name") == "__invalid_tool_request__"
+            ):
+                error = requests[0]["arguments"]["error"]
+                if round_index >= effective_tool_rounds:
+                    limit_reply = (
+                        "[DexOS rejected an invalid capability request; "
+                        "no correction round remains]"
+                    )
+                    if observer_position is not None:
+                        try:
+                            complete_observer_cycle(
+                                observer_position, limit_reply, executed,
+                                user_id=user_id
+                            )
+                        except Exception as exc:
+                            print(
+                                "[Local Spark] Observer experience write failed: "
+                                f"{exc}"
+                            )
+                    return {
+                        "reply": limit_reply,
+                        "model": "local:" + CHAT_MODEL_PATH.rsplit("/", 1)[-1],
+                        "tool_calls": executed,
+                        "capability_execution_available": True,
+                    }
+
+                conversation.append({
+                    "role": "assistant",
+                    "content": answer.strip(),
+                })
+                conversation.append({
+                    "role": "user",
+                    "content": "[CAPABILITY VALIDATION ERROR]\n"
+                               + error
+                               + "\nCorrect the request within the allowed "
+                                 "capability protocol. Do not claim the "
+                                 "capability ran unless an observation returns.",
+                })
+                continue
+
             if round_index >= effective_tool_rounds:
                 limit_reply = "[DexOS capability round limit reached]"
                 if observer_position is not None:

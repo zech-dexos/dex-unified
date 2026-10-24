@@ -94,7 +94,7 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
     if not normalized:
         raise ValueError("No usable chat messages supplied to local inference")
 
-    output_tokens = min(max(32, int(max_tokens)), max(64, min(512, context_size // 4)))
+    output_tokens = min(max(32, int(max_tokens)), max(64, min(1024, context_size // 3)))
 
     def token_count(items):
         try:

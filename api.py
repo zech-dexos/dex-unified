@@ -294,7 +294,7 @@ async def call_llm(client, messages, max_tokens=1000, user_id="default"):
         from local_llm import CHAT_MODEL_PATH
         from local_spark import local_spark_generate, MAX_TOOL_ROUNDS
         result = await asyncio.get_running_loop().run_in_executor(
-            None, local_spark_generate, messages, min(max_tokens, 256),
+            None, local_spark_generate, messages, min(max_tokens, 768),
             MAX_TOOL_ROUNDS, user_id,
         )
         answer = str(result.get("reply", "")).strip()
