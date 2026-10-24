@@ -96,6 +96,19 @@ find_model() {
   printf '%s\n' "$found"
 }
 
+find_free_port() {
+  local candidate="$PORT"
+  while [[ "$candidate" -lt 65535 ]]; do
+    candidate=$((candidate + 1))
+    if ! ss -ltnH "sport = :$candidate" 2>/dev/null | grep -q LISTEN; then
+      printf '%s\\n' "$candidate"
+      return 0
+    fi
+  done
+  say "Could not find an available TCP port above $PORT."
+  return 1
+}
+
 resolve_models() {
   CHAT_MODEL="$(find_model "${LOCAL_CHAT_MODEL_PATH:-${DEX_CHAT_MODEL_PATH:-$HOME/dev/llm/models/llama-3.2-3b-heretic/model_q4_k_m.gguf}}" chat || true)"
   AMBIENT_MODEL="$(find_model "${LOCAL_SLM_PATH:-/app/models/qwen2.5-0.5b-instruct-q4_k_m.gguf}" ambient || true)"
@@ -190,10 +203,12 @@ start_runtime() {
   if alive "$API_PID" || alive "$AMBIENT_PID"; then
     say "A process is already running. Use restart to replace both."; return 1
   fi
-  if curl -fsS --max-time 2 "http://$HOST:$PORT/health" >/dev/null 2>&1; then
-    adopt_existing_api_if_safe || return 1
-  elif ss -ltnH "sport = :$PORT" 2>/dev/null | grep -q LISTEN; then
-    adopt_existing_api_if_safe || return 1
+  if curl -fsS --max-time 2 "http://$HOST:$PORT/health" >/dev/null 2>&1 || ss -ltnH "sport = :$PORT" 2>/dev/null | grep -q LISTEN; then
+    if ! adopt_existing_api_if_safe; then
+      local old_port="$PORT"
+      PORT="$(find_free_port)" || return 1
+      say "Keeping the existing listener untouched; automatically moving this Dex runtime from port $old_port to $PORT."
+    fi
   fi
   : > "$API_LOG"; : > "$AMBIENT_LOG"; rm -f "$RUNTIME_DIR/ambient.loaded"
 
