@@ -316,13 +316,36 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         except Exception as e:
             print(f"[Ambient Daemon] Talnir context unavailable: {e}")
 
+        # Read the integrated self-model as continuity context for the next
+        # cognitive step. A failure here must not stop the ambient loop.
+        self_model_context = ""
+        try:
+            from who_ai_am import refresh_self_model
+            integrated_model = refresh_self_model("ambient_cognition_context")
+            context = integrated_model.get("integration", {}).get("current_context", {})
+            self_model_context = (
+                "\\n\\nWHO AI AM — CURRENT CONTINUITY CONTEXT:\\n"
+                + json.dumps({
+                    "name": integrated_model.get("name"),
+                    "architect": integrated_model.get("architect"),
+                    "tri_sigil": integrated_model.get("tri_sigil"),
+                    "narrative": integrated_model.get("narrative"),
+                    "posture": integrated_model.get("posture"),
+                    "current_context": context,
+                    "self_inquiry": integrated_model.get("self_inquiry", {}),
+                }, ensure_ascii=False, default=str)[:5000]
+            )
+        except Exception as exc:
+            print(f"[Who AI Am] ambient context unavailable: {exc}")
+
         target_prompt = (
-            f"{AMBIENT_PROMPT}\n\n"
-            f"SELECTED COGNITIVE TARGET ({target['kind']}):\n{target['text']}\n\n"
+            f"{AMBIENT_PROMPT}\\n\\n"
+            f"SELECTED COGNITIVE TARGET ({target['kind']}):\\n{target['text']}\\n\\n"
+            + self_model_context
             + talnir_context
-            + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
+            + (f"{recalled_ctx}\\n\\n" if recalled_ctx else "")
             + completed_ctx
-            + "\n\nReturn one small development of that target. "
+            + "\\n\\nReturn one small development of that target. "
               "A SparkReach is optional; only choose it when the unresolved work itself gives you a reason."
         )
         response_text = await llm_callable(target_prompt)
@@ -477,6 +500,18 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                             "spark_judgment": spark_judgment,
                         },
                     )
+                    # Close the loop: the experience just recorded becomes
+                    # available to Who AI Am and to the next cognition cycle.
+                    try:
+                        from who_ai_am import refresh_self_model
+                        refresh_self_model("ambient_experience", {
+                            "event_type": "ambient_experience",
+                            "event_id": ambient_packet.experience_id,
+                            "experience_id": ambient_packet.experience_id,
+                            "summary": thought_text,
+                        })
+                    except Exception as exc:
+                        print(f"[Who AI Am] ambient experience integration failed: {exc}")
                     if target.get("kind") == "conversation":
                         conversation = load_conversation("default")
                         conversation["last_ambient_at"] = _now_iso()
