@@ -843,7 +843,8 @@ the exchange as a newly started request/response transaction.
                 for b in ranked_branches
             ]
             system_prompt += (
-                "\n\nTALNIR COGNITIVE ROUTING\n"                "Use these internal priorities to guide how you approach the current turn. "
+                "\n\nTALNIR COGNITIVE ROUTING\n"
+                "Use these internal priorities to guide how you approach the current turn. "
                 "Higher values indicate stronger priorities; combine compatible approaches "
                 "when useful. These priorities do not override Dex's constitution, safety, "
                 "the user's actual request, or tool availability. Do not claim a tool ran "
@@ -1241,7 +1242,8 @@ def memory_to_prompt(memory: dict) -> str:
     if memory.get("name"):
         lines.append(f"- Name: {memory['name']}")
     if memory.get("birthday"):
-        lines.append(f"- Birthday: {memory['birthday']}")    if memory.get("age"):
+        lines.append(f"- Birthday: {memory['birthday']}")
+    if memory.get("age"):
         lines.append(f"- Age: {memory['age']}")
 
     # Family — stored as dict of relationship->details
@@ -1639,7 +1641,8 @@ async def save_session(req: dict):
     save_memory(user_id, memory)
     return {"status": "ok"}
 
-@app.get("/haven_session")async def get_session(user_id: str = "default"):
+@app.get("/haven_session")
+async def get_session(user_id: str = "default"):
     """Load last session summary."""
     memory = load_memory(user_id)
     return {
@@ -1839,3 +1842,63 @@ async def get_profile(user_id: str = "default"):
         "preferences": memory.get("preferences", {}),
         "hobbies": memory.get("hobbies", []),
         "family": memory.get("family", {}),
+        "medications": memory.get("medications", []),
+        "notes": memory.get("notes", []),
+        "emotional_history": memory.get("emotional_history", []),
+        "favorites": memory.get("favorites", {}),
+        "has_memory": bool(memory)
+    }
+
+
+# ─── DEX BACKGROUND PULSE ─────────────────────────────────────────────────────
+
+@app.post("/pulse")
+async def trigger_pulse(x_pulse_secret: Optional[str] = Header(None)):
+    """Cloud Scheduler endpoint to trigger a background pulse cycle."""
+    expected_secret = os.environ.get("PULSE_SECRET", "")
+    if not expected_secret or x_pulse_secret != expected_secret:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        from dex_cron import run_background_pulse
+        result = run_background_pulse()
+
+        github_status = "not_attempted"
+        try:
+            from github_persistence import push_to_github
+            push_to_github()
+            github_status = "success"
+        except Exception as e:
+            print(f"[pulse] github push failed: {e}")
+            github_status = f"failed: {e}"
+
+        return {
+            "status": "success",
+            "pulse_result": result,
+            "github_push": github_status
+        }
+    except Exception as e:
+        print(f"[pulse] error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/ambient-pulse")
+async def trigger_ambient_pulse(x_pulse_secret: Optional[str] = Header(None)):
+    """Cloud Scheduler endpoint to trigger one ambient cognition tick."""
+    expected_secret = os.environ.get("PULSE_SECRET", "")
+    if not expected_secret or x_pulse_secret != expected_secret:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        from dex_ambient_daemon import run_ambient_tick
+
+        result = await run_ambient_tick(ambient_llm_callable)
+
+        return {
+            "status": "success",
+            "ambient_result": result
+        }
+    except Exception as e:
+        print(f"[ambient-pulse] error: {e}")
+        return {"status": "error", "message": str(e)}
+

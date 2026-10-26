@@ -19,7 +19,7 @@ CHAT_MODEL_PATH = os.environ.get(
         "/app/models/heretic/model_q4_k_m.gguf",
     ),
 )
-CHAT_CONTEXT_SIZE = max(512, int(os.environ.get("LOCAL_CHAT_N_CTX", "2048")))
+CHAT_CONTEXT_SIZE = max(512, int(os.environ.get("LOCAL_CHAT_N_CTX", "4096")))
 CHAT_THREADS = max(1, int(os.environ.get("LOCAL_CHAT_THREADS", "2")))
 
 
@@ -56,11 +56,50 @@ def _get_chat_llm():
 
 
 def local_slm_generate(prompt: str, max_tokens: int = 200) -> str:
-    """Blocking call -- run this in an executor from async code."""
     llm = _get_llm()
+
+    # Reserve room for generated output and chat-template overhead.
+    context_size = int(llm.n_ctx())
+    output_tokens = min(max(32, int(max_tokens)), context_size // 3)
+    prompt_budget = max(256, context_size - output_tokens - 96)
+
+    prompt_tokens = llm.tokenize(prompt.encode("utf-8"), add_bos=False)
+
+    if len(prompt_tokens) > prompt_budget:
+        marker = (
+            "\n[Middle of ambient context omitted to fit the model window. "
+            "Preserve the instructions and use the available recent context.]\n"
+        )
+        marker_tokens = llm.tokenize(marker.encode("utf-8"), add_bos=False)
+        remaining = max(128, prompt_budget - len(marker_tokens))
+        head_count = min(384, remaining // 3)
+        tail_count = max(1, remaining - head_count)
+
+        head = llm.detokenize(prompt_tokens[:head_count]).decode(
+            "utf-8", errors="replace"
+        )
+        tail = llm.detokenize(prompt_tokens[-tail_count:]).decode(
+            "utf-8", errors="replace"
+        )
+        prompt = head + marker + tail
+
+        # Verify the final text still fits after re-tokenization.
+        fitted = llm.tokenize(prompt.encode("utf-8"), add_bos=False)
+        if len(fitted) > prompt_budget:
+            fitted = fitted[-prompt_budget:]
+            prompt = llm.detokenize(fitted).decode("utf-8", errors="replace")
+
+        print(
+            f"[Ambient Runtime] Prompt trimmed to fit: "
+            f"{len(prompt_tokens)} -> "
+            f"{len(llm.tokenize(prompt.encode('utf-8'), add_bos=False))} tokens "
+            f"(context={context_size})",
+            flush=True,
+        )
+
     out = llm.create_chat_completion(
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens,
+        max_tokens=output_tokens,
         temperature=0.8,
     )
     return out["choices"][0]["message"]["content"].strip()
