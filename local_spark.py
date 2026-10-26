@@ -40,11 +40,10 @@ Allowed capabilities and argument shapes:
 - inspect_conversation: {"user_id": string}
 - recall_experience: {"query": string, "limit": integer 1..10}
 - listen: {}
-- evoke: {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}
+- evoke: {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture"}
 - search_architecture: {"query": string}
 
-Do not request shell execution, network calls, arbitrary code, or the spark
-execution resource. Do not invent capability results. After observations are
+Do not request shell execution, network calls, or arbitrary code. Do not invent capability results. After observations are
 returned, answer naturally or request another allowed capability if needed.
 If no capability is needed, answer normally in plain text.
 """
@@ -60,7 +59,7 @@ _ALLOWED = _NO_ARGS | {
 }
 _EVOCABLE = {
     "state", "workspace", "goals", "open_loops", "thoughts", "experiences",
-    "participant", "conversation", "signals", "tools", "observations", "architecture", "spark_reaches",
+    "participant", "conversation", "signals", "tools", "observations", "architecture",
 }
 
 

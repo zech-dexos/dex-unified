@@ -102,7 +102,6 @@ def inspect_architecture(query: str = "") -> Dict[str, Any]:
         "tri_sigil_observer": "dex_observer.py",
         "continuity_events": "dex_continuity.py",
         "cryptographic_lineage": "lineage.py",
-        "asynchronous_spark_limb": "spark_reach.py",
     }
     result = {
         "modules": [
@@ -196,20 +195,7 @@ def listen() -> Dict[str, Any]:
         "last_continuity_event": state.get("last_continuity_event"),
         "last_autobiographical_event": state.get("last_autobiographical_event"),
         "pending_signals": list(state.get("pending_signals", []) or [])[-10:],
-        "pending_spark_reaches": list(state.get("pending_spark_reaches", []) or [])[-10:],
-        "last_spark_reach": state.get("last_spark_reach"),
         "workspace": state.get("active_mental_workspace_state", {}),
-    }
-
-
-def _inspect_spark_reaches() -> Dict[str, Any]:
-    """Retrieve bounded completed/pending SparkReach results for deliberate review."""
-    from spark_reach import pending_spark_reaches
-    state = _state()
-    return {
-        "pending_spark_reaches": pending_spark_reaches(limit=5),
-        "last_spark_reach": state.get("last_spark_reach"),
-        "active_spark_reaches": list(state.get("active_spark_reaches", []) or [])[-5:],
     }
 
 
@@ -227,25 +213,12 @@ def evoke(resource: str, **kwargs) -> Dict[str, Any]:
         "tools": inspect_tools,
         "observations": inspect_observations,
         "architecture": lambda: inspect_architecture(),
-        "spark_reaches": _inspect_spark_reaches,
     }
-    if resource == "spark":
-        from spark_reach import submit_spark_reach
-        return submit_spark_reach(
-            intention=kwargs.get("intention", ""),
-            reach_objective=kwargs.get("reach_objective", ""),
-            code=kwargs.get("code", ""),
-            selected_context=kwargs.get("selected_context", []),
-            invocation_origin=kwargs.get("invocation_origin", "self_directed"),
-            initiated_by=kwargs.get("initiated_by", "capability_evoke"),
-            timeout_seconds=kwargs.get("timeout_seconds"),
-            memory_mb=kwargs.get("memory_mb"),
-        )
     fn = resources.get(resource)
     if not fn:
         return {
             "error": f"unknown resource: {resource}",
-            "available": sorted([*resources, "spark"]),
+            "available": sorted(resources),
         }
     return fn()
 
@@ -364,7 +337,7 @@ CAPABILITY_CATALOG = [
     ("reason_with_talnir", "Run Talnir structured intent and reasoning-branch analysis.", {"prompt": "string, max 2000"}),
     ("request_reflection", "Queue a durable request for another ambient architecture reflection pass; does not directly change goals.", {"focus": "string, max 500", "reason": "optional string, max 500"}),
     ("listen", "Notice current runtime signals without taking action.", {}),
-    ("evoke", "Deliberately retrieve a named resource.", {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture|spark_reaches"}),
+    ("evoke", "Deliberately retrieve a named resource.", {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture"}),
     ("search_architecture", "Search source text without executing it.", {"query": "string, max 200"}),
 ]
 
