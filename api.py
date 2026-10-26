@@ -124,10 +124,10 @@ async def ambient_llm_callable(prompt: str) -> str:
 
     # Local inference avoids Groq/OpenRouter/Gemini quotas entirely.
     # Keep blocking CPU inference off the event loop.
-    from local_llm import local_slm_generate
+    from local_llm import local_ambient_generate
 
     result = await asyncio.get_running_loop().run_in_executor(
-        None, local_slm_generate, full_prompt
+        None, local_ambient_generate, full_prompt
     )
     if not result:
         raise ValueError("local_slm_generate returned empty response")

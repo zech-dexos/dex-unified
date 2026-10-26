@@ -236,6 +236,52 @@ def _persist_pulse_state(target, thought_text, salience, status, next_attention_
     return update_self_state(delta)
 
 
+AMBIENT_MAX_TARGET_FAILURES = 3
+
+
+def _register_target_failure(target):
+    """Back off a target whose ambient output could not be parsed.
+
+    Queue items (tri-sigil observations, reflection requests) are deferred after
+    repeated failures so one bad item cannot monopolize the pulse; their records
+    are kept and never deleted. Persistent thoughts get their normal revisit
+    cooldown. Other target kinds are left to their existing cooldown logic.
+    """
+    if not isinstance(target, dict) or not target.get("id"):
+        return
+    kind = target.get("kind")
+    queues = {
+        "tri_sigil_observation": ("pending_cognitive_observations", "observation_id"),
+        "reflection_request": ("pending_reflection_requests", "request_id"),
+    }
+    if kind in queues:
+        key, id_field = queues[kind]
+        items = list(load_self_state().get(key, []) or [])
+        for index, item in enumerate(items):
+            if isinstance(item, dict) and item.get(id_field) == target["id"]:
+                item = dict(item)
+                attempts = int(item.get("ambient_attempts", 0) or 0) + 1
+                item["ambient_attempts"] = attempts
+                item["ambient_last_failure_at"] = _now_iso()
+                if attempts >= AMBIENT_MAX_TARGET_FAILURES:
+                    item["status"] = "deferred"
+                    item["deferred_reason"] = "ambient_parse_failure"
+                items[index] = item
+                update_self_state({key: items})
+                return
+        return
+    if kind == "persistent_thought":
+        retry_at = (
+            datetime.now(timezone.utc) + timedelta(seconds=AMBIENT_REVISIT_SECONDS)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        thoughts = list(load_self_state().get("persistent_thoughts", []) or [])
+        for item in thoughts:
+            if item.get("thought_id") == target["id"]:
+                item["next_attention_at"] = retry_at
+                update_self_state({"persistent_thoughts": thoughts})
+                return
+
+
 async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dict[str, Any]:
     """
     Run ONE ambient cognition tick. Cadence is owned by durable runtime
@@ -327,7 +373,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             + self_model_context
             + talnir_context
             + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
-            + "\n\nReturn one small development of that target."
+            + "\n\nReturn one small development of that target. Respond with ONLY the JSON object."
         )
         response_text = await llm_callable(target_prompt)
 
@@ -476,6 +522,10 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         except json.JSONDecodeError as e:
             print(f"[Ambient Daemon] Failed to parse LLM output as JSON: {e}")
             print(f"[Ambient Daemon] Raw output: {response_text}")
+            try:
+                _register_target_failure(target)
+            except Exception as backoff_error:
+                print(f"[Ambient Daemon] failure backoff could not be recorded: {backoff_error}")
             return {"status": "parse_error", "error": str(e), "raw": response_text}
 
     except Exception as e:

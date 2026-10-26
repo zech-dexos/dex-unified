@@ -55,7 +55,7 @@ def _get_chat_llm():
     return _chat_llm
 
 
-def local_slm_generate(prompt: str, max_tokens: int = 200) -> str:
+def local_slm_generate(prompt: str, max_tokens: int = 200, json_schema=None) -> str:
     llm = _get_llm()
 
     # Reserve room for generated output and chat-template overhead.
@@ -97,11 +97,25 @@ def local_slm_generate(prompt: str, max_tokens: int = 200) -> str:
             flush=True,
         )
 
-    out = llm.create_chat_completion(
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=output_tokens,
-        temperature=0.8,
-    )
+    request = {
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": output_tokens,
+        "temperature": 0.8,
+    }
+    if json_schema:
+        try:
+            out = llm.create_chat_completion(
+                response_format={"type": "json_object", "schema": json_schema},
+                **request,
+            )
+        except Exception as e:
+            print(
+                f"[Ambient Runtime] JSON-constrained decoding failed ({e}); retrying unconstrained",
+                flush=True,
+            )
+            out = llm.create_chat_completion(**request)
+    else:
+        out = llm.create_chat_completion(**request)
     return out["choices"][0]["message"]["content"].strip()
 
 
@@ -227,3 +241,18 @@ def model_status() -> dict:
             "loaded": _llm is not None,
         },
     }
+
+
+AMBIENT_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "thought": {"type": "string", "maxLength": 400},
+        "salience": {"type": "number"},
+    },
+    "required": ["thought", "salience"],
+}
+
+
+def local_ambient_generate(prompt: str, max_tokens: int = 200) -> str:
+    """Ambient pulse generation constrained to the {thought, salience} JSON shape."""
+    return local_slm_generate(prompt, max_tokens, json_schema=AMBIENT_JSON_SCHEMA)
