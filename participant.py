@@ -10,6 +10,11 @@ import json
 import os
 import tempfile
 import time
+from dataclasses import fields
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 import uuid
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
@@ -37,23 +42,60 @@ class ParticipantSnapshot:
 
     def save(self):
         PARTICIPANT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        fd, temp_path = tempfile.mkstemp(dir=str(PARTICIPANT_PATH.parent), suffix=".tmp")
+        lock_path = str(PARTICIPANT_PATH) + ".lock"
+        lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        temp_path = None
         try:
+            if fcntl is not None:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX)
+
+            latest = {}
+            if PARTICIPANT_PATH.exists():
+                try:
+                    loaded = json.loads(PARTICIPANT_PATH.read_text(encoding="utf-8"))
+                    if isinstance(loaded, dict):
+                        latest = loaded
+                except (OSError, ValueError):
+                    latest = {}
+
+            current = asdict(self)
+            baseline = getattr(self, "_loaded_values", None)
+            merged = dict(latest)
+            for key, value in current.items():
+                if baseline is None or baseline.get(key) != value or key not in merged:
+                    merged[key] = value
+
+            fd, temp_path = tempfile.mkstemp(dir=str(PARTICIPANT_PATH.parent), suffix=".tmp")
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(asdict(self), handle, indent=2, ensure_ascii=False)
+                json.dump(merged, handle, indent=2, ensure_ascii=False)
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temp_path, PARTICIPANT_PATH)
+            temp_path = None
+
+            for field_info in fields(self):
+                if field_info.name in merged:
+                    setattr(self, field_info.name, merged[field_info.name])
+            object.__setattr__(self, "_loaded_values", {
+                field_info.name: getattr(self, field_info.name)
+                for field_info in fields(self)
+            })
         finally:
-            if os.path.exists(temp_path):
+            if temp_path and os.path.exists(temp_path):
                 os.remove(temp_path)
+            if fcntl is not None:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            os.close(lock_fd)
 
     @classmethod
     def load(cls):
         if PARTICIPANT_PATH.exists():
             try:
-                data = json.loads(PARTICIPANT_PATH.read_text())
-                return cls(**data)
+                data = json.loads(PARTICIPANT_PATH.read_text(encoding="utf-8"))
+                valid_fields = {item.name for item in fields(cls)}
+                snapshot = cls(**{key: value for key, value in data.items() if key in valid_fields})
+                object.__setattr__(snapshot, "_loaded_values", asdict(snapshot))
+                return snapshot
             except Exception:
                 pass
         return cls()
