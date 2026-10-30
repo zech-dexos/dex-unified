@@ -405,7 +405,8 @@ async def chat(req: ChatRequest):
         if cycle_result.get("workspace_released"):
             await _cognitive_event_bus.publish("WORKSPACE_RELEASED", {
                 "event_type": "WORKSPACE_RELEASED",
-                "event_id": interaction_event_id,
+                "event_id": uuid.uuid4().hex,
+                "source_event_id": interaction_event_id,
                 "source": "ape_scheduler",
                 "concept_identifier": cycle_result.get("released_workspace"),
             })
@@ -413,7 +414,8 @@ async def chat(req: ChatRequest):
             _workspace = load_self_state().get("active_mental_workspace_state", {})
             await _cognitive_event_bus.publish("WORKSPACE_ACTIVATED", {
                 "event_type": "WORKSPACE_ACTIVATED",
-                "event_id": interaction_event_id,
+                "event_id": uuid.uuid4().hex,
+                "source_event_id": interaction_event_id,
                 "source": "ape_scheduler",
                 "concept_identifier": _workspace.get("concept_identifier"),
                 "salience": _workspace.get("attention_salience"),
