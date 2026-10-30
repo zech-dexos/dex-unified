@@ -64,7 +64,7 @@ async def persist_observation(trace, user_id="default"):
         content="Observed local spark cycle across continuity, awareness, and emergence.",
         metadata={
             "event_id": trace.get("event_id"),
-        "observation_id": trace.get("observation_id"),
+            "observation_id": trace.get("observation_id"),
             "experience_id": trace.get("experience_id"),
             "user_id": str(user_id)[:128],
             "sigil_ids": trace.get("sigil_ids", []),
