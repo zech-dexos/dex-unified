@@ -200,6 +200,29 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
             matching[0]["evidence"]["source_event_ids"],
         )
 
+    def test_primary_event_evidence_wins_over_later_child_transition(self):
+        identity = json.loads(self.identity.read_text(encoding="utf-8"))
+        identity["narrative_thread"].append({
+            "event_id": "attention-child-event",
+            "source_event_id": "event-1",
+            "event_type": "ATTENTION_CHANGED",
+            "what_happened": "Attention moved because of the interaction.",
+        })
+        self.identity.write_text(json.dumps(identity), encoding="utf-8")
+
+        model = who_ai_am.refresh_self_model("test", {
+            "event_type": "interactive_cycle_complete",
+            "event_id": "event-1",
+            "experience_id": "exp-1",
+        })
+        development = next(
+            row for row in model["development_log"]
+            if row.get("event_id") == "event-1"
+        )
+        autobiography = development["evidence"]["autobiography"]
+        self.assertEqual(autobiography["event_id"], "event-1")
+        self.assertEqual(autobiography["event_type"], "RESPONSE_COMPLETED")
+
     def test_event_integration_is_idempotent_by_event_id(self):
         event = {"event_type": "ambient_experience", "event_id": "exp-1", "summary": "same"}
         first = who_ai_am.refresh_self_model("test", event)
