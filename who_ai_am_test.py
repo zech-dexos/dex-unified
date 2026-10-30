@@ -18,6 +18,8 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
         self.experiences = self.root / "experiences.jsonl"
         self.reflections = self.root / "reflections.jsonl"
         self.ledger = self.root / "dex_lineage.jsonl"
+        self.narrative = self.root / "narrative.jsonl"
+        self.loops = self.root / "open_loops.json"
         self.patches = [
             patch.object(who_ai_am, "IDENTITY_PATH", self.identity),
             patch.object(who_ai_am, "SELF_MODEL_PATH", self.model),
@@ -25,6 +27,8 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
             patch.object(who_ai_am, "EXPERIENCES_PATH", self.experiences),
             patch.object(who_ai_am, "REFLECTION_PATH", self.reflections),
             patch.object(who_ai_am, "LEDGER_PATH", self.ledger),
+            patch.object(who_ai_am, "NARRATIVE_PATH", self.narrative),
+            patch.object(who_ai_am, "LOOPS_PATH", self.loops),
         ]
         for item in self.patches:
             item.start()
@@ -80,6 +84,8 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
             "cycle_analysis": {"conversation_turns": 1},
         }) + "\n", encoding="utf-8")
         self.ledger.write_text(json.dumps({"event_type": "reflection"}) + "\n", encoding="utf-8")
+        self.narrative.write_text(json.dumps({"internal_thought": "I carry my thread forward."}) + "\n", encoding="utf-8")
+        self.loops.write_text("[]", encoding="utf-8")
 
     def _stop_patches(self):
         for item in reversed(self.patches):
@@ -99,6 +105,7 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
         self.assertEqual(model["custom_field"], {"preserve": True})
         context = model["integration"]["current_context"]
         self.assertEqual(context["attention"], "observer evidence")
+        self.assertEqual(context["recent_narrative_records"][0]["internal_thought"], "I carry my thread forward.")
         self.assertEqual(context["recent_experiences"][0]["experience_id"], "exp-1")
         self.assertEqual(context["recent_experiences"][0]["event_id"], "event-1")
         self.assertEqual(context["recent_experiences"][0]["reflection"], "I carry the pattern forward.")
