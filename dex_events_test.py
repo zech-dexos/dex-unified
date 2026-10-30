@@ -49,6 +49,26 @@ class EventBusTests(unittest.IsolatedAsyncioTestCase):
             callback.__name__ for callback in bus._subscribers["ATTENTION_CHANGED"]
         ])
 
+        self.assertIn("process_autobiographical_event", [
+            callback.__name__ for callback in bus._subscribers["WORKSPACE_ACTIVATED"]
+        ])
+        self.assertIn("process_autobiographical_event", [
+            callback.__name__ for callback in bus._subscribers["TRI_SIGIL_OBSERVED"]
+        ])
+
+    async def test_subscriber_result_preserves_nested_layer_outcomes(self):
+        bus = EventBus()
+
+        async def nested(_payload):
+            return {"event_dispatch_complete": False, "reason": "child failed"}
+
+        bus.subscribe("OUTER", nested)
+        outcomes = await bus.publish("OUTER", {"event_id": "outer-1"})
+
+        self.assertEqual(outcomes[0]["status"], "completed")
+        self.assertFalse(outcomes[0]["result"]["event_dispatch_complete"])
+        self.assertEqual(outcomes[0]["result"]["reason"], "child failed")
+
     async def test_subscriber_failure_does_not_skip_later_layers(self):
         bus = EventBus()
         observed = []
