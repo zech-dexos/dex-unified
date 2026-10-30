@@ -21,6 +21,7 @@ CHAT_MODEL_PATH = os.environ.get(
 )
 CHAT_CONTEXT_SIZE = max(512, int(os.environ.get("LOCAL_CHAT_N_CTX", "4096")))
 CHAT_THREADS = max(1, int(os.environ.get("LOCAL_CHAT_THREADS", "2")))
+AMBIENT_THREADS = max(1, int(os.environ.get("LOCAL_AMBIENT_THREADS", "1")))
 
 
 def _load_model(path: str, context_size: int, threads: int | None = None):
@@ -44,7 +45,8 @@ def _load_model(path: str, context_size: int, threads: int | None = None):
 def _get_llm():
     global _llm
     if _llm is None:
-        _llm = _load_model(MODEL_PATH, 2048)
+        # Bound background inference so it cannot consume every CPU thread.
+        _llm = _load_model(MODEL_PATH, 2048, AMBIENT_THREADS)
     return _llm
 
 
