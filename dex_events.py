@@ -102,7 +102,7 @@ class EventBus:
         outcomes = await self._dispatch_local(event_type, event)
         outcomes.append({
             "subscriber": "durable_cross_process_bridge",
-            "status": "completed",
+            "status": "failed" if bridge_result.get("failed", 0) else "completed",
             "result": bridge_result,
         })
         return outcomes
