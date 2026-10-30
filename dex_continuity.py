@@ -138,6 +138,8 @@ async def process_continuity_event(payload: Dict[str, Any]):
         "observation_id",
         "experience_id",
         "event_id",
+        "source_event_id",
+        "source_interaction_event_id",
         "lineage_hash",
         "stages",
         "sigil_ids",
