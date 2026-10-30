@@ -51,10 +51,20 @@ class EventBus:
             subscribers.append(callback)
 
     async def _dispatch_local(self, event_type: str, payload: Dict[str, Any]) -> List[dict]:
-        outcomes = []
-        for callback in tuple(self._subscribers.get(event_type, ())):
-            outcomes.append(await self._safe_call(callback, event_type, payload))
-        return outcomes
+        """Deliver one shared event to every cognitive layer concurrently.
+
+        Each subscriber receives the same immutable-in-practice event snapshot.
+        Results retain registration order even though handlers execute together.
+        A slow persistence layer therefore does not prevent another layer from
+        observing the event at the same time.
+        """
+        subscribers = tuple(self._subscribers.get(event_type, ()))
+        if not subscribers:
+            return []
+        return await asyncio.gather(*(
+            self._safe_call(callback, event_type, dict(payload))
+            for callback in subscribers
+        ))
 
     async def drain_shared(self, limit: int = 64) -> dict:
         """Consume events emitted by the other runtime process.
