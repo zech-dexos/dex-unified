@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional
 
 from paths import (
     IDENTITY_PATH, SELF_MODEL_PATH, PARTICIPANT_PATH, EXPERIENCES_PATH,
-    REFLECTION_PATH, LEDGER_PATH, NARRATIVE_PATH,
+    REFLECTION_PATH, LEDGER_PATH, NARRATIVE_PATH, LOOPS_PATH,
 )
 
 
@@ -79,6 +79,7 @@ def refresh_self_model(
     experiences = _read_jsonl_tail(EXPERIENCES_PATH, 8)
     reflections = _read_jsonl_tail(REFLECTION_PATH, 5)
     narrative_records = _read_jsonl_tail(NARRATIVE_PATH, 8)
+    open_loops = _read_json(LOOPS_PATH, [])
     lineage = _read_jsonl_tail(LEDGER_PATH, 12)
     narrative = identity.get("narrative_thread", [])
     if not isinstance(narrative, list):
@@ -115,7 +116,17 @@ def refresh_self_model(
             "current_context": {
                 "attention": participant.get("current_attention", ""),
                 "attention_state": identity.get("attention_state", {}),
-                "goals": participant.get("current_goals", []),
+                "goals": [
+                    item for item in (identity.get("active_goals_state", []) or [])
+                    if isinstance(item, dict) and item.get("status") == "active"
+                ],
+                "persistent_thoughts": [
+                    item for item in (identity.get("persistent_thoughts", []) or [])
+                    if isinstance(item, dict) and item.get("status") in ("active", "deferred")
+                ][-8:],
+                "active_workspace": identity.get("active_mental_workspace_state", {}),
+                "open_loops": open_loops[-10:] if isinstance(open_loops, list) else open_loops,
+                "pending_cognitive_observations": (identity.get("pending_cognitive_observations", []) or [])[-5:],
                 "experiential_continuity": participant.get("experiential_continuity", {}),
                 "interlocutor": participant.get("current_interlocutor", {}),
                 "last_autobiographical_event": identity.get("last_autobiographical_event"),
