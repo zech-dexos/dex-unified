@@ -3,6 +3,12 @@ local_llm.py — local GGUF inference for ambient and interactive chat.
 Models are loaded lazily and kept resident for the life of the container.
 """
 import os
+import json
+import fcntl
+import hashlib
+import tempfile
+import time
+from contextlib import contextmanager
 
 _llm = None
 _chat_llm = None
@@ -21,6 +27,43 @@ CHAT_MODEL_PATH = os.environ.get(
 )
 CHAT_CONTEXT_SIZE = max(512, int(os.environ.get("LOCAL_CHAT_N_CTX", "4096")))
 CHAT_THREADS = max(1, int(os.environ.get("LOCAL_CHAT_THREADS", "2")))
+
+
+@contextmanager
+def _shared_inference_slot(kind: str):
+    """Serialize GGUF generation across the independent chat and ambient processes."""
+    state_root = os.path.realpath(
+        os.environ.get("DEXOS_STATE_DIR") or os.path.dirname(__file__)
+    )
+    identity = hashlib.sha256(state_root.encode("utf-8")).hexdigest()[:16]
+    lock_path = os.path.join(
+        tempfile.gettempdir(),
+        f"dexos-inference-{getattr(os, 'getuid', lambda: 0)()}-{identity}.lock",
+    )
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    wait_started = time.monotonic()
+    acquired_at = None
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        acquired_at = time.monotonic()
+        waited = acquired_at - wait_started
+        print(
+            f"[Inference Coordinator] {kind} slot acquired after {waited:.2f}s",
+            flush=True,
+        )
+        yield
+    finally:
+        held = time.monotonic() - acquired_at if acquired_at is not None else 0.0
+        try:
+            if acquired_at is not None:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+        if acquired_at is not None:
+            print(
+                f"[Inference Coordinator] {kind} slot released after {held:.2f}s",
+                flush=True,
+            )
 
 
 def _load_model(path: str, context_size: int, threads: int | None = None):
@@ -102,24 +145,25 @@ def local_slm_generate(prompt: str, max_tokens: int = 200, json_schema=None) -> 
         "max_tokens": output_tokens,
         "temperature": 0.8,
     }
-    if json_schema:
-        try:
-            out = llm.create_chat_completion(
-                response_format={"type": "json_object", "schema": json_schema},
-                **request,
-            )
-        except Exception as e:
-            print(
-                f"[Ambient Runtime] JSON-constrained decoding failed ({e}); retrying unconstrained",
-                flush=True,
-            )
+    with _shared_inference_slot("ambient"):
+        if json_schema:
+            try:
+                out = llm.create_chat_completion(
+                    response_format={"type": "json_object", "schema": json_schema},
+                    **request,
+                )
+            except Exception as e:
+                print(
+                    f"[Ambient Runtime] JSON-constrained decoding failed ({e}); retrying unconstrained",
+                    flush=True,
+                )
+                out = llm.create_chat_completion(**request)
+        else:
             out = llm.create_chat_completion(**request)
-    else:
-        out = llm.create_chat_completion(**request)
     return out["choices"][0]["message"]["content"].strip()
 
 
-def local_chat_generate(messages, max_tokens: int = 200) -> str:
+def local_chat_generate(messages, max_tokens: int = 200, on_token=None) -> str:
     """Generate from native chat messages through the resident local GGUF.
 
     This preserves system/user/assistant roles instead of flattening the whole
@@ -192,25 +236,49 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
         "max_tokens": output_tokens,
         "temperature": 0.7,
     }
-    if endpoint:
-        import httpx
+    # Consume the model's actual generation stream. The callback receives
+    # only newly generated text; callers decide how to observe or display it.
+    fragments = []
+    with _shared_inference_slot("interactive"):
+        if endpoint:
+            import httpx
 
-        response = httpx.post(
-            endpoint + "/v1/chat/completions",
-            json={"model": "heretic-local", **request},
-            timeout=httpx.Timeout(300.0, connect=5.0),
-        )
-        response.raise_for_status()
-        result = response.json()
-    else:
-        result = llm.create_chat_completion(**request)
-    choices = result.get("choices") or []
-    if not choices:
-        raise RuntimeError("llama.cpp returned no completion choices")
-    message = choices[0].get("message") or {}
-    content = message.get("content")
-    if not isinstance(content, str) or not content.strip():
-        raise RuntimeError("llama.cpp returned empty completion content")
+            with httpx.stream(
+                "POST",
+                endpoint + "/v1/chat/completions",
+                json={"model": "heretic-local", **request, "stream": True},
+                timeout=httpx.Timeout(300.0, connect=5.0),
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                    except (TypeError, ValueError):
+                        continue
+                    choices = chunk.get("choices") or []
+                    delta = (choices[0].get("delta") or {}).get("content") if choices else None
+                    if isinstance(delta, str) and delta:
+                        fragments.append(delta)
+                        if callable(on_token):
+                            on_token(delta)
+        else:
+            stream = llm.create_chat_completion(**request, stream=True)
+            for chunk in stream:
+                choices = chunk.get("choices") or []
+                delta = (choices[0].get("delta") or {}).get("content") if choices else None
+                if isinstance(delta, str) and delta:
+                    fragments.append(delta)
+                    if callable(on_token):
+                        on_token(delta)
+
+    content = "".join(fragments)
+    if not content.strip():
+        raise RuntimeError("local GGUF returned empty completion content")
     return content.strip()
 
 

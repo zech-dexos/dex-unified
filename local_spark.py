@@ -142,7 +142,7 @@ def _parse_tool_request(text):
     return valid or None
 
 
-def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUNDS):
+def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUNDS, on_token=None, on_event=None):
     """Generate a reply and execute only explicitly allowlisted DexOS capabilities."""
     with _inference_lock:
         from local_llm import local_chat_generate, CHAT_MODEL_PATH
@@ -170,7 +170,31 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
             0, min(int(max_tool_rounds), MAX_TOOL_ROUNDS)
         )
         for round_index in range(effective_tool_rounds + 1):
-            answer = local_chat_generate(conversation, max_tokens=max_tokens)
+            if callable(on_event):
+                on_event("MODEL_PASS_STARTED", {"generation_round": round_index})
+            token_buffer = []
+
+            def observe_token(delta):
+                if not isinstance(delta, str) or not delta:
+                    return
+                token_buffer.append(delta)
+                if sum(len(part) for part in token_buffer) >= 128:
+                    chunk = "".join(token_buffer)
+                    token_buffer.clear()
+                    if callable(on_token):
+                        on_token(chunk, {
+                            "generation_round": round_index,
+                            "generation_stage": "model_generation",
+                        })
+
+            answer = local_chat_generate(
+                conversation, max_tokens=max_tokens, on_token=observe_token
+            )
+            if token_buffer and callable(on_token):
+                on_token("".join(token_buffer), {
+                    "generation_round": round_index,
+                    "generation_stage": "model_generation",
+                })
             if not isinstance(answer, str) or not answer.strip():
                 raise RuntimeError("local GGUF returned empty text")
             requests = _parse_tool_request(answer)
@@ -192,6 +216,14 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
             observations = []
             for request in requests:
                 observation = execute_capability(request["name"], request["arguments"])
+                if callable(on_event):
+                    on_event("CAPABILITY_EXECUTED", {
+                        "generation_round": round_index,
+                        "capability": request["name"],
+                        "arguments": request["arguments"],
+                        "success": not (isinstance(observation, dict) and "error" in observation),
+                        "observation": observation,
+                    })
                 executed.append({
                     "name": request["name"],
                     "args": request["arguments"],

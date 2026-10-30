@@ -73,9 +73,24 @@ async def evaluate_salience(payload: Dict[str, Any]):
     prior = current.get("attention_state", {})
     prior_focus = str(prior.get("current_focus", ""))
     prior_score = float(prior.get("salience", 0.0) or 0.0)
+    history = list(prior.get("history", []) or [])
+
+    # API and ambient processes share this state but receive the same journal
+    # event independently. Do not apply its attention transition twice.
+    if source_event_id and any(
+        isinstance(item, dict)
+        and item.get("source_event_id") == source_event_id
+        and item.get("source_event_type") == event_type
+        for item in history
+    ):
+        return {
+            "status": "duplicate",
+            "source_event_id": source_event_id,
+            "source_event_type": event_type,
+        }
+
     changed = focus != prior_focus or abs(score - prior_score) >= 0.05
 
-    history = list(prior.get("history", []) or [])
     record = {
         "event_id": event_id,
         "source_event_id": source_event_id,

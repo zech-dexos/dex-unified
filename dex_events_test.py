@@ -6,15 +6,24 @@ from dex_events import EventBus, bus, setup_cognitive_layers, dispatch_complete
 
 
 class EventBusTests(unittest.IsolatedAsyncioTestCase):
-    async def test_publish_waits_and_preserves_registration_order(self):
+    async def test_subscribers_run_concurrently_and_results_keep_registration_order(self):
         bus = EventBus()
         observed = []
+        started = []
+        both_started = asyncio.Event()
 
         async def first(payload):
-            await asyncio.sleep(0)
+            started.append("first")
+            if len(started) == 2:
+                both_started.set()
+            await asyncio.wait_for(both_started.wait(), timeout=1)
             observed.append(("first", payload["event_id"]))
 
-        def second(payload):
+        async def second(payload):
+            started.append("second")
+            if len(started) == 2:
+                both_started.set()
+            await asyncio.wait_for(both_started.wait(), timeout=1)
             observed.append(("second", payload["event_id"]))
 
         bus.subscribe("INTERACTION", first)
@@ -23,9 +32,15 @@ class EventBusTests(unittest.IsolatedAsyncioTestCase):
 
         outcomes = await bus.publish("INTERACTION", {"event_id": "event-1"})
 
-        self.assertEqual(
+        self.assertCountEqual(started, ["first", "second"])
+        self.assertCountEqual(
             observed,
             [("first", "event-1"), ("second", "event-1")],
+        )
+        self.assertEqual(
+            [item["subscriber"] for item in outcomes],
+            ["EventBusTests.test_subscribers_run_concurrently_and_results_keep_registration_order.<locals>.first",
+             "EventBusTests.test_subscribers_run_concurrently_and_results_keep_registration_order.<locals>.second"],
         )
         self.assertEqual([item["status"] for item in outcomes], ["completed", "completed"])
 
