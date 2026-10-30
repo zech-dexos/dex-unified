@@ -169,6 +169,15 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
 
     current = load_self_state()
     narrative = list(current.get("narrative_thread", []))
+    event_id = payload.get("event_id")
+    if event_id and any(
+        isinstance(item, dict)
+        and item.get("event_id") == event_id
+        and item.get("event_type") == event_type
+        for item in narrative
+    ):
+        print(f"[Autobiography] Duplicate event skipped: {event_type} {event_id}")
+        return
     narrative.append(entry)
     narrative = narrative[-500:]
 
