@@ -361,6 +361,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "tri_sigil": integrated_model.get("tri_sigil"),
                     "narrative": integrated_model.get("narrative"),
                     "posture": integrated_model.get("posture"),
+                    "becoming": integrated_model.get("becoming", {}),
                     "current_context": context,
                     "self_inquiry": integrated_model.get("self_inquiry", {}),
                 }, ensure_ascii=False, default=str)[:5000]
