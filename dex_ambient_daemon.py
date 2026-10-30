@@ -1,6 +1,7 @@
 import asyncio
 import json
 import traceback
+import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Callable, Awaitable, Dict, Any
 
@@ -375,6 +376,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
             + "\n\nReturn one small development of that target. Respond with ONLY the JSON object."
         )
+        ambient_event_id = uuid.uuid4().hex
         response_text = await llm_callable(target_prompt)
 
         try:
@@ -438,6 +440,8 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                         salience=salience,
                         runtime_trace={
                             "lifecycle_mode": lifecycle_mode,
+                            "event_id": ambient_event_id,
+                            "source_event_id": target.get("id"),
                         },
                     )
                     # Close the loop: the persisted experience becomes
@@ -446,7 +450,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                         from who_ai_am import refresh_self_model
                         refresh_self_model("ambient_experience", {
                             "event_type": "ambient_experience",
-                            "event_id": ambient_packet.experience_id,
+                            "event_id": ambient_packet.event_id,
                             "experience_id": ambient_packet.experience_id,
                             "summary": thought_text,
                         })
@@ -492,6 +496,8 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                 # Publish event to the continuous substrate fabric.
                 await bus.publish("THOUGHT_GENERATED", {
                     "event_type": "THOUGHT_GENERATED",
+                    "event_id": ambient_packet.event_id,
+                    "experience_id": ambient_packet.experience_id,
                     "thought": thought_text,
                     "salience": salience,
                     "source": "ambient_pulse",
