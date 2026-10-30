@@ -57,7 +57,7 @@ def build_observer_trace(snapshot, user_id, message, reply, model, provider,
 
 async def persist_observation(trace, user_id="default"):
     from lineage import create_entry
-    from dex_events import bus
+    from dex_events import bus, dispatch_complete
     stages = trace.get("stages", {})
     entry = create_entry(
         event_type="tri_sigil_observation",
@@ -126,5 +126,7 @@ async def persist_observation(trace, user_id="default"):
         "observation_id": trace.get("observation_id"),
         "queued_for_cognition": True,
         "event_dispatch": event_dispatch,
-        "event_dispatch_complete": all(item.get("status") == "completed" for item in event_dispatch),
+        "event_dispatch_complete": bool(event_dispatch) and dispatch_complete(
+            event_dispatch, {"process_continuity_event"}
+        ),
     }
