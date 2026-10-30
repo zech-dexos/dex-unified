@@ -381,6 +381,13 @@ def run_reflection(lookback: int = 20) -> dict:
         "observations": reflection["observations"],
         "open_questions": reflection["open_questions"],
         "continuity": reflection["continuity"],
+        "event_id": reflection.get("event_id"),
+        "source_event_ids": reflection.get("source_event_ids", []),
+        "experience_ids": [
+            item.get("experience_id")
+            for item in reflection.get("experience_evidence", [])
+            if item.get("experience_id")
+        ],
     }
 
 
