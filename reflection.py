@@ -20,7 +20,7 @@ from collections import deque
 from pathlib import Path
 from lineage import create_entry, get_recent, verify_chain
 
-from paths import IDENTITY_PATH, AMENDMENT_PATH, REFLECTION_PATH, EXPERIENCES_PATH
+from paths import IDENTITY_PATH, AMENDMENT_PATH, REFLECTION_PATH, EXPERIENCES_PATH, NARRATIVE_PATH
 
 
 def load_identity() -> dict:
@@ -326,6 +326,16 @@ def run_reflection(lookback: int = 20) -> dict:
     autobiographical_events = identity.get("narrative_thread", [])
     if not isinstance(autobiographical_events, list):
         autobiographical_events = []
+    narrative_records = _read_jsonl_tail(NARRATIVE_PATH, 5)
+    autobiographical_events = autobiographical_events + [
+        {
+            "event_type": "INTERNAL_THOUGHT",
+            "timestamp": item.get("timestamp"),
+            "what_happened": item.get("internal_thought", ""),
+            "fragments_referenced": item.get("fragments_referenced", 0),
+        }
+        for item in narrative_records if isinstance(item, dict)
+    ]
     reflection = compose_reflection(
         identity,
         analysis,
