@@ -50,6 +50,7 @@ class ParticipantSnapshot:
 @dataclass
 class ExperiencePacket:
     experience_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    event_id: str = ""
     participant_id: str = ""
     timestamp: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
     intent: str = ""
@@ -203,6 +204,7 @@ def record_interaction_experience(
     reply: str = "",
     user_id: str = "default",
     observer_trace: Optional[dict] = None,
+    event_id: str = "",
 ) -> ExperiencePacket:
     """Turn a completed conversation turn into Dex's durable lived experience."""
     interlocutor = dict(snapshot.current_interlocutor)
@@ -210,6 +212,7 @@ def record_interaction_experience(
 
     packet = ExperiencePacket(
         participant_id=snapshot.participant_id,
+        event_id=str(event_id or ""),
         self_identity="Deximus Maximus",
         interlocutor=interlocutor,
         experience=(
