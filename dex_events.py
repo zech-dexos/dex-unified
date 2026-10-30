@@ -1,17 +1,21 @@
-"""DexOS event fabric.
+"""DexOS event fabric with a durable cross-process integration bridge.
 
-Events are the integration boundary between the live runtime and persistent
-cognitive subsystems. Publishing an event is a completion barrier: all
-registered subscribers are invoked in registration order and awaited before
-publish returns. This keeps the existing event API while ensuring that a
-completed response cannot outrun its continuity/autobiography handlers.
+The in-process bus remains the synchronous cognitive dispatch boundary. Each
+published event is also appended to a SQLite journal in DEXOS_STATE_DIR. Other
+runtime processes consume that journal with independent acknowledgements, so
+API and ambient cognition no longer depend on sharing Python memory.
 
-Subscribers should remain bounded, deterministic persistence/coordination
-handlers. Long-running inference belongs in the ambient scheduler, not in a
-request-completion subscriber.
+Delivery is at-least-once across process crashes. Subscribers should use the
+event_id as an idempotency key when making non-idempotent mutations.
 """
+import asyncio
 import inspect
+import os
+import sys
+import uuid
 from typing import Dict, List, Callable, Any, Awaitable
+
+from dex_event_bridge import append_event, pending_events, acknowledge_event
 
 
 class EventBus:
@@ -19,6 +23,21 @@ class EventBus:
         self._subscribers: Dict[
             str, List[Callable[[Dict[str, Any]], Awaitable[None]]]
         ] = {}
+        self._bridge_lock = asyncio.Lock()
+        self._draining_bridge = False
+        self._consumer_id = self._resolve_consumer_id()
+
+    @staticmethod
+    def _resolve_consumer_id() -> str:
+        configured = os.environ.get("DEX_EVENT_CONSUMER", "").strip()
+        if configured:
+            return configured
+        command = os.path.basename(sys.argv[0]).lower()
+        if "ambient" in command:
+            return "ambient"
+        if "uvicorn" in command or "api" in command:
+            return "api"
+        return f"runtime-{os.getpid()}"
 
     def subscribe(
         self,
@@ -30,18 +49,62 @@ class EventBus:
         if callback not in subscribers:
             subscribers.append(callback)
 
-    async def publish(self, event_type: str, payload: Dict[str, Any]) -> List[dict]:
-        """Deliver an event and wait for each subscriber to finish.
-
-        A snapshot prevents subscription changes during delivery from changing
-        the current dispatch. One failing subscriber is reported but does not
-        prevent later subscribers from receiving the same event.
-        """
+    async def _dispatch_local(self, event_type: str, payload: Dict[str, Any]) -> List[dict]:
         outcomes = []
         for callback in tuple(self._subscribers.get(event_type, ())):
-            outcomes.append(
-                await self._safe_call(callback, event_type, payload)
-            )
+            outcomes.append(await self._safe_call(callback, event_type, payload))
+        return outcomes
+
+    async def drain_shared(self, limit: int = 64) -> dict:
+        """Consume events emitted by the other runtime process.
+
+        Acknowledgements are written only after every local subscriber succeeds.
+        Failed deliveries remain pending for retry on the next bus operation.
+        """
+        if self._draining_bridge:
+            return {"received": 0, "acknowledged": 0, "failed": 0}
+        async with self._bridge_lock:
+            self._draining_bridge = True
+            received = acknowledged = failed = 0
+            try:
+                for event in pending_events(self._consumer_id, limit=limit):
+                    received += 1
+                    event_type = str(event.get("event_type") or "")
+                    payload = event.get("payload")
+                    if not event_type or not isinstance(payload, dict):
+                        acknowledge_event(self._consumer_id, event["event_id"])
+                        acknowledged += 1
+                        continue
+                    outcomes = await self._dispatch_local(event_type, payload)
+                    if all(item.get("status") == "completed" for item in outcomes):
+                        acknowledge_event(self._consumer_id, event["event_id"])
+                        acknowledged += 1
+                    else:
+                        failed += 1
+                return {
+                    "received": received,
+                    "acknowledged": acknowledged,
+                    "failed": failed,
+                }
+            finally:
+                self._draining_bridge = False
+
+    async def publish(self, event_type: str, payload: Dict[str, Any]) -> List[dict]:
+        """Journal an event, drain remote events, then complete local delivery."""
+        event = dict(payload or {})
+        event_id = str(event.get("event_id") or uuid.uuid4().hex)
+        event["event_id"] = event_id
+        event.setdefault("event_type", event_type)
+        event.setdefault("event_origin", self._consumer_id)
+        append_event(event_id, event_type, self._consumer_id, event)
+
+        bridge_result = await self.drain_shared()
+        outcomes = await self._dispatch_local(event_type, event)
+        outcomes.append({
+            "subscriber": "durable_cross_process_bridge",
+            "status": "completed",
+            "result": bridge_result,
+        })
         return outcomes
 
     async def _safe_call(
@@ -74,12 +137,7 @@ bus = EventBus()
 
 
 def setup_cognitive_layers() -> None:
-    """Register the same persistent cognitive layers in every runtime process.
-
-    The event bus is process-local. API and ambient workers must each register
-    these handlers against their own bus instance while sharing canonical state.
-    EventBus.subscribe makes repeated setup safe.
-    """
+    """Register persistent cognitive layers in each runtime process."""
     from dex_continuity import setup_continuity
     from dex_autobiography import setup_autobiography
     from dex_attention import setup_attention
