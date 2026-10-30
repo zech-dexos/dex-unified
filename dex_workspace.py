@@ -34,7 +34,42 @@ async def activate_workspace(payload: Dict[str, Any]):
     same_focus = active and current_focus == focus
     current_salience = float(workspace.get("attention_salience", 0.65) or 0.65)
 
-    if active and not same_focus and salience < current_salience + WORKSPACE_PREEMPTION_MARGIN:
+    root_interrupt = (
+        str(payload.get("user_id", "")).strip().lower() == "root"
+        and payload.get("source_event_type") == "PARTICIPANT_EVENT"
+    )
+
+    if active and not same_focus and root_interrupt:
+        # Suspend the ambient focus before Root takes the active workspace.
+        suspended = list(current.get("suspended_workspaces", []) or [])
+        if workspace.get("source_event_type") != "PARTICIPANT_EVENT" and current_focus:
+            suspended = [
+                item for item in suspended
+                if not isinstance(item, dict)
+                or item.get("concept_identifier") != current_focus
+            ]
+            suspended.append({
+                "concept_identifier": current_focus,
+                "description_snapshot": workspace.get("description_snapshot", current_focus),
+                "attention_salience": current_salience,
+                "source_event_type": workspace.get("source_event_type"),
+                "source_event_id": workspace.get("source_event_id"),
+                "suspended_at": payload.get("timestamp"),
+            })
+            update_self_state({"suspended_workspaces": suspended[-10:]})
+    elif (
+        active and not same_focus
+        and workspace.get("source_event_type") == "PARTICIPANT_EVENT"
+        and payload.get("source_event_type") != "PARTICIPANT_EVENT"
+    ):
+        return {
+            "status": "participant_workspace_retained",
+            "current_focus": current_focus,
+            "incoming_focus": focus,
+            "current_salience": current_salience,
+            "incoming_salience": salience,
+        }
+    elif active and not same_focus and salience < current_salience + WORKSPACE_PREEMPTION_MARGIN:
         return {
             "status": "existing_workspace_retained",
             "current_focus": current_focus,
