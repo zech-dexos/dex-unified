@@ -31,6 +31,7 @@ def _default_state(user_id: str = "default") -> Dict[str, Any]:
         "carry_forward": [],
         "last_contribution_at": None,
         "last_experience_id": None,
+        "last_event_id": None,
         "first_person_experience": "",
         "recent_contributions": [],
     }
@@ -100,6 +101,7 @@ def experience_contribution(
     message: str,
     reply: str = "",
     experience_id: str = "",
+    event_id: str = "",
 ) -> Dict[str, Any]:
     """
     Record one contribution as Dex's first-person experience.
@@ -131,11 +133,14 @@ def experience_contribution(
 
     state["first_person_experience"] = first_person
     state["last_experience_id"] = experience_id or state.get("last_experience_id")
+    state["last_event_id"] = event_id or state.get("last_event_id")
     state["last_contribution_at"] = _now_iso()
     state["recent_contributions"] = (
         state.get("recent_contributions", [])
         + [{
             "timestamp": state["last_contribution_at"],
+            "event_id": event_id or None,
+            "experience_id": experience_id or None,
             "message": text[:500],
             "responded": responded,
             "experience": first_person,
