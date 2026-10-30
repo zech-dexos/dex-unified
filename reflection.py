@@ -251,6 +251,36 @@ def write_reflection(reflection: dict):
     with open(REFLECTION_PATH, "a") as f:
         f.write(json.dumps(reflection) + "\n")
 
+    # Reflection questions become explicit future cognition targets.
+    # This closes the loop: reflection -> queued inquiry -> ambient cognition.
+    try:
+        from self_state import load_self_state, update_self_state
+        state = load_self_state()
+        pending = list(state.get("pending_reflection_requests", []) or [])
+        pending_focuses = {
+            str(item.get("focus", "")).strip().casefold()
+            for item in pending
+            if isinstance(item, dict) and item.get("status", "pending") == "pending"
+        }
+        for index, question in enumerate(reflection.get("open_questions", []) or []):
+            if not isinstance(question, str) or not question.strip():
+                continue
+            if question.strip().casefold() in pending_focuses:
+                continue
+            pending.append({
+                "request_id": f"{reflection.get('event_id')}:{index}",
+                "focus": question.strip(),
+                "reason": "reflection_open_question",
+                "source": "reflection",
+                "source_event_ids": reflection.get("source_event_ids", []),
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "status": "pending",
+            })
+            pending_focuses.add(question.strip().casefold())
+        update_self_state({"pending_reflection_requests": pending})
+    except Exception as exc:
+        print(f"[reflection] future inquiry queue update failed: {exc}")
+
     # Also anchor it in the main lineage chain
     create_entry(
         event_type="reflection",
