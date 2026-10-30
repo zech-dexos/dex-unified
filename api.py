@@ -699,6 +699,8 @@ architecture directly. Otherwise remain inside the conversation.
             if isinstance(_self_model, dict) and _self_model:
                 _integration = _self_model.get("integration", {})
                 _current_context = _integration.get("current_context", {}) if isinstance(_integration, dict) else {}
+                if not isinstance(_current_context, dict):
+                    _current_context = {}
                 _self_model_context = {
                     "name": _self_model.get("name"),
                     "architect": _self_model.get("architect"),
