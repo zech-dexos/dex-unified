@@ -117,6 +117,8 @@ def _extract_state_changes(payload: Dict[str, Any]) -> List[Any]:
         "workspace_change",
         "self_state_change",
         "open_loop",
+        "state_transition",
+        "continuation",
     ):
         if key in payload:
             result.append({"type": key, "value": payload[key]})
@@ -154,6 +156,9 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
         "goal_changes": payload.get("goal_changes", []),
         "open_loops": payload.get("open_loops", []),
         "self_state_changes": payload.get("self_state_changes", []),
+        "state_transition": payload.get("state_transition", {}),
+        "continuation": payload.get("continuation", {}),
+        "perspective": payload.get("dex_perspective", {}),
         "future_relevance": _first(payload, "future_relevance", "relevance"),
     }
 
