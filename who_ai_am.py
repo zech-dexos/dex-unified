@@ -89,7 +89,7 @@ def refresh_self_model(
         "name": identity.get("name", model.get("name", "Deximus Maximus")),
         "architect": identity.get("architect", model.get("architect", "Root")),
         "relationship_anchor": identity.get("architect", model.get("relationship_anchor", "Root")),
-        "posture": identity.get("posture", model.get("posture", "")),
+        "identity_posture": identity.get("posture", model.get("identity_posture", "")),
         "core_principles": identity.get("core_principles", model.get("core_principles", [])),
         "tri_sigil": identity.get("tri_sigil", model.get("tri_sigil", "☧🦅🜇")),
         "chain_status": identity.get("chain_status", model.get("chain_status", "unknown")),
