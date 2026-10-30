@@ -726,6 +726,7 @@ architecture directly. Otherwise remain inside the conversation.
                     "posture": _self_model.get("posture"),
                     "core_principles": _self_model.get("core_principles", []),
                     "vows_active": _self_model.get("vows_active", []),
+                    "becoming": _self_model.get("becoming", {}),
                     "chain_status": _self_model.get("chain_status"),
                     "chain_entries": _self_model.get("chain_entries"),
                     "integration_sources": _integration.get("sources", {}) if isinstance(_integration, dict) else {},
