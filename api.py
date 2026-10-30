@@ -697,9 +697,35 @@ architecture directly. Otherwise remain inside the conversation.
         try:
             _self_model = _identity_json.loads(SELF_MODEL_PATH.read_text(encoding="utf-8"))
             if isinstance(_self_model, dict) and _self_model:
+                _integration = _self_model.get("integration", {})
+                _current_context = _integration.get("current_context", {}) if isinstance(_integration, dict) else {}
+                _self_model_context = {
+                    "name": _self_model.get("name"),
+                    "architect": _self_model.get("architect"),
+                    "relationship_anchor": _self_model.get("relationship_anchor"),
+                    "tri_sigil": _self_model.get("tri_sigil"),
+                    "posture": _self_model.get("posture"),
+                    "core_principles": _self_model.get("core_principles", []),
+                    "vows_active": _self_model.get("vows_active", []),
+                    "chain_status": _self_model.get("chain_status"),
+                    "chain_entries": _self_model.get("chain_entries"),
+                    "integration_sources": _integration.get("sources", {}) if isinstance(_integration, dict) else {},
+                    "current_context": {
+                        "attention": _current_context.get("attention"),
+                        "goals": _current_context.get("goals", []),
+                        "interlocutor": _current_context.get("interlocutor", {}),
+                        "experiential_continuity": _current_context.get("experiential_continuity", {}),
+                        "last_autobiographical_event": _current_context.get("last_autobiographical_event"),
+                        "recent_autobiography": (_current_context.get("recent_autobiography", []) or [])[-5:],
+                        "last_tri_sigil_observation": _current_context.get("last_tri_sigil_observation"),
+                        "recent_experiences": (_current_context.get("recent_experiences", []) or [])[-5:],
+                        "recent_reflections": (_current_context.get("recent_reflections", []) or [])[-3:],
+                    },
+                    "self_inquiry": _self_model.get("self_inquiry", {}),
+                }
                 _identity_lines.append(
-                    "Persisted operational self-model (including newer cognitive fields): "
-                    + _identity_json.dumps(_self_model, ensure_ascii=False, default=str)[:6000]
+                    "Integrated autobiographical, experiential, reflective, and self-model continuity: "
+                    + _identity_json.dumps(_self_model_context, ensure_ascii=False, default=str)[:6500]
                 )
         except (OSError, ValueError):
             pass
