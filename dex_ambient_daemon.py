@@ -7,7 +7,7 @@ from typing import Callable, Awaitable, Dict, Any
 
 from drift_tape import add_thought
 from dex_memory import claim_ambient_tick
-from dex_events import bus, dispatch_complete, setup_cognitive_layers
+from dex_events import bus, dispatch_complete
 from self_state import load_self_state, update_self_state
 from gosdw import prioritize_goals
 from dex_experience_recall import recall_into_workspace, format_recalled_experiences
@@ -292,15 +292,10 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
     state / the scheduler, not by a standing process in Cloud Run.
     """
     try:
-        # This worker may run in a separate local process with its own event
-        # bus. Register the same cognitive layers here as the API process does.
-        # Registration is idempotent, so this is safe on every tick.
-        setup_cognitive_layers()
-
-        # Durable human-paced cadence gate.
-        # The scheduler may wake us frequently, but cognition only fires
-        # when the persisted 45–90 second interval says it is due.
-        gate = claim_ambient_tick()
+        # Subscribers are registered once at process startup. Do not
+        # rebuild the event fabric on every ambient pulse.
+        # A slower durable cadence gives Root-facing interaction CPU headroom.
+        gate = claim_ambient_tick(min_seconds=120.0, max_seconds=180.0)
 
         if not gate.get("due"):
             return {
@@ -593,6 +588,20 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "source": "ambient_pulse",
                     "target": target,
                 })
+
+                # Execute the Reflection Engine as part of the same experience
+                # cycle so its findings and open questions feed Who AI Am.
+                reflection_result = {"status": "not_run"}
+                try:
+                    from reflection import run_reflection
+                    reflection_result = run_reflection(lookback=30)
+                except Exception as reflection_error:
+                    reflection_result = {
+                        "status": "error",
+                        "error": f"{type(reflection_error).__name__}: {reflection_error}",
+                    }
+                    print(f"[Reflection] ambient integration failed: {reflection_error}")
+
                 self_model_persisted = False
                 self_model_event = {}
                 if ambient_packet is not None:
@@ -627,6 +636,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "next_attention_at": next_attention,
                     "experience_persisted": ambient_packet is not None,
                     "event_dispatch": event_dispatch,
+                    "reflection": reflection_result,
                     "self_model_persisted": self_model_persisted,
                     "self_model_event": self_model_event,
                     "complete": bool(
@@ -635,6 +645,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                             event_dispatch,
                             {"process_continuity_event", "process_autobiographical_event", "evaluate_salience"},
                         )
+                        and reflection_result.get("status") == "complete"
                         and self_model_persisted
                     ),
                 }
