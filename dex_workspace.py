@@ -2,7 +2,7 @@
 import uuid
 from typing import Dict, Any
 
-from dex_events import bus
+from dex_events import bus, dispatch_complete
 from self_state import SELF_STATE_PATH, load_self_state, update_self_state
 from amw import activate_thought
 
@@ -86,7 +86,9 @@ async def activate_workspace(payload: Dict[str, Any]):
         "event_id": workspace_event_id,
         "salience": salience,
         "event_dispatch": dispatch,
-        "event_dispatch_complete": all(item.get("status") == "completed" for item in dispatch),
+        "event_dispatch_complete": bool(dispatch) and dispatch_complete(
+            dispatch, {"process_continuity_event", "process_autobiographical_event"}
+        ),
     }
 
 
