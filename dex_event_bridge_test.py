@@ -22,30 +22,67 @@ class DurableBridgeTests(unittest.TestCase):
         self.path_patch.stop()
         self.temp.cleanup()
 
-    def test_two_runtime_buses_exchange_and_ack_events(self):
-        async def scenario():
-            received = []
-            with patch.dict(os.environ, {"DEX_EVENT_CONSUMER": "api"}):
-                api = EventBus()
-            with patch.dict(os.environ, {"DEX_EVENT_CONSUMER": "ambient"}):
-                ambient = EventBus()
+    def test_two_os_processes_exchange_and_ack_events(self):
+        import subprocess
+        import sys
 
-            async def ambient_handler(payload):
-                received.append(payload["event_id"])
+        event = {
+            "event_id": "interaction-1",
+            "message": "Root's event",
+        }
+        publisher = """
+import asyncio
+from dex_events import EventBus
+asyncio.run(EventBus().publish("PARTICIPANT_EVENT", {
+    "event_id": "interaction-1",
+    "message": "Root's event",
+}))
+"""
+        consumer = """
+import asyncio
+import json
+from dex_events import EventBus
+bus = EventBus()
+received = []
+async def handler(payload):
+    received.append(payload["event_id"])
+bus.subscribe("PARTICIPANT_EVENT", handler)
+result = asyncio.run(bus.drain_shared())
+print(json.dumps({"result": result, "received": received}))
+"""
+        env = dict(os.environ, DEX_EVENT_BRIDGE_PATH=self.db)
+        publisher_env = dict(env, DEX_EVENT_CONSUMER="api")
+        consumer_env = dict(env, DEX_EVENT_CONSUMER="ambient")
 
-            ambient.subscribe("PARTICIPANT_EVENT", ambient_handler)
-            await api.publish("PARTICIPANT_EVENT", {
-                "event_id": "interaction-1",
-                "message": "Root's event",
-            })
+        subprocess.run(
+            [sys.executable, "-c", publisher],
+            check=True,
+            env=publisher_env,
+            capture_output=True,
+            text=True,
+        )
+        first = subprocess.run(
+            [sys.executable, "-c", consumer],
+            check=True,
+            env=consumer_env,
+            capture_output=True,
+            text=True,
+        )
+        result = json.loads(first.stdout.strip().splitlines()[-1])
+        self.assertEqual(result["result"]["received"], 1)
+        self.assertEqual(result["result"]["acknowledged"], 1)
+        self.assertEqual(result["received"], [event["event_id"]])
 
-            result = await ambient.drain_shared()
-            self.assertEqual(result["received"], 1)
-            self.assertEqual(result["acknowledged"], 1)
-            self.assertEqual(received, ["interaction-1"])
-            self.assertEqual(dex_event_bridge.pending_events("ambient"), [])
-
-        asyncio.run(scenario())
+        second = subprocess.run(
+            [sys.executable, "-c", consumer],
+            check=True,
+            env=consumer_env,
+            capture_output=True,
+            text=True,
+        )
+        replay = json.loads(second.stdout.strip().splitlines()[-1])
+        self.assertEqual(replay["result"]["received"], 0)
+        self.assertEqual(replay["received"], [])
 
     def test_failed_subscriber_is_not_acknowledged_and_can_retry(self):
         async def scenario():
