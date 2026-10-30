@@ -127,7 +127,7 @@ async def evaluate_salience(payload: Dict[str, Any]):
         "focus": focus,
         "salience": score,
         "event_dispatch": event_dispatch,
-        "event_dispatch_complete": bool(event_dispatch) and dispatch_complete(event_dispatch, {"activate_workspace"}),
+        "event_dispatch_complete": (not changed) or dispatch_complete(event_dispatch, {"activate_workspace"}),
     }
 
 
