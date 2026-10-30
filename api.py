@@ -404,6 +404,23 @@ async def chat(req: ChatRequest):
         from ape_scheduler import run_cycle
         cycle_result = run_cycle()
         print(f"[ape_scheduler] {cycle_result}")
+        from dex_events import bus as _cognitive_event_bus
+        if cycle_result.get("workspace_released"):
+            await _cognitive_event_bus.publish("WORKSPACE_RELEASED", {
+                "event_type": "WORKSPACE_RELEASED",
+                "event_id": interaction_event_id,
+                "source": "ape_scheduler",
+                "concept_identifier": cycle_result.get("released_workspace"),
+            })
+        if cycle_result.get("amw_action") == "activated":
+            _workspace = load_self_state().get("active_mental_workspace_state", {})
+            await _cognitive_event_bus.publish("WORKSPACE_ACTIVATED", {
+                "event_type": "WORKSPACE_ACTIVATED",
+                "event_id": interaction_event_id,
+                "source": "ape_scheduler",
+                "concept_identifier": _workspace.get("concept_identifier"),
+                "salience": _workspace.get("attention_salience"),
+            })
         # Persist immediately -- don't wait for the 6-hour pulse. Cloud Run's
         # /tmp state is ephemeral, so anything not pushed before a cold start
         # is lost. Fire-and-forget in a thread so it doesn't block the reply.
