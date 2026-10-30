@@ -598,11 +598,9 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "event_dispatch": event_dispatch,
                     "complete": bool(
                         ambient_packet is not None
-                        and all(item.get("status") == "completed" for item in event_dispatch)
-                        and all(
-                            item.get("result", {}).get("event_dispatch_complete", True)
-                            for item in event_dispatch
-                            if isinstance(item.get("result"), dict)
+                        and dispatch_complete(
+                            event_dispatch,
+                            {"process_continuity_event", "process_autobiographical_event", "evaluate_salience"},
                         )
                     ),
                 }
