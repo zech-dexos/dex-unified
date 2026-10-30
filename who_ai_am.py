@@ -72,7 +72,7 @@ def _event_evidence_for(
     later instance can inspect what changed, why it mattered, and which source
     records support the account. Source ledgers remain authoritative.
     """
-    def source_ids(item: dict) -> list:
+    def _source_id_values(item: dict) -> list:
         value = item.get("source_event_ids", []) or []
         if isinstance(value, (list, tuple, set)):
             return [str(entry) for entry in value if entry]
@@ -122,7 +122,7 @@ def _event_evidence_for(
             item.get("experience_id"),
             item.get("observation_id"),
             item.get("source_event_id"),
-            *source_ids(item),
+            *_source_id_values(item),
         ):
             if value and value not in source_ids:
                 source_ids.append(value)
