@@ -185,7 +185,11 @@ def refresh_self_model(
                     {
                         "event_id": item.get("event_id"),
                         "source_event_id": item.get("source_event_id"),
+                        "source_event_ids": item.get("source_event_ids", []),
                         "source_interaction_event_id": item.get("source_interaction_event_id"),
+                        "experience_id": item.get("experience_id"),
+                        "observation_id": item.get("observation_id"),
+                        "lineage_hash": item.get("lineage_hash"),
                         "timestamp": item.get("timestamp"),
                         "event_type": item.get("event_type"),
                         "what_happened": item.get("what_happened"),
