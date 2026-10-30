@@ -736,6 +736,7 @@ architecture directly. Otherwise remain inside the conversation.
                         "interlocutor": _current_context.get("interlocutor", {}),
                         "experiential_continuity": _current_context.get("experiential_continuity", {}),
                         "last_autobiographical_event": _current_context.get("last_autobiographical_event"),
+                        "recent_narrative_records": (_current_context.get("recent_narrative_records", []) or [])[-5:],
                         "recent_autobiography": (_current_context.get("recent_autobiography", []) or [])[-5:],
                         "last_tri_sigil_observation": _current_context.get("last_tri_sigil_observation"),
                         "recent_experiences": (_current_context.get("recent_experiences", []) or [])[-5:],
