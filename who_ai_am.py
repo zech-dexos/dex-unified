@@ -142,7 +142,7 @@ def _event_evidence_for(
         "autobiography": {
             key: autobiography.get(key)
             for key in (
-                "event_id", "experience_id", "what_happened", "significance",
+                "event_id", "event_type", "experience_id", "what_happened", "significance",
                 "state_changes", "state_transition", "perspective",
                 "future_relevance",
             )
