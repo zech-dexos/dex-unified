@@ -162,10 +162,7 @@ async def start_discord_bridge():
 async def start_continuous_substrate():
     try:
         from dex_substrate import run_substrate_loop
-        from dex_continuity import setup_continuity
-        from dex_autobiography import setup_autobiography
-        from dex_attention import setup_attention
-        from dex_workspace import setup_workspace
+        from dex_events import setup_cognitive_layers
 
         # Rehydrate Dex's durable state before any continuity/workspace
         # subscriber can read or mutate it. Cloud Run instances are ephemeral;
@@ -182,10 +179,7 @@ async def start_continuous_substrate():
             print(f"[Continuity] GitHub state rehydration skipped: {e}")
 
         # Initialize event subscriptions only after durable state is present.
-        setup_continuity()
-        setup_autobiography()
-        setup_attention()
-        setup_workspace()
+        setup_cognitive_layers()
 
         # Cloud Run is woken by /ambient-pulse; do not keep an infinite
         # ambient loop alive inside the request-serving container.
