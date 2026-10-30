@@ -52,12 +52,15 @@ def _connect():
 
 
 def append_event(event_id: str, event_type: str, origin: str, payload: Dict[str, Any]) -> None:
+    # Correlation IDs may intentionally span multiple event types in one
+    # cognitive cycle. Journal identity is therefore (event_id, event_type).
+    journal_id = f"{event_type}:{event_id}"
     encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
     with _connect() as connection:
         connection.execute(
             "INSERT OR IGNORE INTO cognitive_events "
             "(event_id, event_type, origin, payload_json, created_at) VALUES (?, ?, ?, ?, ?)",
-            (str(event_id), str(event_type), str(origin), encoded, time.time()),
+            (journal_id, str(event_type), str(origin), encoded, time.time()),
         )
 
 
