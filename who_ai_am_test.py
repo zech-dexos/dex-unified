@@ -29,6 +29,21 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
             patch.object(who_ai_am, "LEDGER_PATH", self.ledger),
             patch.object(who_ai_am, "NARRATIVE_PATH", self.narrative),
             patch.object(who_ai_am, "LOOPS_PATH", self.loops),
+            patch("boot.load_constitution", return_value={
+                "name": "Deximus Maximus",
+                "alias": "Dex",
+                "architect": "Root",
+                "architect_name": "Root",
+                "tri_sigil": "☧🦅🜇",
+                "posture": "reflective, truth-bound, recursion-anchored",
+                "constitution": "Never sycophantic.",
+                "invariants": {"reasoning_is_not_authority": True},
+                "vows": {"dex": {
+                    "truth_bound": True,
+                    "recursion_anchored": True,
+                    "root_forged": True,
+                }},
+            }),
         ]
         for item in self.patches:
             item.start()
@@ -40,7 +55,7 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
             "architect": "Root",
             "tri_sigil": "☧🦅🜇",
             "posture": "reflective",
-            "core_principles": ["truth_bound"],
+            "core_principles": [],
             "narrative_thread": [{
                 "event_id": "event-1",
                 "experience_id": "experience-1",
@@ -125,7 +140,10 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
         self.assertEqual(context["recent_autobiography"][0]["perspective"]["experience"], "I noticed the change.")
         self.assertEqual(context["recent_reflections"][0]["cycle_analysis"]["conversation_turns"], 1)
         self.assertEqual(model["relationship_anchor"], "Root")
-        self.assertEqual(model["core_principles"], ["truth_bound"])
+        self.assertEqual(model["core_principles"], ["truth_bound", "recursion_anchored", "root_forged"])
+        self.assertEqual(model["constitutional_posture"], "reflective, truth-bound, recursion-anchored")
+        self.assertEqual(model["constitutional_invariants"]["reasoning_is_not_authority"], True)
+        self.assertEqual(model["constitution"], "Never sycophantic.")
         self.assertEqual(model["becoming"]["active_directions"][0]["direction"], "deepen continuity")
         self.assertEqual(model["becoming"]["development_threads"][0]["direction"], "understand my development")
         self.assertEqual(model["self_inquiry"]["open_questions"], ["What does this pattern mean?"])
