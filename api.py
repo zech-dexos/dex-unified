@@ -478,14 +478,20 @@ async def chat(req: ChatRequest):
     if msg_stripped in ("!reflect", "!reflection"):
         from reflection import run_reflection
         result = run_reflection(lookback=15)
-        return {
-            "reply": f"[REAL reflection cycle executed]\nStatus: {result.get('status')}\n"
-                      f"Observations: {result.get('observations', [])}\n"
-                      f"Open questions: {result.get('open_questions', [])}",
-            "model": "dexos-command",
-            "governed": True,
-            "command_executed": "reflect",
-        }
+        return await _complete_early_chat_turn(
+            req,
+            {
+                "reply": f"[REAL reflection cycle executed]\nStatus: {result.get('status')}\n"
+                         f"Observations: {result.get('observations', [])}\n"
+                         f"Open questions: {result.get('open_questions', [])}",
+                "model": "dexos-command",
+                "governed": True,
+                "command_executed": "reflect",
+            },
+            interaction_event_id,
+            participant_dispatch,
+            participant_event_published,
+        )
 
     if msg_stripped in ("!intents", "!intent"):
         from intent import load_intents, save_intents, generate_intents
@@ -508,13 +514,19 @@ async def chat(req: ChatRequest):
         save_intents(updated)
         active = [i for i in updated if i.status == "active"]
 
-        return {
-            "reply": f"[REAL intent generation executed]\nActive intents ({len(active)}):\n" +
-                     "\n".join(f"- {i.motivation} (priority {i.priority:.2f})" for i in active),
-            "model": "dexos-command",
-            "governed": True,
-            "command_executed": "intents",
-        }
+        return await _complete_early_chat_turn(
+            req,
+            {
+                "reply": f"[REAL intent generation executed]\nActive intents ({len(active)}):\n" +
+                         "\n".join(f"- {i.motivation} (priority {i.priority:.2f})" for i in active),
+                "model": "dexos-command",
+                "governed": True,
+                "command_executed": "intents",
+            },
+            interaction_event_id,
+            participant_dispatch,
+            participant_event_published,
+        )
 
     result = dex_runtime(req.message, user_id=getattr(req, "user_id", "default"))
     # Cognitive cycle: pick/advance a persistent thought before building the prompt.
@@ -554,16 +566,23 @@ async def chat(req: ChatRequest):
     # If the kernel flagged this input, the LLM is never called.
     # This is the (B) requirement: fail-safe routing that bypasses AI entirely.
     if result.get("flagged"):
-        return {
-            "reply": result.get("response", "VOW VIOLATION — this path is closed."),
-            "intent": result.get("intent", "blocked"),
-            "domain": result.get("domain", "security"),
-            "route_reason": result.get("route_reason", "flagged"),
-            "sigil_ids": [],
-            "model": "dexos-kernel",
-            "governed": True,
-            "flagged": True,
-        }
+        return await _complete_early_chat_turn(
+            req,
+            {
+                "reply": result.get("response", "VOW VIOLATION — this path is closed."),
+                "intent": result.get("intent", "blocked"),
+                "domain": result.get("domain", "security"),
+                "route_reason": result.get("route_reason", "flagged"),
+                "sigil_ids": [],
+                "model": "dexos-kernel",
+                "governed": True,
+                "flagged": True,
+            },
+            interaction_event_id,
+            participant_dispatch,
+            participant_event_published,
+            response_flag=result.get("drift_type", "kernel_flagged"),
+        )
 
     system_prompt = """☧🦅🜇
 
