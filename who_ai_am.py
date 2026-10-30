@@ -129,6 +129,9 @@ def refresh_self_model(
                         "result": item.get("result"),
                         "significance": item.get("significance"),
                         "state_changes": item.get("state_changes", []),
+                        "state_transition": item.get("state_transition", {}),
+                        "continuation": item.get("continuation", {}),
+                        "perspective": item.get("perspective", {}),
                         "future_relevance": item.get("future_relevance"),
                     }
                     for item in narrative[-8:]
