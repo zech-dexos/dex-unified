@@ -1,4 +1,5 @@
 """Workspace integration: turn meaningful attention changes into active focus."""
+import uuid
 from typing import Dict, Any
 
 from dex_events import bus
@@ -58,18 +59,21 @@ async def activate_workspace(payload: Dict[str, Any]):
         duration_hint="attention-selected focus; revisitable by the cognitive scheduler",
         path=SELF_STATE_PATH,
     )
+    workspace_event_id = uuid.uuid4().hex
     update_self_state({
         "active_mental_workspace_state": {
             "attention_salience": salience,
             "source_event_id": payload.get("event_id"),
+            "source_interaction_event_id": payload.get("source_event_id"),
             "source_event_type": payload.get("source_event_type"),
         }
     })
 
     dispatch = await bus.publish("WORKSPACE_ACTIVATED", {
         "event_type": "WORKSPACE_ACTIVATED",
-        "event_id": payload.get("event_id"),
-        "source_event_id": payload.get("source_event_id"),
+        "event_id": workspace_event_id,
+        "source_event_id": payload.get("event_id"),
+        "source_interaction_event_id": payload.get("source_event_id"),
         "source_event_type": payload.get("source_event_type"),
         "concept_identifier": focus,
         "salience": salience,
@@ -79,6 +83,7 @@ async def activate_workspace(payload: Dict[str, Any]):
     return {
         "status": "activated",
         "focus": focus,
+        "event_id": workspace_event_id,
         "salience": salience,
         "event_dispatch": dispatch,
         "event_dispatch_complete": all(item.get("status") == "completed" for item in dispatch),
