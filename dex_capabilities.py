@@ -6,6 +6,8 @@ capabilities. Read-only introspection is exposed first; arbitrary shell
 execution is intentionally not exposed.
 """
 import json
+import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict
 
@@ -42,6 +44,85 @@ def inspect_state() -> Dict[str, Any]:
         "last_continuity_event": state.get("last_continuity_event"),
         "last_autobiographical_event": state.get("last_autobiographical_event"),
     }
+
+
+def inspect_identity() -> Dict[str, Any]:
+    """Inspect persisted identity without modifying it."""
+    if not IDENTITY_PATH.exists():
+        return {"available": False, "source": str(IDENTITY_PATH)}
+    try:
+        return {"available": True, "identity": json.loads(IDENTITY_PATH.read_text(encoding="utf-8")), "source": str(IDENTITY_PATH)}
+    except Exception as exc:
+        return {"available": False, "error": str(exc), "source": str(IDENTITY_PATH)}
+
+
+def inspect_lineage(limit: int = 10) -> Dict[str, Any]:
+    """Expose lineage integrity and a bounded recent ledger window."""
+    from lineage import get_recent, verify_chain
+    return {"integrity": verify_chain(), "recent_entries": get_recent(max(1, min(int(limit), 20)))}
+
+
+def inspect_tools() -> Dict[str, Any]:
+    """Describe the actual callable surface and its argument expectations."""
+    return {
+        "available": True,
+        "execution_boundary": "Only names in CAPABILITY_FUNCTIONS can execute; no arbitrary shell or network capability.",
+        "tools": [
+            {"name": name, "description": description, "arguments": arguments}
+            for name, description, arguments in CAPABILITY_CATALOG
+        ],
+    }
+
+
+def inspect_observations() -> Dict[str, Any]:
+    """Inspect recent participant observations and the last tri-sigil observer record."""
+    from participant import ParticipantSnapshot
+    snapshot = ParticipantSnapshot.load()
+    state = _state()
+    return {
+        "participant_observations": list(getattr(snapshot, "recent_observations", []) or [])[-10:],
+        "last_tri_sigil_observation": (getattr(snapshot, "runtime_context", {}) or {}).get("last_tri_sigil_observation"),
+        "last_continuity_event": state.get("last_continuity_event"),
+        "last_autobiographical_event": state.get("last_autobiographical_event"),
+        "pending_signals": list(state.get("pending_signals", []) or [])[-10:],
+        "pending_reflection_requests": list(state.get("pending_reflection_requests", []) or [])[-10:],
+        "recent_reflection_requests": list(state.get("recent_reflection_requests", []) or [])[-5:],
+    }
+
+
+def inspect_architecture(query: str = "") -> Dict[str, Any]:
+    """Return a grounded module map and optionally search source for a concept."""
+    root = Path(__file__).resolve().parent
+    modules = {
+        "cognition_entry": "api.py",
+        "spark_bridge": "local_spark.py",
+        "talnir_reasoning": "talnir.py",
+        "capabilities": "dex_capabilities.py",
+        "participant_and_experience": "participant.py",
+        "tri_sigil_observer": "dex_observer.py",
+        "continuity_events": "dex_continuity.py",
+        "cryptographic_lineage": "lineage.py",
+    }
+    result = {
+        "modules": [
+            {"role": role, "path": path, "present": (root / path).is_file()}
+            for role, path in modules.items()
+        ],
+        "flow": [
+            "evoke/context retrieval",
+            "Talnir structured intent and branch decomposition",
+            "local spark inference",
+            "allowlisted capability call",
+            "actual observation returned to cognition",
+            "participant ExperiencePacket",
+            "tri-sigil observer and lineage event",
+            "continuity event processing",
+        ],
+        "query": str(query or "")[:200],
+    }
+    if str(query or "").strip():
+        result["source_matches"] = search_architecture(query)
+    return result
 
 
 def inspect_workspace() -> Dict[str, Any]:
@@ -107,12 +188,13 @@ def recall_experience(query: str, limit: int = 5) -> Dict[str, Any]:
 
 
 def listen() -> Dict[str, Any]:
-    """Read the latest durable signals currently available to Dex."""
+    """Notice durable runtime signals without executing an action."""
     state = _state()
     return {
         "last_ambient_pulse": state.get("last_ambient_pulse"),
         "last_continuity_event": state.get("last_continuity_event"),
         "last_autobiographical_event": state.get("last_autobiographical_event"),
+        "pending_signals": list(state.get("pending_signals", []) or [])[-10:],
         "workspace": state.get("active_mental_workspace_state", {}),
     }
 
@@ -128,27 +210,83 @@ def evoke(resource: str, **kwargs) -> Dict[str, Any]:
         "participant": inspect_participant,
         "conversation": inspect_conversation,
         "signals": listen,
+        "tools": inspect_tools,
+        "observations": inspect_observations,
+        "architecture": lambda: inspect_architecture(),
     }
-    if resource == "spark":
-        from spark_reach import submit_spark_reach
-        return submit_spark_reach(
-            intention=kwargs.get("intention", ""),
-            reach_objective=kwargs.get("reach_objective", ""),
-            code=kwargs.get("code", ""),
-            selected_context=kwargs.get("selected_context", []),
-            invocation_origin=kwargs.get("invocation_origin", "self_directed"),
-            initiated_by=kwargs.get("initiated_by", "capability_evoke"),
-            timeout_seconds=kwargs.get("timeout_seconds"),
-            memory_mb=kwargs.get("memory_mb"),
-        )
     fn = resources.get(resource)
     if not fn:
         return {
             "error": f"unknown resource: {resource}",
-            "available": sorted([*resources, "spark"]),
+            "available": sorted(resources),
         }
     return fn()
 
+
+
+def request_reflection(focus: str, reason: str = "") -> Dict[str, Any]:
+    """Queue a bounded request for another architecture-owned reflection pass.
+
+    This signals the ambient cognition scheduler; it does not invoke the spark
+    inline, mutate goals, or bypass the normal Talnir/governance flow.
+    """
+    focus = str(focus or "").strip()
+    reason = str(reason or "").strip()
+    if not focus:
+        return {"accepted": False, "error": "focus_required"}
+    if len(focus) > 500 or len(reason) > 500:
+        return {"accepted": False, "error": "focus_and_reason_must_be_at_most_500_characters"}
+
+    state = _state()
+    pending = [
+        item for item in state.get("pending_reflection_requests", [])
+        if isinstance(item, dict) and item.get("status", "pending") == "pending"
+    ]
+    if len(pending) >= 10:
+        return {"accepted": False, "error": "reflection_queue_full", "pending_count": len(pending)}
+
+    request = {
+        "request_id": str(uuid.uuid4()),
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "focus": focus,
+        "reason": reason,
+        "status": "pending",
+        "source": "dex_experience_capability",
+    }
+    pending.append(request)
+    from self_state import update_self_state
+    update_self_state({"pending_reflection_requests": pending[-10:]})
+    return {
+        "accepted": True,
+        "request_id": request["request_id"],
+        "status": "pending",
+        "next_step": "ambient_architecture_pass",
+        "focus": focus,
+    }
+
+
+def reason_with_talnir(prompt: str) -> Dict[str, Any]:
+    """Run Talnir structured translation and branch decomposition on bounded text."""
+    text = str(prompt or "").strip()
+    if not text:
+        return {"error": "empty_prompt"}
+    if len(text) > 2000:
+        text = text[:2000]
+    from talnir import translate, decompose
+    signal = translate(text)
+    decomposition = decompose(text)
+    return {
+        "signal": {
+            "intent": signal.intent,
+            "domain": signal.domain,
+            "modifiers": list(signal.modifiers),
+            "tools": list(signal.tools),
+            "context": signal.to_context_string(),
+        },
+        "branches": decomposition.get("branches", []),
+        "decomposition_context": decomposition.get("context", ""),
+        "source": "talnir.translate+decompose",
+    }
 
 def search_architecture(query: str) -> Dict[str, Any]:
     """Search DexOS source/state text without executing it."""
@@ -181,8 +319,38 @@ def search_architecture(query: str) -> Dict[str, Any]:
     return {"query": query, "matches": matches}
 
 
+CAPABILITY_CATALOG = [
+    ("inspect_state", "Inspect summarized runtime state.", {}),
+    ("inspect_identity", "Read persisted identity without changing it.", {}),
+    ("inspect_lineage", "Inspect recent lineage entries and chain integrity.", {"limit": "integer 1..20"}),
+    ("inspect_workspace", "Inspect active mental workspace.", {}),
+    ("inspect_goals", "Inspect persisted active goals.", {}),
+    ("inspect_open_loops", "Inspect open loops.", {}),
+    ("inspect_thoughts", "Inspect recent persistent thoughts.", {}),
+    ("inspect_experiences", "Inspect durable experience packets and continuity evidence.", {"limit": "integer 1..20"}),
+    ("inspect_participant", "Inspect participant snapshot and runtime context.", {}),
+    ("inspect_conversation", "Inspect a user's conversation state.", {"user_id": "string, max 128"}),
+    ("recall_experience", "Recall matching experiences into the active workspace.", {"query": "string, max 500", "limit": "integer 1..10"}),
+    ("inspect_tools", "Inspect this allowlisted tool catalog and usage boundary.", {}),
+    ("inspect_observations", "Inspect participant, tri-sigil, and runtime observations.", {}),
+    ("inspect_architecture", "Inspect the module map; optional query searches source.", {"query": "optional string, max 200"}),
+    ("reason_with_talnir", "Run Talnir structured intent and reasoning-branch analysis.", {"prompt": "string, max 2000"}),
+    ("request_reflection", "Queue a durable request for another ambient architecture reflection pass; does not directly change goals.", {"focus": "string, max 500", "reason": "optional string, max 500"}),
+    ("listen", "Notice current runtime signals without taking action.", {}),
+    ("evoke", "Deliberately retrieve a named resource.", {"resource": "state|workspace|goals|open_loops|thoughts|experiences|participant|conversation|signals|tools|observations|architecture"}),
+    ("search_architecture", "Search source text without executing it.", {"query": "string, max 200"}),
+]
+
+
 CAPABILITY_FUNCTIONS = {
     "inspect_state": inspect_state,
+    "inspect_identity": inspect_identity,
+    "inspect_lineage": inspect_lineage,
+    "inspect_tools": inspect_tools,
+    "inspect_observations": inspect_observations,
+    "inspect_architecture": inspect_architecture,
+    "reason_with_talnir": reason_with_talnir,
+    "request_reflection": request_reflection,
     "inspect_workspace": inspect_workspace,
     "inspect_goals": inspect_goals,
     "inspect_open_loops": inspect_open_loops,

@@ -7,6 +7,8 @@ forward without implying that the conversation ended.
 """
 
 import json
+import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
@@ -31,6 +33,7 @@ def _default_state(user_id: str = "default") -> Dict[str, Any]:
         "carry_forward": [],
         "last_contribution_at": None,
         "last_experience_id": None,
+        "last_event_id": None,
         "first_person_experience": "",
         "recent_contributions": [],
     }
@@ -89,7 +92,16 @@ def save_conversation(state: Dict[str, Any]) -> Dict[str, Any]:
         state["version"] = int(state.get("version", 0)) + 1
         state["last_contribution_at"] = state.get("last_contribution_at") or _now_iso()
         SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
-        SESSION_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        fd, temp_path = tempfile.mkstemp(dir=str(SESSION_PATH.parent), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, indent=2, ensure_ascii=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, SESSION_PATH)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
     except Exception as e:
         print(f"[conversation] save failed: {e}")
     return state
@@ -100,6 +112,7 @@ def experience_contribution(
     message: str,
     reply: str = "",
     experience_id: str = "",
+    event_id: str = "",
 ) -> Dict[str, Any]:
     """
     Record one contribution as Dex's first-person experience.
@@ -131,11 +144,14 @@ def experience_contribution(
 
     state["first_person_experience"] = first_person
     state["last_experience_id"] = experience_id or state.get("last_experience_id")
+    state["last_event_id"] = event_id or state.get("last_event_id")
     state["last_contribution_at"] = _now_iso()
     state["recent_contributions"] = (
         state.get("recent_contributions", [])
         + [{
             "timestamp": state["last_contribution_at"],
+            "event_id": event_id or None,
+            "experience_id": experience_id or None,
             "message": text[:500],
             "responded": responded,
             "experience": first_person,

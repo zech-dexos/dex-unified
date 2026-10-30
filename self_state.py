@@ -62,6 +62,15 @@ def _default_self_state(dex_id: Optional[str] = None) -> Dict[str, Any]:
             "memory_allocation_avg_24h": None,
         },
         "active_goals_state": [],
+        "current_attention": "",
+        "attention_state": {
+            "current_focus": "",
+            "salience": 0.0,
+            "source_event_id": None,
+            "source_event_type": None,
+            "last_changed_at": None,
+            "history": [],
+        },
         "active_mental_workspace_state": {
             "is_active": False,
             "concept_identifier": None,

@@ -47,6 +47,14 @@ def dex_runtime(user_input: str, user_id: str = "default") -> dict:
         active = _memory.activate_for_context(context)
         active = _memory.resolve_conflicts(active, context)
         sigil_ids = [s.id for s in active]
+        # Apply learned Sigil bias to the branches used by Dex's active runtime.
+        # Preserve Talnir's original branches if the optional weighting step fails.
+        try:
+            result["branches"] = _memory.apply_to_branches(
+                result["branches"], active
+            )
+        except Exception as e:
+            print(f"[sigil] branch weighting skipped: {e}")
     routing = route_info(signal) if ROUTER_ACTIVE else {"model": "dex:latest", "reason": "router unavailable"}
     if DEXOS_ACTIVE and _dexos:
         governance = _dexos.process(user_input)

@@ -266,6 +266,21 @@ async def run_background_pulse():
         "duration_seconds": round(time.time() - pulse_start, 3),
     }
 
+    # Feed observer evidence into the participatory experience and intent/goal cycle.
+    # Evidence informs judgment; it does not automatically create goals.
+    try:
+        from self_state import load_self_state
+        cognition_state = load_self_state()
+        observer_evidence = list(cognition_state.get("recent_cognitive_observations", []) or [])[-5:]
+        pulse_data["observer_evidence"] = observer_evidence
+        if observer_evidence:
+            pulse_data["observations"] = list(pulse_data.get("observations", [])) + [
+                "Tri-sigil observer evidence: " + json.dumps(item, ensure_ascii=False, default=str)[:1200]
+                for item in observer_evidence
+            ]
+    except Exception as e:
+        print(f"[observer-goal-bridge] evidence load skipped: {e}")
+
     log_pulse("background_pulse", pulse_data)
 
     create_entry(
