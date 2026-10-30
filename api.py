@@ -860,7 +860,13 @@ architecture directly. Otherwise remain inside the conversation.
                 _self_model_context = {
                     "name": _self_model.get("name"),
                     "architect": _self_model.get("architect"),
+                    "architect_name": _self_model.get("architect_name"),
                     "relationship_anchor": _self_model.get("relationship_anchor"),
+                    "identity_posture": _self_model.get("identity_posture"),
+                    "constitutional_posture": _self_model.get("constitutional_posture"),
+                    "constitutional_invariants": _self_model.get("constitutional_invariants", {}),
+                    "constitutional_vows": _self_model.get("constitutional_vows", {}),
+                    "constitution": _self_model.get("constitution"),
                     "tri_sigil": _self_model.get("tri_sigil"),
                     "posture": _self_model.get("posture"),
                     "core_principles": _self_model.get("core_principles", []),
