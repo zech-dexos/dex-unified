@@ -1,5 +1,6 @@
 from typing import Optional
 import asyncio
+import uuid
 from gtts import gTTS
 import io
 from fastapi.responses import StreamingResponse
@@ -343,11 +344,13 @@ class ChatRequest(BaseModel):
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
+    interaction_event_id = uuid.uuid4().hex
     msg_stripped = req.message.strip().lower()
     try:
         from dex_events import bus
         await bus.publish("PARTICIPANT_EVENT", {
             "event_type": "PARTICIPANT_EVENT",
+            "event_id": interaction_event_id,
             "message": req.message,
             "user_id": getattr(req, "user_id", "default"),
         })
@@ -931,6 +934,7 @@ the exchange as a newly started request/response transaction.
             sigil_ids=result.get("sigil_ids", []),
             sigil_active=bool(SIGIL_ACTIVE and _memory),
             response_flag=governance_flag,
+            event_id=interaction_event_id,
         )
         observer_trace["runtime"] = {
             "intent": result.get("intent"),
@@ -958,6 +962,7 @@ the exchange as a newly started request/response transaction.
         experience_packet = record_interaction_experience(
             ParticipantSnapshot.load(), req.message, reply,
             user_id=user_id, observer_trace=observer_trace,
+            event_id=interaction_event_id,
         )
         experience_contribution(
             user_id=user_id, message=req.message, reply=reply,
@@ -973,6 +978,7 @@ the exchange as a newly started request/response transaction.
         from dex_events import bus
         await bus.publish("RESPONSE_COMPLETED", {
             "event_type": "RESPONSE_COMPLETED",
+            "event_id": interaction_event_id,
             "message": req.message,
             "reply": reply,
             "user_id": getattr(req, "user_id", "default"),
@@ -1011,6 +1017,7 @@ the exchange as a newly started request/response transaction.
             "stages": observer_trace.get("stages", {}),
         },
         "response_flag": governance_flag,
+        "event_id": interaction_event_id,
     }
 
 @app.post("/experience-recall")
