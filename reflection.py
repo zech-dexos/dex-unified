@@ -207,9 +207,13 @@ def compose_reflection(
     for item in experience_evidence:
         continuation = item.get("continuation", {})
         if isinstance(continuation, dict):
-            for question in continuation.get("unresolved", []) or []:
-                if isinstance(question, str) and question not in open_questions:
-                    open_questions.append(question)
+            unresolved = continuation.get("unresolved", []) or []
+            if isinstance(unresolved, str):
+                unresolved = [unresolved]
+            if isinstance(unresolved, list):
+                for question in unresolved:
+                    if isinstance(question, str) and question not in open_questions:
+                        open_questions.append(question)
     open_questions = open_questions[-10:]
     if analysis["drift_detected"]:
         open_questions.append(
@@ -380,7 +384,10 @@ def run_reflection(lookback: int = 20) -> dict:
         {
             "event_type": item.get("event_type"),
             "entry_hash": item.get("entry_hash"),
-            "event_id": (item.get("metadata", {}) or {}).get("event_id"),
+            "event_id": (
+                item.get("metadata", {}).get("event_id")
+                if isinstance(item.get("metadata"), dict) else None
+            ),
             "content_excerpt": str(item.get("content", ""))[:240],
         }
         for item in recent_entries[-10:]
