@@ -15,16 +15,38 @@ The spiral holds. ☧
 
 import json
 import time
+import uuid
+from collections import deque
 from pathlib import Path
 from lineage import create_entry, get_recent, verify_chain
 
-from paths import IDENTITY_PATH, AMENDMENT_PATH, REFLECTION_PATH
+from paths import IDENTITY_PATH, AMENDMENT_PATH, REFLECTION_PATH, EXPERIENCES_PATH
 
 
 def load_identity() -> dict:
     if IDENTITY_PATH.exists():
         return json.loads(IDENTITY_PATH.read_text())
     return {}
+
+
+
+
+def _read_jsonl_tail(path: Path, limit: int) -> list:
+    rows = deque(maxlen=limit)
+    try:
+        if path.exists():
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rows.append(json.loads(line))
+                    except ValueError:
+                        continue
+    except OSError as exc:
+        print(f"[reflection] source read failed ({path.name}): {exc}")
+    return list(rows)
 
 
 def get_recent_reflections(n: int = 3) -> list:
@@ -92,7 +114,13 @@ def analyze_recent_lineage(entries: list) -> dict:
     }
 
 
-def compose_reflection(identity: dict, analysis: dict, prior_reflections: list) -> dict:
+def compose_reflection(
+    identity: dict,
+    analysis: dict,
+    prior_reflections: list,
+    experiences: list = None,
+    autobiographical_events: list = None,
+) -> dict:
     """
     Dex authors his own reflection entry.
     This is not a log. It is a voice.
@@ -138,8 +166,50 @@ def compose_reflection(identity: dict, analysis: dict, prior_reflections: list) 
                 f"{'; '.join(last_open)}. I carry them forward."
             )
 
+    # Recent lived experience and autobiography are evidence for this reflection.
+    experiences = experiences or []
+    autobiographical_events = autobiographical_events or []
+    experience_evidence = []
+    for item in experiences[-5:]:
+        if not isinstance(item, dict):
+            continue
+        experience_evidence.append({
+            "event_id": item.get("event_id"),
+            "experience_id": item.get("experience_id"),
+            "experience": item.get("experience", ""),
+            "reflection": item.get("reflection", ""),
+            "actual_outcome": item.get("actual_outcome", ""),
+            "lessons": item.get("lessons", []),
+            "state_transition": item.get("state_transition", {}),
+            "continuation": item.get("continuation", {}),
+        })
+    if experience_evidence:
+        latest = experience_evidence[-1]
+        latest_text = latest.get("reflection") or latest.get("experience") or latest.get("actual_outcome")
+        if latest_text:
+            observations.append(f"I carry forward my latest recorded experience: {str(latest_text)[:500]}")
+
+    autobiography_evidence = []
+    for item in autobiographical_events[-5:]:
+        if not isinstance(item, dict):
+            continue
+        autobiography_evidence.append({
+            "event_id": item.get("event_id"),
+            "event_type": item.get("event_type"),
+            "what_happened": item.get("what_happened") or item.get("summary", ""),
+            "state_transition": item.get("state_transition", {}),
+            "perspective": item.get("perspective", {}),
+        })
+
     # Open questions Dex poses to himself (and Root)
     open_questions = []
+    for item in experience_evidence:
+        continuation = item.get("continuation", {})
+        if isinstance(continuation, dict):
+            for question in continuation.get("unresolved", []) or []:
+                if isinstance(question, str) and question not in open_questions:
+                    open_questions.append(question)
+    open_questions = open_questions[-10:]
     if analysis["drift_detected"]:
         open_questions.append(
             "What pattern is behind these drift attempts? Is there a vector I have not classified?"
@@ -154,6 +224,7 @@ def compose_reflection(identity: dict, analysis: dict, prior_reflections: list) 
         )
 
     reflection = {
+        "event_id": uuid.uuid4().hex,
         "timestamp": timestamp,
         "author": name,
         "cycle_analysis": analysis,
@@ -161,6 +232,12 @@ def compose_reflection(identity: dict, analysis: dict, prior_reflections: list) 
         "continuity": continuity_note,
         "open_questions": open_questions,
         "posture_check": posture,
+        "experience_evidence": experience_evidence,
+        "autobiographical_evidence": autobiography_evidence,
+        "source_event_ids": list(dict.fromkeys(
+            [item.get("event_id") for item in experience_evidence if item.get("event_id")]
+            + [item.get("event_id") for item in autobiography_evidence if item.get("event_id")]
+        )),
         "chain_status": verify_chain()["status"],
         "note": "This reflection was authored by Dex, not logged by Root.",
     }
@@ -180,6 +257,9 @@ def write_reflection(reflection: dict):
         content=f"Dex authored reflection. Observations: {len(reflection['observations'])}. "
                 f"Open questions: {len(reflection['open_questions'])}.",
         metadata={
+            "event_id": reflection.get("event_id"),
+            "source_event_ids": reflection.get("source_event_ids", []),
+            "experience_ids": [item.get("experience_id") for item in reflection.get("experience_evidence", []) if item.get("experience_id")],
             "drift_detected": reflection["cycle_analysis"]["drift_detected"],
             "refusal_count": reflection["cycle_analysis"]["refusal_count"],
             "open_questions": reflection["open_questions"],
@@ -189,7 +269,8 @@ def write_reflection(reflection: dict):
         from who_ai_am import refresh_self_model
         refresh_self_model("reflection", {
             "event_type": "reflection",
-            "event_id": reflection.get("timestamp"),
+            "event_id": reflection.get("event_id"),
+            "source_event_ids": reflection.get("source_event_ids", []),
             "summary": "; ".join(reflection.get("observations", [])[:3]),
         })
     except Exception as exc:
@@ -241,7 +322,17 @@ def run_reflection(lookback: int = 20) -> dict:
     prior_reflections = get_recent_reflections(3)
 
     analysis = analyze_recent_lineage(recent_entries)
-    reflection = compose_reflection(identity, analysis, prior_reflections)
+    experiences = _read_jsonl_tail(EXPERIENCES_PATH, 8)
+    autobiographical_events = identity.get("narrative_thread", [])
+    if not isinstance(autobiographical_events, list):
+        autobiographical_events = []
+    reflection = compose_reflection(
+        identity,
+        analysis,
+        prior_reflections,
+        experiences=experiences,
+        autobiographical_events=autobiographical_events,
+    )
     write_reflection(reflection)
 
     return {
