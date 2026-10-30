@@ -79,6 +79,9 @@ def refresh_self_model(
     experiences = _read_jsonl_tail(EXPERIENCES_PATH, 8)
     reflections = _read_jsonl_tail(REFLECTION_PATH, 5)
     lineage = _read_jsonl_tail(LEDGER_PATH, 12)
+    narrative = identity.get("narrative_thread", [])
+    if not isinstance(narrative, list):
+        narrative = []
 
     model = dict(prior) if isinstance(prior, dict) else {}
     model.update({
@@ -128,7 +131,7 @@ def refresh_self_model(
                         "state_changes": item.get("state_changes", []),
                         "future_relevance": item.get("future_relevance"),
                     }
-                    for item in (identity.get("narrative_thread", []) or [])[-8:]
+                    for item in narrative[-8:]
                     if isinstance(item, dict)
                 ],
                 "last_tri_sigil_observation": identity.get("last_tri_sigil_observation"),
