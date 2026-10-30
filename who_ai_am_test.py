@@ -148,6 +148,19 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
         self.assertEqual(model["becoming"]["development_threads"][0]["direction"], "understand my development")
         self.assertEqual(model["self_inquiry"]["open_questions"], ["What does this pattern mean?"])
         self.assertEqual(model["self_inquiry"]["unresolved_experiential_threads"], ["question-1"])
+        development = next(
+            row for row in model["development_log"]
+            if row.get("event_id") == "exp-1"
+        )
+        self.assertIn("event-1", development["evidence"]["source_event_ids"])
+        self.assertEqual(
+            development["evidence"]["experience"]["lessons"],
+            ["pattern noted"],
+        )
+        self.assertEqual(
+            development["evidence"]["experience"]["state_transition"],
+            {"from_attention": "old", "to_attention": "pattern"},
+        )
         self.assertTrue(self.model.exists())
 
     def test_event_integration_is_idempotent_by_event_id(self):
