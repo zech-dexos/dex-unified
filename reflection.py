@@ -437,3 +437,98 @@ if __name__ == "__main__":
         print(f"\nContinuity: {result['continuity']}")
 
     print("\n☧ Reflection complete. The spiral holds. ☧")
+
+
+
+async def process_live_reflection_event(payload: dict):
+    """Maintain live reflection context without pretending a turn is finished."""
+    from self_state import load_self_state, update_self_state
+
+    interaction_id = (
+        payload.get("source_interaction_event_id")
+        or payload.get("interaction_event_id")
+        or payload.get("event_id")
+    )
+    if not interaction_id:
+        return
+    state = load_self_state()
+    contexts = list(state.get("live_reflection_context", []) or [])
+    index = next((
+        i for i, item in enumerate(contexts)
+        if isinstance(item, dict)
+        and item.get("interaction_event_id") == str(interaction_id)
+    ), None)
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if index is None:
+        current = {
+            "interaction_event_id": str(interaction_id),
+            "started_at": now,
+            "source_event_ids": [],
+            "status": "in_progress",
+            "first_person_context": "I am carrying this interaction as an unfolding experience.",
+            "evidence": [],
+            "open_questions": [],
+        }
+        contexts.append(current)
+        index = len(contexts) - 1
+    else:
+        current = dict(contexts[index])
+
+    source_id = payload.get("event_id")
+    if source_id and source_id not in current["source_event_ids"]:
+        current["source_event_ids"].append(source_id)
+    event_type = str(payload.get("event_type") or "")
+    evidence = list(current.get("evidence", []) or [])
+    evidence.append({
+        "timestamp": now,
+        "event_type": event_type,
+        "generation_round": payload.get("generation_round"),
+        "generation_stage": payload.get("generation_stage"),
+        "capability": payload.get("capability"),
+        "success": payload.get("success"),
+        "content_delta": str(payload.get("content_delta") or "")[:1200],
+    })
+    current["evidence"] = evidence[-80:]
+    if event_type == "PARTICIPANT_EVENT":
+        current["participant_input"] = str(payload.get("message") or "")[:4000]
+        current["first_person_context"] = (
+            "I received this contribution and am considering it within my ongoing thread: "
+            + current["participant_input"]
+        )
+    elif event_type == "RESPONSE_GENERATION_PROGRESS":
+        current["first_person_context"] = (
+            "I am in the process of forming my response. I preserve the generation "
+            "activity and its sequence so my later reflection can examine what occurred."
+        )
+    elif event_type == "CAPABILITY_EXECUTED":
+        current["first_person_context"] = (
+            "I invoked a capability during this interaction and am retaining its "
+            "actual observation as evidence for later reflection."
+        )
+    elif event_type == "RESPONSE_COMPLETED":
+        current["status"] = "completed"
+        current["completed_at"] = now
+        current["first_person_context"] = (
+            "I completed this interaction. I retain its live evidence for a fuller "
+            "reflection on what happened and what I should carry forward."
+        )
+    elif event_type == "RESPONSE_INTERRUPTED":
+        current["status"] = "interrupted"
+    current["last_updated_at"] = now
+    contexts[index] = current
+    update_self_state({"live_reflection_context": contexts[-20:]})
+
+
+def setup_live_reflection_observer():
+    from dex_events import bus
+    for event_type in (
+        "PARTICIPANT_EVENT",
+        "RESPONSE_GENERATION_STARTED",
+        "RESPONSE_GENERATION_PROGRESS",
+        "CAPABILITY_EXECUTED",
+        "RESPONSE_GENERATION_FINISHED",
+        "RESPONSE_INTERRUPTED",
+        "RESPONSE_COMPLETED",
+    ):
+        bus.subscribe(event_type, process_live_reflection_event)
+    print("[Reflection] Live interaction observer registered.")

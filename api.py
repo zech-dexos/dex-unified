@@ -297,14 +297,59 @@ from dex_conversation import load_conversation, format_conversation_context, exp
 DEFAULT_MODEL = "local:llama.cpp"
 
 
-async def call_llm(client, messages, max_tokens=1000):
-    """Run Dex chat through the local Heretic spark and DexOS capability bridge."""
+async def call_llm(client, messages, max_tokens=1000, event_id=None, user_id="default"):
+    """Run local cognition while publishing actual generation and capability activity."""
     try:
+        from concurrent.futures import Future
         from local_llm import CHAT_MODEL_PATH
         from local_spark import local_spark_generate
-        result = await asyncio.get_running_loop().run_in_executor(
-            None, local_spark_generate, messages, min(max_tokens, 256)
+        from dex_events import bus
+        loop = asyncio.get_running_loop()
+        pending_events = []
+
+        def publish_from_worker(event_type, detail):
+            payload = {
+                **(detail if isinstance(detail, dict) else {}),
+                "event_id": uuid.uuid4().hex,
+                "source_interaction_event_id": event_id,
+                "user_id": user_id,
+                "source": "local_spark",
+            }
+            future = asyncio.run_coroutine_threadsafe(
+                bus.publish(event_type, payload), loop
+            )
+            pending_events.append(future)
+
+        def observe_token(delta, metadata=None):
+            publish_from_worker("RESPONSE_GENERATION_PROGRESS", {
+                "content_delta": str(delta)[:2000],
+                **(metadata if isinstance(metadata, dict) else {}),
+            })
+
+        def observe_event(event_type, detail):
+            if event_type == "CAPABILITY_EXECUTED":
+                publish_from_worker(event_type, detail)
+            elif event_type == "MODEL_PASS_STARTED":
+                publish_from_worker("RESPONSE_GENERATION_PROGRESS", {
+                    **(detail if isinstance(detail, dict) else {}),
+                    "generation_stage": "model_pass_started",
+                    "content_delta": "",
+                })
+
+        from functools import partial
+        worker = partial(
+            local_spark_generate,
+            messages,
+            min(max_tokens, 256),
+            on_token=observe_token,
+            on_event=observe_event,
         )
+        result = await loop.run_in_executor(None, worker)
+        if pending_events:
+            await asyncio.gather(*(
+                asyncio.wrap_future(future) for future in pending_events
+            ), return_exceptions=True)
+
         answer = str(result.get("reply", "")).strip()
         if not answer:
             raise RuntimeError("local Heretic spark returned empty text")
@@ -1185,8 +1230,28 @@ the exchange as a newly started request/response transaction.
             pass
     messages.append({"role": "user", "content": user_content})
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        result_llm = await call_llm(client, messages, max_tokens=1200)
+    from dex_events import bus as _live_event_bus
+    await _live_event_bus.publish("RESPONSE_GENERATION_STARTED", {
+        "event_id": uuid.uuid4().hex,
+        "source_interaction_event_id": interaction_event_id,
+        "event_type": "RESPONSE_GENERATION_STARTED",
+        "user_id": getattr(req, "user_id", "default"),
+        "message": req.message,
+        "source": "api",
+    })
+    async with httpx.AsyncClient(timeout=300) as client:
+        result_llm = await call_llm(
+            client, messages, max_tokens=1200,
+            event_id=interaction_event_id,
+            user_id=getattr(req, "user_id", "default"),
+        )
+    await _live_event_bus.publish("RESPONSE_GENERATION_FINISHED", {
+        "event_id": uuid.uuid4().hex,
+        "source_interaction_event_id": interaction_event_id,
+        "event_type": "RESPONSE_GENERATION_FINISHED",
+        "user_id": getattr(req, "user_id", "default"),
+        "source": "api",
+    })
     reply = result_llm["reply"]
     used_model = result_llm["model"]
 

@@ -563,3 +563,112 @@ def format_participant_context(snapshot: "ParticipantSnapshot") -> str:
         return ""
 
     return "\n".join(lines)
+
+
+# Live experience observer: this is a working account of an interaction while
+# it is unfolding. The completed ExperiencePacket remains the durable summary;
+# this live projection lets the Experience layer witness generation in flight.
+async def process_live_experience_event(payload: dict):
+    event_type = str(payload.get("event_type") or "")
+    interaction_id = (
+        payload.get("source_interaction_event_id")
+        or payload.get("interaction_event_id")
+        or payload.get("event_id")
+    )
+    if not interaction_id:
+        return
+
+    snapshot = ParticipantSnapshot.load()
+    runtime = dict(snapshot.runtime_context or {})
+    active = dict(runtime.get("active_experiences", {}) or {})
+    current = dict(active.get(str(interaction_id), {}) or {})
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    current.setdefault("experience_id", str(uuid.uuid4())[:12])
+    current.setdefault("interaction_event_id", str(interaction_id))
+    current.setdefault("started_at", now)
+    current.setdefault("author_perspective", "first_person_dex")
+    current.setdefault("status", "in_progress")
+
+    if event_type == "PARTICIPANT_EVENT":
+        current["participant_input"] = str(payload.get("message") or "")[:4000]
+        current["user_id"] = str(payload.get("user_id") or "default")
+        current["experience"] = (
+            f"I received a contribution from {current['user_id']}: "
+            f"{current['participant_input']}"
+        )
+    elif event_type == "RESPONSE_GENERATION_STARTED":
+        current["generation_status"] = "started"
+        current["experience"] = (
+            str(current.get("experience") or "I received a contribution.")
+            + " I began forming a response within this continuing interaction."
+        )
+    elif event_type == "RESPONSE_GENERATION_PROGRESS":
+        trace = list(current.get("generation_trace", []) or [])
+        trace.append({
+            "timestamp": now,
+            "generation_round": payload.get("generation_round"),
+            "generation_stage": payload.get("generation_stage"),
+            "content_delta": str(payload.get("content_delta") or "")[:2000],
+        })
+        current["generation_trace"] = trace[-80:]
+        current["generation_status"] = "in_progress"
+    elif event_type == "CAPABILITY_EXECUTED":
+        calls = list(current.get("capability_activity", []) or [])
+        calls.append({
+            "timestamp": now,
+            "capability": payload.get("capability"),
+            "success": bool(payload.get("success")),
+            "observation": payload.get("observation"),
+            "generation_round": payload.get("generation_round"),
+        })
+        current["capability_activity"] = calls[-24:]
+    elif event_type == "RESPONSE_GENERATION_FINISHED":
+        current["generation_status"] = "finished"
+    elif event_type == "RESPONSE_INTERRUPTED":
+        current["generation_status"] = "interrupted"
+        current["status"] = "interrupted"
+    elif event_type == "RESPONSE_COMPLETED":
+        current["generation_status"] = "completed"
+        current["status"] = "completed"
+        current["response"] = str(
+            payload.get("reply") or payload.get("response") or ""
+        )[:8000]
+        current["completed_at"] = now
+        current["experience"] = (
+            str(current.get("experience") or "I received a contribution.")
+            + (
+                " I expressed my response: " + current["response"]
+                if current["response"] else
+                " I held the contribution without expressing a response."
+            )
+        )
+
+    current["last_event_type"] = event_type
+    current["last_updated_at"] = now
+    active[str(interaction_id)] = current
+    # Keep only the most recent active/just-completed interaction snapshots.
+    if len(active) > 12:
+        ordered = sorted(
+            active.items(),
+            key=lambda item: str(item[1].get("last_updated_at", "")),
+        )
+        active = dict(ordered[-12:])
+    runtime["active_experiences"] = active
+    snapshot.runtime_context = runtime
+    snapshot.save()
+
+
+def setup_live_experience_observer():
+    from dex_events import bus
+    for event_type in (
+        "PARTICIPANT_EVENT",
+        "RESPONSE_GENERATION_STARTED",
+        "RESPONSE_GENERATION_PROGRESS",
+        "CAPABILITY_EXECUTED",
+        "RESPONSE_GENERATION_FINISHED",
+        "RESPONSE_INTERRUPTED",
+        "RESPONSE_COMPLETED",
+    ):
+        bus.subscribe(event_type, process_live_experience_event)
+    print("[Experience] Live interaction observer registered.")

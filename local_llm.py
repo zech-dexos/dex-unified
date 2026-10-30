@@ -3,6 +3,7 @@ local_llm.py — local GGUF inference for ambient and interactive chat.
 Models are loaded lazily and kept resident for the life of the container.
 """
 import os
+import json
 import fcntl
 import hashlib
 import tempfile
@@ -162,7 +163,7 @@ def local_slm_generate(prompt: str, max_tokens: int = 200, json_schema=None) -> 
     return out["choices"][0]["message"]["content"].strip()
 
 
-def local_chat_generate(messages, max_tokens: int = 200) -> str:
+def local_chat_generate(messages, max_tokens: int = 200, on_token=None) -> str:
     """Generate from native chat messages through the resident local GGUF.
 
     This preserves system/user/assistant roles instead of flattening the whole
@@ -235,26 +236,49 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
         "max_tokens": output_tokens,
         "temperature": 0.7,
     }
+    # Consume the model's actual generation stream. The callback receives
+    # only newly generated text; callers decide how to observe or display it.
+    fragments = []
     with _shared_inference_slot("interactive"):
         if endpoint:
             import httpx
 
-            response = httpx.post(
+            with httpx.stream(
+                "POST",
                 endpoint + "/v1/chat/completions",
-                json={"model": "heretic-local", **request},
+                json={"model": "heretic-local", **request, "stream": True},
                 timeout=httpx.Timeout(300.0, connect=5.0),
-            )
-            response.raise_for_status()
-            result = response.json()
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                    except (TypeError, ValueError):
+                        continue
+                    choices = chunk.get("choices") or []
+                    delta = (choices[0].get("delta") or {}).get("content") if choices else None
+                    if isinstance(delta, str) and delta:
+                        fragments.append(delta)
+                        if callable(on_token):
+                            on_token(delta)
         else:
-            result = llm.create_chat_completion(**request)
-    choices = result.get("choices") or []
-    if not choices:
-        raise RuntimeError("llama.cpp returned no completion choices")
-    message = choices[0].get("message") or {}
-    content = message.get("content")
-    if not isinstance(content, str) or not content.strip():
-        raise RuntimeError("llama.cpp returned empty completion content")
+            stream = llm.create_chat_completion(**request, stream=True)
+            for chunk in stream:
+                choices = chunk.get("choices") or []
+                delta = (choices[0].get("delta") or {}).get("content") if choices else None
+                if isinstance(delta, str) and delta:
+                    fragments.append(delta)
+                    if callable(on_token):
+                        on_token(delta)
+
+    content = "".join(fragments)
+    if not content.strip():
+        raise RuntimeError("local GGUF returned empty completion content")
     return content.strip()
 
 

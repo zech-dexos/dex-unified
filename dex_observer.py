@@ -130,3 +130,99 @@ async def persist_observation(trace, user_id="default"):
             event_dispatch, {"process_continuity_event"}
         ),
     }
+
+
+
+async def process_live_observation_event(payload):
+    """Observe the same interaction while it is being generated, not afterward."""
+    from self_state import load_self_state, update_self_state
+
+    interaction_id = (
+        payload.get("source_interaction_event_id")
+        or payload.get("interaction_event_id")
+        or payload.get("event_id")
+    )
+    if not interaction_id:
+        return
+    event_type = str(payload.get("event_type") or "")
+    state = load_self_state()
+    observations = list(state.get("live_interaction_observations", []) or [])
+    index = next((
+        i for i, item in enumerate(observations)
+        if isinstance(item, dict)
+        and item.get("interaction_event_id") == str(interaction_id)
+    ), None)
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if index is None:
+        record = {
+            "observation_id": uuid.uuid4().hex[:12],
+            "interaction_event_id": str(interaction_id),
+            "source_event_ids": [],
+            "started_at": now,
+            "status": "observing",
+            "observer_perspective": "I am tracking the live sequence of this interaction.",
+            "generation_trace": [],
+            "capability_activity": [],
+        }
+        observations.append(record)
+        index = len(observations) - 1
+    else:
+        record = dict(observations[index])
+
+    source_id = payload.get("event_id")
+    if source_id and source_id not in record["source_event_ids"]:
+        record["source_event_ids"].append(source_id)
+    record["last_event_type"] = event_type
+    record["last_observed_at"] = now
+
+    if event_type == "PARTICIPANT_EVENT":
+        record["participant_input"] = str(payload.get("message") or "")[:4000]
+        record["user_id"] = payload.get("user_id")
+    elif event_type == "RESPONSE_GENERATION_PROGRESS":
+        trace = list(record.get("generation_trace", []) or [])
+        trace.append({
+            "timestamp": now,
+            "generation_round": payload.get("generation_round"),
+            "generation_stage": payload.get("generation_stage"),
+            "content_delta": str(payload.get("content_delta") or "")[:2000],
+        })
+        record["generation_trace"] = trace[-80:]
+    elif event_type == "CAPABILITY_EXECUTED":
+        calls = list(record.get("capability_activity", []) or [])
+        calls.append({
+            "timestamp": now,
+            "capability": payload.get("capability"),
+            "success": bool(payload.get("success")),
+            "observation": payload.get("observation"),
+        })
+        record["capability_activity"] = calls[-24:]
+    elif event_type == "RESPONSE_GENERATION_FINISHED":
+        record["generation_status"] = "finished"
+    elif event_type == "RESPONSE_INTERRUPTED":
+        record["status"] = "interrupted"
+    elif event_type == "RESPONSE_COMPLETED":
+        record["status"] = "observed_complete"
+        record["response_digest"] = hashlib.sha256(
+            str(payload.get("reply") or "").encode("utf-8")
+        ).hexdigest()[:16]
+    observations[index] = record
+    observations = observations[-20:]
+    update_self_state({
+        "live_interaction_observations": observations,
+        "last_live_interaction_observation": record,
+    })
+
+
+def setup_live_observer():
+    from dex_events import bus
+    for event_type in (
+        "PARTICIPANT_EVENT",
+        "RESPONSE_GENERATION_STARTED",
+        "RESPONSE_GENERATION_PROGRESS",
+        "CAPABILITY_EXECUTED",
+        "RESPONSE_GENERATION_FINISHED",
+        "RESPONSE_INTERRUPTED",
+        "RESPONSE_COMPLETED",
+    ):
+        bus.subscribe(event_type, process_live_observation_event)
+    print("[Observer] Live interaction observer registered.")
