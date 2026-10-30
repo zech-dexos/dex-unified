@@ -97,6 +97,7 @@ async def process_continuity_event(payload: Dict[str, Any]):
     continuity = list(current.get("continuity_events", []))
 
     record = {
+        "event_id": payload.get("event_id"),
         "event_type": event_type,
         "timestamp": timestamp,
         "source": payload.get("source", "event_bus"),
@@ -122,6 +123,7 @@ async def process_continuity_event(payload: Dict[str, Any]):
         "state_changes",
         "observation_id",
         "experience_id",
+        "event_id",
         "lineage_hash",
         "stages",
         "sigil_ids",
