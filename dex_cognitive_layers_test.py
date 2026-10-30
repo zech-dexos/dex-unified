@@ -1,9 +1,37 @@
 """Tests for attention-to-workspace cognitive layer wiring."""
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 import dex_attention
 import dex_workspace
+import participant
+
+
+class ParticipantPersistenceTests(unittest.TestCase):
+    def test_stale_snapshots_merge_non_overlapping_updates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "participant_state.json"
+            with patch.object(participant, "PARTICIPANT_PATH", path):
+                participant.ParticipantSnapshot().save()
+                attention_writer = participant.ParticipantSnapshot.load()
+                experience_writer = participant.ParticipantSnapshot.load()
+
+                attention_writer.current_attention = "identity continuity"
+                attention_writer.save()
+
+                experience_writer.experiential_continuity = {
+                    "last_experience_id": "experience-1"
+                }
+                experience_writer.save()
+
+                final = participant.ParticipantSnapshot.load()
+                self.assertEqual(final.current_attention, "identity continuity")
+                self.assertEqual(
+                    final.experiential_continuity["last_experience_id"],
+                    "experience-1",
+                )
 
 
 class AttentionLayerTests(unittest.IsolatedAsyncioTestCase):
