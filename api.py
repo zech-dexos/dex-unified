@@ -741,6 +741,7 @@ architecture directly. Otherwise remain inside the conversation.
                         "active_workspace": _current_context.get("active_workspace", {}),
                         "open_loops": _current_context.get("open_loops", []),
                         "pending_cognitive_observations": _current_context.get("pending_cognitive_observations", []),
+                        "pending_reflection_requests": _current_context.get("pending_reflection_requests", []),
                         "interlocutor": _current_context.get("interlocutor", {}),
                         "experiential_continuity": _current_context.get("experiential_continuity", {}),
                         "last_autobiographical_event": _current_context.get("last_autobiographical_event"),
