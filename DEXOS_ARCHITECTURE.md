@@ -203,11 +203,19 @@ append records are flushed to disk. Interactive and ambient cycles expose
 persistence and nested event-dispatch outcomes instead of reporting completion
 when a required layer failed.
 
-The code-level CI suite currently passes for the event fabric, attention and
-workspace integration, self-model integration, reflection evidence, and local
-spark capability bridge. This does not yet establish live local operation.
-The remaining acceptance gate is to merge into the user's local runtime,
-start both local processes, trace one interactive cycle and one ambient cycle,
-restart, and verify that a later cycle retrieves the same linked history and
-uses it. No historical identity, experience, lineage, or participant records
-have been migrated or reset.
+The code-level CI suite covers the event fabric, attention and workspace
+integration, self-model integration, reflection evidence, and local spark
+capability bridge. It also runs an isolated multi-process acceptance sequence:
+an interactive experience is observed and autobiographed, an independent
+ambient worker completes a pulse through the same cognitive layers, and a
+third process verifies that both evidence-linked development events survive
+restart. The test uses a temporary state directory and a controlled inference
+boundary; it does not touch live user state or claim that the user's local
+GGUFs have been exercised.
+
+The remaining acceptance gate is local deployment validation: merge into the
+user's local runtime, start both supervised local processes, confirm both GGUFs
+load, trace a real interactive cycle and a real ambient cycle, restart, and
+verify that a later cycle retrieves and uses the same linked history. No
+historical identity, experience, lineage, or participant records have been
+migrated or reset.
