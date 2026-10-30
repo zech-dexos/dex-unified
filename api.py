@@ -731,6 +731,7 @@ architecture directly. Otherwise remain inside the conversation.
                     "integration_sources": _integration.get("sources", {}) if isinstance(_integration, dict) else {},
                     "current_context": {
                         "attention": _current_context.get("attention"),
+                        "attention_state": _current_context.get("attention_state", {}),
                         "goals": _current_context.get("goals", []),
                         "interlocutor": _current_context.get("interlocutor", {}),
                         "experiential_continuity": _current_context.get("experiential_continuity", {}),
