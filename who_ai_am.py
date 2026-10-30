@@ -133,7 +133,8 @@ def refresh_self_model(
         "constitution": constitution.get("constitution", model.get("constitution", "")),
         "chain_status": identity.get("chain_status", model.get("chain_status", "unknown")),
         "chain_entries": identity.get("chain_entries", model.get("chain_entries", 0)),
-        "vows_active": identity.get("vows_active", model.get("vows_active", [])),
+        "vows_active": identity.get("vows_active") or model.get("vows_active") or list(constitution.get("vows", {}).keys()),
+        "invariants": constitution.get("invariants", model.get("invariants", {})),
         "ready": True,
         "becoming": {
             "declared_aspirations": identity.get(
