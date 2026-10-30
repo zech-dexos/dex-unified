@@ -154,11 +154,33 @@ Logs and model-generated claims are not sufficient acceptance evidence by
 themselves. This is an engineering standard for functional continuity, not a
 claim that the system has proven subjective consciousness.
 
-## Current first integration change
+## Current integration milestone
 
 `dex_events.py` now awaits subscribers in registration order, avoids duplicate
 registration of the same callback, and returns per-subscriber completion/failure
-results. This makes `await bus.publish(...)` a real completion barrier while
-preserving the existing publish call shape. The next build step is to connect
-the response's experience identifier through the downstream persistence stages
-and make partial failures explicit.
+results. The event fabric is covered by focused tests for ordering, awaiting,
+duplicate registration, and failure isolation.
+
+Interactive contributions now receive one event ID which is carried through
+participant intake, the first-person `ExperiencePacket`, conversational continuity,
+observer evidence and its pending cognition queue, continuity history,
+autobiography, and the Who AI Am development record. The response event also
+carries the experience's state transition, continuation, and first-person
+perspective. Continuity and autobiography skip duplicate deliveries by
+(event ID, event type), while retaining compatibility with older records that
+have no event ID.
+
+Ambient cognition creates its own event ID and carries it through the ambient
+experience, self-model integration, and `THOUGHT_GENERATED` event. Who AI Am
+assembles recent lived experience, state transitions, observer/runtime
+perspective, autobiography, and reflections into the self-model projection.
+The interactive prompt refreshes and injects that integrated context before
+inference; the ambient prompt also reads the projection. Both interaction and
+ambient paths report persistence and event-dispatch outcomes.
+
+The next milestone is full evidence-backed reflection and state development:
+a later cognition cycle must retrieve a prior event, form a grounded reflection,
+and make a traceable, useful change to goals, attention, open loops, or the
+self-model without rewriting constitutional identity or historical records.
+Live local runtime validation and restart/recall verification remain required
+before this integration is considered complete.
