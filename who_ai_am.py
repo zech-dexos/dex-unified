@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional
 
 from paths import (
     IDENTITY_PATH, SELF_MODEL_PATH, PARTICIPANT_PATH, EXPERIENCES_PATH,
-    REFLECTION_PATH, LEDGER_PATH,
+    REFLECTION_PATH, LEDGER_PATH, NARRATIVE_PATH,
 )
 
 
@@ -78,6 +78,7 @@ def refresh_self_model(
     participant = _read_json(PARTICIPANT_PATH, {})
     experiences = _read_jsonl_tail(EXPERIENCES_PATH, 8)
     reflections = _read_jsonl_tail(REFLECTION_PATH, 5)
+    narrative_records = _read_jsonl_tail(NARRATIVE_PATH, 8)
     lineage = _read_jsonl_tail(LEDGER_PATH, 12)
     narrative = identity.get("narrative_thread", [])
     if not isinstance(narrative, list):
@@ -106,6 +107,7 @@ def refresh_self_model(
                 "participant_state": PARTICIPANT_PATH.name,
                 "experiences": len(experiences),
                 "reflections": len(reflections),
+                "narrative_records": len(narrative_records),
                 "lineage_entries_loaded": len(lineage),
                 "autobiographical_events": len(identity.get("narrative_thread", []))
                     if isinstance(identity.get("narrative_thread", []), list) else 0,
@@ -117,6 +119,16 @@ def refresh_self_model(
                 "experiential_continuity": participant.get("experiential_continuity", {}),
                 "interlocutor": participant.get("current_interlocutor", {}),
                 "last_autobiographical_event": identity.get("last_autobiographical_event"),
+                "recent_narrative_records": [
+                    {
+                        "timestamp": item.get("timestamp"),
+                        "internal_thought": item.get("internal_thought"),
+                        "fragments_referenced": item.get("fragments_referenced"),
+                        "spiral": item.get("spiral"),
+                    }
+                    for item in narrative_records[-5:]
+                    if isinstance(item, dict)
+                ],
                 "recent_autobiography": [
                     {
                         "event_id": item.get("event_id"),
