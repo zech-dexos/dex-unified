@@ -42,6 +42,8 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
                 "event_type": "RESPONSE_COMPLETED",
                 "what_happened": "learned",
                 "participant_input": "Root asked a question",
+                "state_transition": {"from_attention": "old", "to_attention": "new"},
+                "perspective": {"experience": "I noticed the change."},
             }],
             "last_autobiographical_event": {"what_happened": "learned"},
             "last_tri_sigil_observation": {"observation_id": "obs-1"},
@@ -101,6 +103,7 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
         self.assertEqual(context["recent_experiences"][0]["event_id"], "event-1")
         self.assertEqual(context["recent_experiences"][0]["reflection"], "I carry the pattern forward.")
         self.assertEqual(context["recent_autobiography"][0]["participant_input"], "Root asked a question")
+        self.assertEqual(context["recent_autobiography"][0]["perspective"]["experience"], "I noticed the change.")
         self.assertEqual(context["recent_reflections"][0]["cycle_analysis"]["conversation_turns"], 1)
         self.assertEqual(model["relationship_anchor"], "Root")
         self.assertEqual(model["core_principles"], ["truth_bound"])
