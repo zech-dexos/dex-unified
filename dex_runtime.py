@@ -106,7 +106,7 @@ def dex_runtime(user_input: str, user_id: str = "default") -> dict:
         "intent":       signal.intent,
         "domain":       signal.domain,
         "modifiers":    signal.modifiers,
-        "tools":        result["branches"],
+        "tools":        signal.tools,
         "context":      result["context"],
         "branches":     result["branches"],
         "sigil_ids":    sigil_ids,
