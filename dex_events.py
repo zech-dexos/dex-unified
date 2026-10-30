@@ -26,6 +26,7 @@ class EventBus:
         self._bridge_lock = asyncio.Lock()
         self._draining_bridge = False
         self._consumer_id = self._resolve_consumer_id()
+        self.last_bridge_result = {"received": 0, "acknowledged": 0, "failed": 0}
 
     @staticmethod
     def _resolve_consumer_id() -> str:
@@ -98,14 +99,8 @@ class EventBus:
         event.setdefault("event_origin", self._consumer_id)
         append_event(event_id, event_type, self._consumer_id, event)
 
-        bridge_result = await self.drain_shared()
-        outcomes = await self._dispatch_local(event_type, event)
-        outcomes.append({
-            "subscriber": "durable_cross_process_bridge",
-            "status": "failed" if bridge_result.get("failed", 0) else "completed",
-            "result": bridge_result,
-        })
-        return outcomes
+        self.last_bridge_result = await self.drain_shared()
+        return await self._dispatch_local(event_type, event)
 
     async def _safe_call(
         self,
