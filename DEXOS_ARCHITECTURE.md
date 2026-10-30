@@ -157,11 +157,14 @@ claim that the system has proven subjective consciousness.
 ## Current integration milestone
 
 The event fabric now provides ordered, awaited, duplicate-safe delivery with
-per-subscriber outcomes. The shared `setup_cognitive_layers()` bootstrap registers
-continuity, autobiography, attention, and workspace handlers in both the API
-process and the separate local ambient process. This matters because each
-process owns a separate in-memory event bus even though both use the same
-canonical persistent state directory.
+per-subscriber outcomes, including nested layer-dispatch results. The shared
+`setup_cognitive_layers()` bootstrap registers continuity, autobiography,
+attention, and workspace handlers in both the API process and the separate
+local ambient process. This matters because each process owns a separate
+in-memory event bus even though both use the same canonical persistent state
+directory. The ambient process also receives the authoritative constitution,
+Root relationship, vows, invariants, and evolving self-model before generating
+internal thought.
 
 Interactive contributions receive one event ID carried through participant
 intake, the first-person `ExperiencePacket`, conversational continuity,
@@ -190,7 +193,9 @@ experiences, narrative records, autobiography, and evidence-linked reflections.
 It also maintains an explicit `becoming` projection from declared aspirations,
 active goal directions, and development threads without inventing aspirations.
 The interactive prompt refreshes and injects this curated self-model before
-inference; ambient cognition reads the same projection.
+inference; ambient cognition reads the same projection. Command and governance
+early-return paths in `/chat` use the same experience/observer/autobiography
+finalizer rather than bypassing the cognitive cycle.
 
 Participant snapshots now use locked, atomic, field-level merging so concurrent
 API and ambient writers preserve unrelated updates. Experience and reflection
