@@ -376,6 +376,23 @@ def run_reflection(lookback: int = 20) -> dict:
         experiences=experiences,
         autobiographical_events=autobiographical_events,
     )
+    reflection["lineage_evidence"] = [
+        {
+            "event_type": item.get("event_type"),
+            "entry_hash": item.get("entry_hash"),
+            "event_id": (item.get("metadata", {}) or {}).get("event_id"),
+            "content_excerpt": str(item.get("content", ""))[:240],
+        }
+        for item in recent_entries[-10:]
+        if isinstance(item, dict)
+    ]
+    lineage_event_ids = [
+        item.get("event_id") for item in reflection["lineage_evidence"]
+        if item.get("event_id")
+    ]
+    reflection["source_event_ids"] = list(dict.fromkeys(
+        list(reflection.get("source_event_ids", [])) + lineage_event_ids
+    ))
     write_reflection(reflection)
 
     return {
