@@ -183,7 +183,7 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
                 "experience_id": "later-experience",
                 "experience": "I encountered a new result.",
                 "lessons": ["retain the result"],
-            }) + "\\n")
+            }) + "\n")
 
         second = who_ai_am.refresh_self_model("test", event)
         matching = [
