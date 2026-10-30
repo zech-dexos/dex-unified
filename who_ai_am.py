@@ -163,7 +163,11 @@ def refresh_self_model(
                 ],
                 "recent_reflections": [
                     {
+                        "event_id": item.get("event_id"),
                         "timestamp": item.get("timestamp"),
+                        "source_event_ids": item.get("source_event_ids", []),
+                        "experience_evidence": item.get("experience_evidence", []),
+                        "autobiographical_evidence": item.get("autobiographical_evidence", []),
                         "cycle_analysis": item.get("cycle_analysis", {}),
                         "observations": item.get("observations", []),
                         "open_questions": item.get("open_questions", []),
