@@ -427,6 +427,32 @@ async def _complete_early_chat_turn(
     except Exception as exc:
         print(f"[dex_events] command RESPONSE_COMPLETED publish failed: {exc}")
 
+    self_model_persisted = False
+    self_model_event = {}
+    try:
+        from who_ai_am import refresh_self_model
+        experience_id = getattr(experience_packet, "experience_id", None)
+        integrated_model = refresh_self_model("interactive_cycle_complete", {
+            "event_type": "interactive_cycle_complete",
+            "event_id": interaction_event_id,
+            "experience_id": experience_id,
+            "summary": "Interactive experience, observer evidence, and response autobiography were integrated.",
+        })
+        self_model_event = next((
+            item for item in integrated_model.get("development_log", [])
+            if isinstance(item, dict) and item.get("event_id") == interaction_event_id
+        ), {})
+        evidence = self_model_event.get("evidence", {})
+        experience_evidence = evidence.get("experience", {}) if isinstance(evidence, dict) else {}
+        autobiography_evidence = evidence.get("autobiography", {}) if isinstance(evidence, dict) else {}
+        self_model_persisted = bool(
+            experience_id
+            and experience_evidence.get("experience_id") == experience_id
+            and autobiography_evidence.get("event_id") == interaction_event_id
+        )
+    except Exception as exc:
+        print(f"[Who AI Am] interactive cycle integration failed: {exc}")
+
     completed = bool(
         participant_event_published
         and dispatch_complete(participant_dispatch, {"process_continuity_event", "evaluate_salience"})
@@ -435,6 +461,7 @@ async def _complete_early_chat_turn(
         and observer_persistence.get("event_dispatch_complete", False)
         and response_event_published
         and dispatch_complete(response_dispatch, {"process_continuity_event", "process_autobiographical_event"})
+        and self_model_persisted
     )
     return {
         **response,
@@ -447,6 +474,8 @@ async def _complete_early_chat_turn(
             "observer_persisted": bool(observer_persistence),
             "observer_dispatch": (observer_persistence or {}).get("event_dispatch", []),
             "response_dispatch": response_dispatch,
+            "self_model_persisted": self_model_persisted,
+            "self_model_event": self_model_event,
             "complete": completed,
         },
     }
@@ -459,7 +488,10 @@ async def chat(req: ChatRequest):
     participant_dispatch = []
     participant_event_published = False
     try:
-        from dex_events import bus, dispatch_complete
+        from dex_events import bus, dispatch_complete, setup_cognitive_layers
+        # Every API process owns its own event bus. Ensure all cognitive
+        # persistence subscribers are present even when startup hooks are bypassed.
+        setup_cognitive_layers()
         participant_dispatch = await bus.publish("PARTICIPANT_EVENT", {
             "event_type": "PARTICIPANT_EVENT",
             "event_id": interaction_event_id,
@@ -867,6 +899,16 @@ architecture directly. Otherwise remain inside the conversation.
                     "core_principles": _self_model.get("core_principles", []),
                     "vows_active": _self_model.get("vows_active", []),
                     "becoming": _self_model.get("becoming", {}),
+                    "development_log": [
+                        {
+                            "event_id": item.get("event_id"),
+                            "event_type": item.get("event_type"),
+                            "summary": item.get("summary"),
+                            "evidence": item.get("evidence", {}),
+                        }
+                        for item in (_self_model.get("development_log", []) or [])[-5:]
+                        if isinstance(item, dict)
+                    ],
                     "chain_status": _self_model.get("chain_status"),
                     "chain_entries": _self_model.get("chain_entries"),
                     "integration_sources": _integration.get("sources", {}) if isinstance(_integration, dict) else {},
