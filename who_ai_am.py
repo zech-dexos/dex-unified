@@ -112,6 +112,7 @@ def refresh_self_model(
             },
             "current_context": {
                 "attention": participant.get("current_attention", ""),
+                "attention_state": identity.get("attention_state", {}),
                 "goals": participant.get("current_goals", []),
                 "experiential_continuity": participant.get("experiential_continuity", {}),
                 "interlocutor": participant.get("current_interlocutor", {}),
