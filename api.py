@@ -336,6 +336,127 @@ class ChatRequest(BaseModel):
     system: str = ""
     user_id: str = "default"
 
+async def _complete_early_chat_turn(
+    req: ChatRequest,
+    response: dict,
+    interaction_event_id: str,
+    participant_dispatch: list,
+    participant_event_published: bool,
+    response_flag: Optional[str] = None,
+) -> dict:
+    """Persist command and governed early-return turns through the same cognitive path."""
+    from dex_events import bus
+    from dex_observer import build_observer_trace, persist_observation
+
+    user_id = getattr(req, "user_id", "default")
+    reply = str(response.get("reply", "") or "")
+    experience_packet = None
+    experience_persisted = False
+    observer_trace = {}
+    observer_persistence = None
+    response_dispatch = []
+    response_event_published = False
+
+    try:
+        observer_trace = build_observer_trace(
+            snapshot=ParticipantSnapshot.load(),
+            user_id=user_id,
+            message=req.message,
+            reply=reply,
+            model=response.get("model", "dexos-command"),
+            provider="local",
+            capability_available=False,
+            capability_calls=[],
+            sigil_ids=[],
+            sigil_active=bool(SIGIL_ACTIVE and _memory),
+            response_flag=response_flag,
+            event_id=interaction_event_id,
+        )
+        observer_trace["runtime"] = {
+            "intent": response.get("intent", response.get("command_executed")),
+            "domain": response.get("domain", "command"),
+            "route_reason": response.get("route_reason", "early_return"),
+            "model": response.get("model", "dexos-command"),
+            "provider": "local",
+            "capability_calls": [],
+            "response_flag": response_flag,
+        }
+    except Exception as exc:
+        print(f"[observer] command-turn observation failed: {exc}")
+
+    try:
+        experience_packet = record_interaction_experience(
+            ParticipantSnapshot.load(),
+            req.message,
+            reply,
+            user_id=user_id,
+            observer_trace=observer_trace,
+            event_id=interaction_event_id,
+        )
+        experience_contribution(
+            user_id=user_id,
+            message=req.message,
+            reply=reply,
+            experience_id=experience_packet.experience_id,
+            event_id=interaction_event_id,
+        )
+        experience_persisted = True
+        if observer_trace:
+            observer_trace["experience_id"] = experience_packet.experience_id
+            observer_persistence = await persist_observation(observer_trace, user_id=user_id)
+    except Exception as exc:
+        print(f"[experience] command-turn experience persistence failed: {exc}")
+
+    try:
+        response_dispatch = await bus.publish("RESPONSE_COMPLETED", {
+            "event_type": "RESPONSE_COMPLETED",
+            "event_id": interaction_event_id,
+            "message": req.message,
+            "reply": reply,
+            "user_id": user_id,
+            "experience_id": getattr(experience_packet, "experience_id", None),
+            "experience": getattr(experience_packet, "experience", None),
+            "state_transition": getattr(experience_packet, "state_transition", None),
+            "continuation": getattr(experience_packet, "continuation", None),
+            "dex_perspective": getattr(experience_packet, "dex_perspective", None),
+            "intent": response.get("intent", response.get("command_executed")),
+            "domain": response.get("domain", "command"),
+            "response_flag": response_flag,
+        })
+        response_event_published = True
+    except Exception as exc:
+        print(f"[dex_events] command RESPONSE_COMPLETED publish failed: {exc}")
+
+    completed = bool(
+        participant_event_published
+        and all(item.get("status") == "completed" for item in participant_dispatch)
+        and all(
+            item.get("result", {}).get("event_dispatch_complete", True)
+            for item in participant_dispatch
+            if isinstance(item.get("result"), dict)
+        )
+        and experience_persisted
+        and observer_persistence
+        and observer_persistence.get("event_dispatch_complete", False)
+        and response_event_published
+        and all(item.get("status") == "completed" for item in response_dispatch)
+    )
+    return {
+        **response,
+        "response_flag": response_flag,
+        "event_id": interaction_event_id,
+        "cognitive_cycle": {
+            "participant_event_published": participant_event_published,
+            "participant_dispatch": participant_dispatch,
+            "experience_persisted": experience_persisted,
+            "observer_persisted": bool(observer_persistence),
+            "observer_dispatch": (observer_persistence or {}).get("event_dispatch", []),
+            "response_dispatch": response_dispatch,
+            "complete": completed,
+        },
+    }
+
+
 @app.post("/chat")
 async def chat(req: ChatRequest):
     interaction_event_id = uuid.uuid4().hex
