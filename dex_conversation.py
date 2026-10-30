@@ -7,6 +7,8 @@ forward without implying that the conversation ended.
 """
 
 import json
+import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
@@ -90,7 +92,16 @@ def save_conversation(state: Dict[str, Any]) -> Dict[str, Any]:
         state["version"] = int(state.get("version", 0)) + 1
         state["last_contribution_at"] = state.get("last_contribution_at") or _now_iso()
         SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
-        SESSION_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        fd, temp_path = tempfile.mkstemp(dir=str(SESSION_PATH.parent), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, indent=2, ensure_ascii=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, SESSION_PATH)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
     except Exception as e:
         print(f"[conversation] save failed: {e}")
     return state
