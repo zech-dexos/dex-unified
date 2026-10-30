@@ -385,7 +385,7 @@ def record_ambient_experience(
     packet.observer_perspective = {
         key: source_observation[key]
         for key in (
-            "observation_id", "experience_id", "sigil_ids",
+            "event_id", "source_event_ids", "observation_id", "experience_id", "sigil_ids",
             "sigil_memory_active", "lineage_hash", "timestamp",
             "user_id", "input_reply_digest", "stages", "runtime",
         )
