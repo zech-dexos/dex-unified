@@ -7,7 +7,7 @@ from typing import Callable, Awaitable, Dict, Any
 
 from drift_tape import add_thought
 from dex_memory import claim_ambient_tick
-from dex_events import bus
+from dex_events import bus, dispatch_complete
 from self_state import load_self_state, update_self_state
 from gosdw import prioritize_goals
 from dex_experience_recall import recall_into_workspace, format_recalled_experiences
