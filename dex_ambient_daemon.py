@@ -297,6 +297,13 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         # Registration is idempotent, so this is safe on every tick.
         setup_cognitive_layers()
 
+        # Consume interactive events even when this tick is not yet due to
+        # generate a new ambient thought. This keeps the cross-process bridge
+        # responsive independently of the ambient inference cadence.
+        bridge_result = await bus.drain_shared()
+        if bridge_result.get("received"):
+            print(f"[Ambient Daemon] shared cognitive events: {bridge_result}")
+
         # Durable human-paced cadence gate.
         # The scheduler may wake us frequently, but cognition only fires
         # when the persisted 45–90 second interval says it is due.
