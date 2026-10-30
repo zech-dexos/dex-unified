@@ -60,6 +60,100 @@ def _atomic_write(path: Path, data: dict) -> None:
             os.remove(temp_path)
 
 
+def _event_evidence_for(
+    event_key: str,
+    experiences: list,
+    autobiographical_events: list,
+    reflections: list,
+) -> dict:
+    """Collect the source records that explain one self-model development event.
+
+    The self-model keeps the evidence trail beside the development entry so a
+    later instance can inspect what changed, why it mattered, and which source
+    records support the account. Source ledgers remain authoritative.
+    """
+    def matches(item: dict) -> bool:
+        if not event_key:
+            return False
+        identifiers = {
+            str(item.get("event_id") or ""),
+            str(item.get("experience_id") or ""),
+            str(item.get("observation_id") or ""),
+            str(item.get("source_event_id") or ""),
+        }
+        identifiers.update(
+            str(value) for value in (item.get("source_event_ids", []) or [])
+            if value
+        )
+        return event_key in identifiers
+
+    experience = next(
+        (item for item in reversed(experiences)
+         if isinstance(item, dict) and matches(item)),
+        {},
+    )
+    autobiography = next(
+        (item for item in reversed(autobiographical_events)
+         if isinstance(item, dict) and matches(item)),
+        {},
+    )
+    related_reflections = [
+        item for item in reflections
+        if isinstance(item, dict) and (
+            matches(item)
+            or event_key in (item.get("source_event_ids", []) or [])
+        )
+    ][-3:]
+
+    source_ids = []
+    for item in (experience, autobiography, *related_reflections):
+        if not isinstance(item, dict):
+            continue
+        for value in (
+            item.get("event_id"),
+            item.get("experience_id"),
+            item.get("observation_id"),
+            item.get("source_event_id"),
+            *(item.get("source_event_ids", []) or []),
+        ):
+            if value and value not in source_ids:
+                source_ids.append(value)
+
+    return {
+        "source_event_ids": source_ids,
+        "experience": {
+            key: experience.get(key)
+            for key in (
+                "event_id", "experience_id", "intent", "action", "experience",
+                "actual_outcome", "reflection", "lessons", "state_transition",
+                "continuation", "observer_perspective", "runtime_perspective",
+                "dex_perspective",
+            )
+            if key in experience
+        },
+        "autobiography": {
+            key: autobiography.get(key)
+            for key in (
+                "event_id", "experience_id", "what_happened", "significance",
+                "state_changes", "state_transition", "perspective",
+                "future_relevance",
+            )
+            if key in autobiography
+        },
+        "reflections": [
+            {
+                key: item.get(key)
+                for key in (
+                    "event_id", "source_event_ids", "observations",
+                    "cycle_analysis", "open_questions", "continuity",
+                )
+                if key in item
+            }
+            for item in related_reflections
+        ],
+    }
+
+
 def refresh_self_model(
     trigger: str = "manual",
     event: Optional[Dict[str, Any]] = None,
@@ -285,8 +379,20 @@ def refresh_self_model(
         event_key or event.get("event_type") or event.get("summary")
         or event.get("thought") or event.get("experience")
     )
-    last_integrated_event = model.get("self_inquiry", {}).get("last_integrated_event")
+    prior_inquiry = model.get("self_inquiry", {})
+    if not isinstance(prior_inquiry, dict):
+        prior_inquiry = {}
+    last_integrated_event = prior_inquiry.get("last_integrated_event")
     if has_event:
+        evidence = _event_evidence_for(
+            event_key, experiences, narrative, reflections
+        )
+        supplied_source_ids = event.get("source_event_ids", []) or []
+        evidence["source_event_ids"] = list(dict.fromkeys(
+            evidence["source_event_ids"] + [
+                value for value in supplied_source_ids if value
+            ]
+        ))
         entry = {
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "trigger": str(trigger)[:100],
@@ -294,12 +400,20 @@ def refresh_self_model(
             "event_type": str(event.get("event_type") or event.get("kind") or trigger)[:100],
             "summary": str(event.get("summary") or event.get("thought")
                            or event.get("experience") or "")[:500],
+            "evidence": evidence,
         }
-        if not (event_key and any(
-            isinstance(row, dict) and row.get("event_id") == event_key
-            for row in development
-        )):
+        existing_index = next((
+            index for index, row in enumerate(development)
+            if event_key and isinstance(row, dict)
+            and row.get("event_id") == event_key
+        ), None)
+        if existing_index is None:
             development.append(entry)
+        else:
+            # A later refresh may see source records that were not yet present
+            # at the first delivery. Enrich the existing event; never duplicate it.
+            previous = development[existing_index]
+            development[existing_index] = {**previous, **entry}
         development = development[-100:]
         last_integrated_event = entry
     model["development_log"] = development
