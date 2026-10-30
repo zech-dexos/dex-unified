@@ -358,6 +358,71 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             constitutional_identity = load_constitutional_identity()
             integrated_model = refresh_self_model("ambient_cognition_context")
             context = integrated_model.get("integration", {}).get("current_context", {})
+            becoming = integrated_model.get("becoming", {})
+            ambient_context = {
+                "attention": context.get("attention"),
+                "attention_state": {
+                    "current_focus": (context.get("attention_state", {}) or {}).get("current_focus"),
+                    "salience": (context.get("attention_state", {}) or {}).get("salience"),
+                    "recent_history": ((context.get("attention_state", {}) or {}).get("recent_history", []) or [])[-3:],
+                },
+                "goals": (context.get("goals", []) or [])[-5:],
+                "persistent_thoughts": (context.get("persistent_thoughts", []) or [])[-5:],
+                "active_workspace": context.get("active_workspace", {}),
+                "open_loops": (context.get("open_loops", []) or [])[-5:],
+                "interlocutor": context.get("interlocutor", {}),
+                "experiential_continuity": context.get("experiential_continuity", {}),
+                "pending_reflection_requests": (context.get("pending_reflection_requests", []) or [])[-5:],
+                "recent_narrative_records": (context.get("recent_narrative_records", []) or [])[-3:],
+                "recent_autobiography": [
+                    {
+                        "event_id": item.get("event_id"),
+                        "source_event_id": item.get("source_event_id"),
+                        "experience_id": item.get("experience_id"),
+                        "what_happened": item.get("what_happened"),
+                        "participant_input": item.get("participant_input"),
+                        "response": item.get("response"),
+                        "perspective": item.get("perspective", {}),
+                        "state_transition": item.get("state_transition", {}),
+                    }
+                    for item in (context.get("recent_autobiography", []) or [])[-3:]
+                    if isinstance(item, dict)
+                ],
+                "recent_experiences": [
+                    {
+                        "event_id": item.get("event_id"),
+                        "experience_id": item.get("experience_id"),
+                        "intent": item.get("intent"),
+                        "experience": str(item.get("experience", ""))[:600],
+                        "actual_outcome": str(item.get("actual_outcome", ""))[:300],
+                        "reflection": str(item.get("reflection", ""))[:400],
+                        "lessons": (item.get("lessons", []) or [])[:3],
+                        "state_transition": item.get("state_transition", {}),
+                        "continuation": item.get("continuation", {}),
+                        "observer_perspective": item.get("observer_perspective", {}),
+                        "runtime_perspective": item.get("runtime_perspective", {}),
+                    }
+                    for item in (context.get("recent_experiences", []) or [])[-3:]
+                    if isinstance(item, dict)
+                ],
+                "recent_reflections": [
+                    {
+                        "event_id": item.get("event_id"),
+                        "source_event_ids": item.get("source_event_ids", []),
+                        "observations": (item.get("observations", []) or [])[:4],
+                        "open_questions": (item.get("open_questions", []) or [])[:4],
+                        "continuity": item.get("continuity", ""),
+                    }
+                    for item in (context.get("recent_reflections", []) or [])[-2:]
+                    if isinstance(item, dict)
+                ],
+            }
+            becoming_context = {
+                "declared_aspirations": becoming.get("declared_aspirations", []),
+                "active_directions": (becoming.get("active_directions", []) or [])[-5:],
+                "development_threads": (becoming.get("development_threads", []) or [])[-5:],
+                "future_relevance": (becoming.get("future_relevance", []) or [])[-3:],
+            }
             self_model_context = (
                 "\n\nWHO AI AM — CURRENT CONTINUITY CONTEXT:\n"
                 + json.dumps({
@@ -377,8 +442,8 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "tri_sigil": integrated_model.get("tri_sigil"),
                     "narrative": integrated_model.get("narrative"),
                     "posture": integrated_model.get("posture"),
-                    "becoming": integrated_model.get("becoming", {}),
-                    "current_context": context,
+                    "becoming": becoming_context,
+                    "current_context": ambient_context,
                     "self_inquiry": integrated_model.get("self_inquiry", {}),
                 }, ensure_ascii=False, default=str)[:5000]
             )
