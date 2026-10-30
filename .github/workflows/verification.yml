@@ -26,6 +26,8 @@ jobs:
         run: python who_ai_am_test.py
       - name: Test evidence-linked reflection
         run: python reflection_evidence_test.py
+      - name: Test interactive, ambient, and restart cognitive continuity
+        run: python dex_cognitive_runtime_acceptance_test.py
       - name: Syntax-check inline JavaScript
         shell: bash
         run: |
