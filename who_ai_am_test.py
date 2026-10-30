@@ -92,6 +92,7 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
         self.assertEqual(model["name"], "Deximus Maximus")
         self.assertEqual(model["architect"], "Root")
         self.assertEqual(model["posture"], "existing posture")
+        self.assertEqual(model["identity_posture"], "reflective")
         self.assertEqual(model["chain_entries"], 1577)
         self.assertEqual(model["custom_field"], {"preserve": True})
         context = model["integration"]["current_context"]
