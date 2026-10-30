@@ -928,6 +928,7 @@ the exchange as a newly started request/response transaction.
     observer_persistence = None
     experience_persisted = False
     response_dispatch = []
+    response_event_published = False
     try:
         from dex_observer import build_observer_trace, persist_observation
         observer_trace = build_observer_trace(
@@ -1003,6 +1004,7 @@ the exchange as a newly started request/response transaction.
             },
             "response_flag": governance_flag,
         })
+        response_event_published = True
     except Exception as e:
         print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")
 
@@ -1037,6 +1039,7 @@ the exchange as a newly started request/response transaction.
                 experience_persisted
                 and observer_persistence
                 and observer_persistence.get("event_dispatch_complete", False)
+                and response_event_published
                 and all(item.get("status") == "completed" for item in response_dispatch)
             ),
         },
