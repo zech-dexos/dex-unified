@@ -93,10 +93,20 @@ async def evaluate_salience(payload: Dict[str, Any]):
         "last_changed_at": _now_iso() if changed else prior.get("last_changed_at"),
         "history": history[-30:],
     }
-    update_self_state({
+    state_delta = {
         "current_attention": focus,
         "attention_state": attention_state,
-    })
+    }
+    # Root's live contribution receives a short priority lease so autonomous
+    # goal selection cannot immediately replace the participant workspace.
+    participant_id = str(payload.get("user_id", "")).strip().lower()
+    if event_type == "PARTICIPANT_EVENT" and participant_id == "root":
+        from datetime import timedelta
+        state_delta["participant_priority_until"] = (
+            datetime.now(timezone.utc) + timedelta(minutes=10)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state_delta["participant_priority_event_id"] = source_event_id
+    update_self_state(state_delta)
 
     # Keep the participant-facing snapshot and the canonical self-state aligned.
     try:
@@ -114,6 +124,7 @@ async def evaluate_salience(payload: Dict[str, Any]):
             "event_id": event_id,
             "source_event_id": source_event_id,
             "source_event_type": event_type,
+            "user_id": payload.get("user_id"),
             "focus": focus,
             "salience": score,
             "previous_focus": prior_focus or None,
