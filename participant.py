@@ -321,6 +321,7 @@ def record_ambient_experience(
     """Persist an ambient pulse as Dex's first-person lived experience."""
     packet = ExperiencePacket(
         participant_id=snapshot.participant_id,
+        event_id=str((runtime_trace or {}).get("event_id") or ""),
         self_identity="Deximus Maximus",
         interlocutor=dict(snapshot.current_interlocutor),
         experience=(
