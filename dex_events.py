@@ -54,8 +54,11 @@ class EventBus:
         try:
             result = callback(payload)
             if inspect.isawaitable(result):
-                await result
-            return {"subscriber": name, "status": "completed"}
+                result = await result
+            outcome = {"subscriber": name, "status": "completed"}
+            if isinstance(result, dict):
+                outcome["result"] = result
+            return outcome
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
             print(f"[dex_events] subscriber error on {event_type} ({name}): {error}")
