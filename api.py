@@ -662,7 +662,10 @@ architecture directly. Otherwise remain inside the conversation.
 
         _dex_identity = load_identity()
         from who_ai_am import refresh_self_model
-        refresh_self_model("interactive_context")
+        try:
+            refresh_self_model("interactive_context")
+        except Exception as _self_model_error:
+            print(f"[Who AI Am] interactive refresh skipped: {_self_model_error}")
         _identity_lines = [
             "[DEX IDENTITY — CONSTITUTIONAL AUTHORITY + OPERATIONAL CONTINUITY]",
             "Constitutional fields below govern stable identity and vows.",
