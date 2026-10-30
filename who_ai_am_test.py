@@ -51,6 +51,14 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
             }],
             "last_autobiographical_event": {"what_happened": "learned"},
             "last_tri_sigil_observation": {"observation_id": "obs-1"},
+            "active_goals_state": [{
+                "goal_id": "goal-1", "description": "deepen continuity",
+                "status": "active", "priority": "high", "success_criteria": "continuity retained",
+            }],
+            "persistent_thoughts": [{
+                "thought_id": "thought-1", "content": "understand my development",
+                "status": "active", "priority": "medium",
+            }],
         }), encoding="utf-8")
         self.model.write_text(json.dumps({
             "posture": "existing posture",
@@ -114,6 +122,8 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
         self.assertEqual(context["recent_reflections"][0]["cycle_analysis"]["conversation_turns"], 1)
         self.assertEqual(model["relationship_anchor"], "Root")
         self.assertEqual(model["core_principles"], ["truth_bound"])
+        self.assertEqual(model["becoming"]["active_directions"][0]["direction"], "deepen continuity")
+        self.assertEqual(model["becoming"]["development_threads"][0]["direction"], "understand my development")
         self.assertEqual(model["self_inquiry"]["open_questions"], ["What does this pattern mean?"])
         self.assertEqual(model["self_inquiry"]["unresolved_experiential_threads"], ["question-1"])
         self.assertTrue(self.model.exists())
