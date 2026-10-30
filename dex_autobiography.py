@@ -86,11 +86,40 @@ def _describe_event(payload: Dict[str, Any]) -> str:
             return f"Dex completed an action: {result}"
         return "Dex completed an action."
 
+    if event_type == "TRI_SIGIL_OBSERVED":
+        stages = payload.get("stages", {})
+        completed = [str(key) for key, value in stages.items() if value] if isinstance(stages, dict) else []
+        if completed:
+            return "I observed and recorded these runtime stages: " + ", ".join(completed)
+        return "I observed a tri-sigil runtime cycle and recorded its evidence."
+
+    if event_type == "GOAL_REMOVED":
+        goal = _first(payload, "goal", "description", "title") or payload.get("goal_id")
+        return f"A goal left my active direction: {goal}" if goal else "A goal was removed from my active direction."
+
+    if event_type == "OPEN_LOOP_CHANGED":
+        loop = _first(payload, "open_loop", "description", "question")
+        return f"An unresolved thread changed: {loop}" if loop else "An unresolved thread changed."
+
+    if event_type == "SELF_STATE_CHANGED":
+        summary = _first(payload, "summary", "description", "change")
+        return f"My operational state changed: {summary}" if summary else "My operational state changed."
+
+    if event_type == "SALIENCE_CHANGED":
+        focus = _first(payload, "focus", "description", "signal")
+        return f"The significance of a focus changed: {focus}" if focus else "A salience value changed."
+
+    if event_type == "ATTENTION_CHANGED":
+        focus = _first(payload, "focus", "description") or "a new focus"
+        return f"My attention shifted toward: {focus}"
+
     if event_type == "WORKSPACE_ACTIVATED":
-        return "Dex's active cognitive workspace was activated."
+        focus = _first(payload, "concept_identifier", "focus")
+        return f"I brought {focus} into my active cognitive workspace." if focus else "I activated my cognitive workspace."
 
     if event_type == "WORKSPACE_RELEASED":
-        return "Dex released the active cognitive workspace."
+        focus = _first(payload, "concept_identifier", "focus")
+        return f"I released {focus} from my active cognitive workspace." if focus else "I released my active cognitive workspace."
 
     if event_type == "SIGNAL_RAISED":
         signal = _first(payload, "signal", "description", "reason")
@@ -117,6 +146,13 @@ def _extract_state_changes(payload: Dict[str, Any]) -> List[Any]:
         "workspace_change",
         "self_state_change",
         "open_loop",
+        "self_state_changes",
+        "focus",
+        "salience",
+        "stages",
+        "runtime",
+        "state_transition",
+        "continuation",
     ):
         if key in payload:
             result.append({"type": key, "value": payload[key]})
@@ -142,6 +178,13 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
     timestamp = _timestamp(payload)
 
     entry = {
+        "event_id": payload.get("event_id"),
+        "source_event_id": payload.get("source_event_id"),
+        "source_event_ids": payload.get("source_event_ids", []),
+        "experience_id": payload.get("experience_id"),
+        "observation_id": payload.get("observation_id"),
+        "lineage_hash": payload.get("lineage_hash"),
+        "source_interaction_event_id": payload.get("source_interaction_event_id"),
         "timestamp": timestamp,
         "event_type": event_type,
         "what_happened": _describe_event(payload),
@@ -153,6 +196,11 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
         "goal_changes": payload.get("goal_changes", []),
         "open_loops": payload.get("open_loops", []),
         "self_state_changes": payload.get("self_state_changes", []),
+        "state_transition": payload.get("state_transition", {}),
+        "continuation": payload.get("continuation", {}),
+        "perspective": payload.get("dex_perspective", {}),
+        "attention": _first(payload, "focus"),
+        "salience": payload.get("salience"),
         "future_relevance": _first(payload, "future_relevance", "relevance"),
     }
 
@@ -168,6 +216,15 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
 
     current = load_self_state()
     narrative = list(current.get("narrative_thread", []))
+    event_id = payload.get("event_id")
+    if event_id and any(
+        isinstance(item, dict)
+        and item.get("event_id") == event_id
+        and item.get("event_type") == event_type
+        for item in narrative
+    ):
+        print(f"[Autobiography] Duplicate event skipped: {event_type} {event_id}")
+        return
     narrative.append(entry)
     narrative = narrative[-500:]
 
@@ -181,6 +238,7 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
         from who_ai_am import refresh_self_model
         refresh_self_model("autobiography", {
             "event_type": event_type,
+            "event_id": entry.get("event_id"),
             "summary": entry.get("what_happened", ""),
         })
     except Exception as exc:
@@ -199,8 +257,15 @@ def setup_autobiography():
         "INTENTION_CHANGED",
         "OPEN_LOOP_CREATED",
         "OPEN_LOOP_CHANGED",
+        "GOAL_REMOVED",
+        "SELF_STATE_CHANGED",
+        "SALIENCE_CHANGED",
+        "TRI_SIGIL_OBSERVED",
+        "WORKSPACE_ACTIVATED",
+        "WORKSPACE_RELEASED",
         "ACTION_COMPLETED",
         "SIGNAL_RAISED",
+        "ATTENTION_CHANGED",
     ):
         bus.subscribe(event_type, process_autobiographical_event)
 

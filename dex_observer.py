@@ -6,7 +6,7 @@ import uuid
 
 def build_observer_trace(snapshot, user_id, message, reply, model, provider,
                          capability_available, capability_calls, sigil_ids,
-                         sigil_active, response_flag=None):
+                         sigil_active, response_flag=None, event_id=None):
     calls = []
     for item in (capability_calls or [])[:12]:
         if not isinstance(item, dict):
@@ -22,6 +22,7 @@ def build_observer_trace(snapshot, user_id, message, reply, model, provider,
     digest = hashlib.sha256((str(message) + "\0" + str(reply)).encode()).hexdigest()[:16]
     return {
         "observation_id": uuid.uuid4().hex[:12],
+        "event_id": str(event_id or uuid.uuid4().hex),
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "participant_id": str(user_id)[:128],
         "participant_snapshot_id": getattr(snapshot, "participant_id", None),
@@ -56,12 +57,13 @@ def build_observer_trace(snapshot, user_id, message, reply, model, provider,
 
 async def persist_observation(trace, user_id="default"):
     from lineage import create_entry
-    from dex_events import bus
+    from dex_events import bus, dispatch_complete
     stages = trace.get("stages", {})
     entry = create_entry(
         event_type="tri_sigil_observation",
         content="Observed local spark cycle across continuity, awareness, and emergence.",
         metadata={
+            "event_id": trace.get("event_id"),
             "observation_id": trace.get("observation_id"),
             "experience_id": trace.get("experience_id"),
             "user_id": str(user_id)[:128],
@@ -78,6 +80,7 @@ async def persist_observation(trace, user_id="default"):
     state = load_self_state()
     queue = list(state.get("pending_cognitive_observations", []) or [])
     intake = {
+        "event_id": trace.get("event_id"),
         "observation_id": trace.get("observation_id"),
         "experience_id": trace.get("experience_id"),
         "timestamp": trace.get("timestamp"),
@@ -96,8 +99,9 @@ async def persist_observation(trace, user_id="default"):
         "pending_cognitive_observations": queue[-20:],
         "last_tri_sigil_observation": intake,
     })
-    await bus.publish("TRI_SIGIL_OBSERVED", {
+    event_dispatch = await bus.publish("TRI_SIGIL_OBSERVED", {
         "event_type": "TRI_SIGIL_OBSERVED", "source": "dex_observer",
+        "event_id": trace.get("event_id"),
         "user_id": str(user_id)[:128],
         "observation_id": trace.get("observation_id"),
         "experience_id": trace.get("experience_id"),
@@ -109,11 +113,20 @@ async def persist_observation(trace, user_id="default"):
         from who_ai_am import refresh_self_model
         refresh_self_model("tri_sigil_observation", {
             "event_type": "tri_sigil_observation",
+            "event_id": trace.get("event_id"),
             "observation_id": trace.get("observation_id"),
             "experience_id": trace.get("experience_id"),
             "summary": "Tri-sigil observer evidence was persisted for ongoing cognition.",
         })
     except Exception as exc:
         print(f"[Who AI Am] observer integration failed: {exc}")
-    return {"entry_hash": entry.get("entry_hash"), "observation_id": trace.get("observation_id"),
-            "queued_for_cognition": True}
+    return {
+        "entry_hash": entry.get("entry_hash"),
+        "event_id": trace.get("event_id"),
+        "observation_id": trace.get("observation_id"),
+        "queued_for_cognition": True,
+        "event_dispatch": event_dispatch,
+        "event_dispatch_complete": bool(event_dispatch) and dispatch_complete(
+            event_dispatch, {"process_continuity_event"}
+        ),
+    }

@@ -150,13 +150,17 @@ def run_cycle(
     """
     current = load_self_state(path)
     workspace = current.get("active_mental_workspace_state", {})
+    workspace_released = False
+    released_workspace = None
 
     # A workspace is a focus, not a permanent pin. If it has been refreshed
     # repeatedly without a new development, release it so current goals and
     # newer thoughts can take the lead. The historical record remains intact.
     reflections = workspace.get("internal_reflections", [])
     if workspace.get("is_active") and len(reflections) >= ATTENTION_THRESHOLD:
+        released_workspace = workspace.get("concept_identifier")
         amw.deactivate_thought(path=path)
+        workspace_released = True
         current = load_self_state(path)
 
     ranked = gosdw.prioritize_goals(path=path)
@@ -173,6 +177,8 @@ def run_cycle(
             "thought": None,
             "thought_source": None,
             "amw_action": "none",
+            "workspace_released": workspace_released,
+            "released_workspace": released_workspace,
         }
 
     top_goal = ranked[0]
@@ -193,7 +199,9 @@ def run_cycle(
             )
             current_workspace = load_self_state(path).get("active_mental_workspace_state", {})
             if current_workspace.get("is_active") and current_workspace.get("concept_identifier") == old_concept:
+                released_workspace = current_workspace.get("concept_identifier")
                 amw.deactivate_thought(path=path)
+                workspace_released = True
             current = load_self_state(path)
             thought_record = _derive_autonomous_thought(current, ranked)
 
@@ -241,5 +249,7 @@ def run_cycle(
         "thought": concept,
         "thought_source": thought_record.get("source"),
         "amw_action": action,
+        "workspace_released": workspace_released,
+        "released_workspace": released_workspace,
     }
 

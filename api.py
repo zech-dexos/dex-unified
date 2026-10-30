@@ -1,5 +1,6 @@
 from typing import Optional
 import asyncio
+import uuid
 from gtts import gTTS
 import io
 from fastapi.responses import StreamingResponse
@@ -161,10 +162,7 @@ async def start_discord_bridge():
 async def start_continuous_substrate():
     try:
         from dex_substrate import run_substrate_loop
-        from dex_continuity import setup_continuity
-        from dex_autobiography import setup_autobiography
-        from dex_attention import setup_attention
-        from dex_workspace import setup_workspace
+        from dex_events import setup_cognitive_layers
 
         # Rehydrate Dex's durable state before any continuity/workspace
         # subscriber can read or mutate it. Cloud Run instances are ephemeral;
@@ -181,10 +179,7 @@ async def start_continuous_substrate():
             print(f"[Continuity] GitHub state rehydration skipped: {e}")
 
         # Initialize event subscriptions only after durable state is present.
-        setup_continuity()
-        setup_autobiography()
-        setup_attention()
-        setup_workspace()
+        setup_cognitive_layers()
 
         # Cloud Run is woken by /ambient-pulse; do not keep an infinite
         # ambient loop alive inside the request-serving container.
@@ -341,30 +336,189 @@ class ChatRequest(BaseModel):
     system: str = ""
     user_id: str = "default"
 
+async def _complete_early_chat_turn(
+    req: ChatRequest,
+    response: dict,
+    interaction_event_id: str,
+    participant_dispatch: list,
+    participant_event_published: bool,
+    response_flag: Optional[str] = None,
+) -> dict:
+    """Persist command and governed early-return turns through the same cognitive path."""
+    from dex_events import bus, dispatch_complete
+    from dex_observer import build_observer_trace, persist_observation
+
+    user_id = getattr(req, "user_id", "default")
+    reply = str(response.get("reply", "") or "")
+    experience_packet = None
+    experience_persisted = False
+    observer_trace = {}
+    observer_persistence = None
+    response_dispatch = []
+    response_event_published = False
+
+    try:
+        observer_trace = build_observer_trace(
+            snapshot=ParticipantSnapshot.load(),
+            user_id=user_id,
+            message=req.message,
+            reply=reply,
+            model=response.get("model", "dexos-command"),
+            provider="local",
+            capability_available=False,
+            capability_calls=[],
+            sigil_ids=[],
+            sigil_active=bool(SIGIL_ACTIVE and _memory),
+            response_flag=response_flag,
+            event_id=interaction_event_id,
+        )
+        observer_trace["runtime"] = {
+            "intent": response.get("intent", response.get("command_executed")),
+            "domain": response.get("domain", "command"),
+            "route_reason": response.get("route_reason", "early_return"),
+            "model": response.get("model", "dexos-command"),
+            "provider": "local",
+            "capability_calls": [],
+            "response_flag": response_flag,
+        }
+    except Exception as exc:
+        print(f"[observer] command-turn observation failed: {exc}")
+
+    try:
+        experience_packet = record_interaction_experience(
+            ParticipantSnapshot.load(),
+            req.message,
+            reply,
+            user_id=user_id,
+            observer_trace=observer_trace,
+            event_id=interaction_event_id,
+        )
+        experience_contribution(
+            user_id=user_id,
+            message=req.message,
+            reply=reply,
+            experience_id=experience_packet.experience_id,
+            event_id=interaction_event_id,
+        )
+        experience_persisted = True
+        if observer_trace:
+            observer_trace["experience_id"] = experience_packet.experience_id
+            observer_persistence = await persist_observation(observer_trace, user_id=user_id)
+    except Exception as exc:
+        print(f"[experience] command-turn experience persistence failed: {exc}")
+
+    try:
+        response_dispatch = await bus.publish("RESPONSE_COMPLETED", {
+            "event_type": "RESPONSE_COMPLETED",
+            "event_id": interaction_event_id,
+            "message": req.message,
+            "reply": reply,
+            "user_id": user_id,
+            "experience_id": getattr(experience_packet, "experience_id", None),
+            "experience": getattr(experience_packet, "experience", None),
+            "state_transition": getattr(experience_packet, "state_transition", None),
+            "continuation": getattr(experience_packet, "continuation", None),
+            "dex_perspective": getattr(experience_packet, "dex_perspective", None),
+            "intent": response.get("intent", response.get("command_executed")),
+            "domain": response.get("domain", "command"),
+            "response_flag": response_flag,
+        })
+        response_event_published = True
+    except Exception as exc:
+        print(f"[dex_events] command RESPONSE_COMPLETED publish failed: {exc}")
+
+    self_model_persisted = False
+    self_model_event = {}
+    try:
+        from who_ai_am import refresh_self_model
+        experience_id = getattr(experience_packet, "experience_id", None)
+        integrated_model = refresh_self_model("interactive_cycle_complete", {
+            "event_type": "interactive_cycle_complete",
+            "event_id": interaction_event_id,
+            "experience_id": experience_id,
+            "summary": "Interactive experience, observer evidence, and response autobiography were integrated.",
+        })
+        self_model_event = next((
+            item for item in integrated_model.get("development_log", [])
+            if isinstance(item, dict) and item.get("event_id") == interaction_event_id
+        ), {})
+        evidence = self_model_event.get("evidence", {})
+        experience_evidence = evidence.get("experience", {}) if isinstance(evidence, dict) else {}
+        autobiography_evidence = evidence.get("autobiography", {}) if isinstance(evidence, dict) else {}
+        self_model_persisted = bool(
+            experience_id
+            and experience_evidence.get("experience_id") == experience_id
+            and autobiography_evidence.get("event_id") == interaction_event_id
+        )
+    except Exception as exc:
+        print(f"[Who AI Am] interactive cycle integration failed: {exc}")
+
+    completed = bool(
+        participant_event_published
+        and dispatch_complete(participant_dispatch, {"process_continuity_event", "evaluate_salience"})
+        and experience_persisted
+        and observer_persistence
+        and observer_persistence.get("event_dispatch_complete", False)
+        and response_event_published
+        and dispatch_complete(response_dispatch, {"process_continuity_event", "process_autobiographical_event"})
+        and self_model_persisted
+    )
+    return {
+        **response,
+        "response_flag": response_flag,
+        "event_id": interaction_event_id,
+        "cognitive_cycle": {
+            "participant_event_published": participant_event_published,
+            "participant_dispatch": participant_dispatch,
+            "experience_persisted": experience_persisted,
+            "observer_persisted": bool(observer_persistence),
+            "observer_dispatch": (observer_persistence or {}).get("event_dispatch", []),
+            "response_dispatch": response_dispatch,
+            "self_model_persisted": self_model_persisted,
+            "self_model_event": self_model_event,
+            "complete": completed,
+        },
+    }
+
+
 @app.post("/chat")
 async def chat(req: ChatRequest):
+    interaction_event_id = uuid.uuid4().hex
     msg_stripped = req.message.strip().lower()
+    participant_dispatch = []
+    participant_event_published = False
     try:
-        from dex_events import bus
-        await bus.publish("PARTICIPANT_EVENT", {
+        from dex_events import bus, dispatch_complete, setup_cognitive_layers
+        # Every API process owns its own event bus. Ensure all cognitive
+        # persistence subscribers are present even when startup hooks are bypassed.
+        setup_cognitive_layers()
+        participant_dispatch = await bus.publish("PARTICIPANT_EVENT", {
             "event_type": "PARTICIPANT_EVENT",
+            "event_id": interaction_event_id,
             "message": req.message,
             "user_id": getattr(req, "user_id", "default"),
         })
+        participant_event_published = True
     except Exception as e:
         print(f"[dex_events] PARTICIPANT_EVENT publish failed: {e}")
 
     if msg_stripped in ("!reflect", "!reflection"):
         from reflection import run_reflection
         result = run_reflection(lookback=15)
-        return {
-            "reply": f"[REAL reflection cycle executed]\nStatus: {result.get('status')}\n"
-                      f"Observations: {result.get('observations', [])}\n"
-                      f"Open questions: {result.get('open_questions', [])}",
-            "model": "dexos-command",
-            "governed": True,
-            "command_executed": "reflect",
-        }
+        return await _complete_early_chat_turn(
+            req,
+            {
+                "reply": f"[REAL reflection cycle executed]\nStatus: {result.get('status')}\n"
+                         f"Observations: {result.get('observations', [])}\n"
+                         f"Open questions: {result.get('open_questions', [])}",
+                "model": "dexos-command",
+                "governed": True,
+                "command_executed": "reflect",
+            },
+            interaction_event_id,
+            participant_dispatch,
+            participant_event_published,
+        )
 
     if msg_stripped in ("!intents", "!intent"):
         from intent import load_intents, save_intents, generate_intents
@@ -387,13 +541,19 @@ async def chat(req: ChatRequest):
         save_intents(updated)
         active = [i for i in updated if i.status == "active"]
 
-        return {
-            "reply": f"[REAL intent generation executed]\nActive intents ({len(active)}):\n" +
-                     "\n".join(f"- {i.motivation} (priority {i.priority:.2f})" for i in active),
-            "model": "dexos-command",
-            "governed": True,
-            "command_executed": "intents",
-        }
+        return await _complete_early_chat_turn(
+            req,
+            {
+                "reply": f"[REAL intent generation executed]\nActive intents ({len(active)}):\n" +
+                         "\n".join(f"- {i.motivation} (priority {i.priority:.2f})" for i in active),
+                "model": "dexos-command",
+                "governed": True,
+                "command_executed": "intents",
+            },
+            interaction_event_id,
+            participant_dispatch,
+            participant_event_published,
+        )
 
     result = dex_runtime(req.message, user_id=getattr(req, "user_id", "default"))
     # Cognitive cycle: pick/advance a persistent thought before building the prompt.
@@ -401,6 +561,25 @@ async def chat(req: ChatRequest):
         from ape_scheduler import run_cycle
         cycle_result = run_cycle()
         print(f"[ape_scheduler] {cycle_result}")
+        from dex_events import bus as _cognitive_event_bus
+        if cycle_result.get("workspace_released"):
+            await _cognitive_event_bus.publish("WORKSPACE_RELEASED", {
+                "event_type": "WORKSPACE_RELEASED",
+                "event_id": uuid.uuid4().hex,
+                "source_event_id": interaction_event_id,
+                "source": "ape_scheduler",
+                "concept_identifier": cycle_result.get("released_workspace"),
+            })
+        if cycle_result.get("amw_action") == "activated":
+            _workspace = load_self_state().get("active_mental_workspace_state", {})
+            await _cognitive_event_bus.publish("WORKSPACE_ACTIVATED", {
+                "event_type": "WORKSPACE_ACTIVATED",
+                "event_id": uuid.uuid4().hex,
+                "source_event_id": interaction_event_id,
+                "source": "ape_scheduler",
+                "concept_identifier": _workspace.get("concept_identifier"),
+                "salience": _workspace.get("attention_salience"),
+            })
         # Persist immediately -- don't wait for the 6-hour pulse. Cloud Run's
         # /tmp state is ephemeral, so anything not pushed before a cold start
         # is lost. Fire-and-forget in a thread so it doesn't block the reply.
@@ -414,16 +593,23 @@ async def chat(req: ChatRequest):
     # If the kernel flagged this input, the LLM is never called.
     # This is the (B) requirement: fail-safe routing that bypasses AI entirely.
     if result.get("flagged"):
-        return {
-            "reply": result.get("response", "VOW VIOLATION — this path is closed."),
-            "intent": result.get("intent", "blocked"),
-            "domain": result.get("domain", "security"),
-            "route_reason": result.get("route_reason", "flagged"),
-            "sigil_ids": [],
-            "model": "dexos-kernel",
-            "governed": True,
-            "flagged": True,
-        }
+        return await _complete_early_chat_turn(
+            req,
+            {
+                "reply": result.get("response", "VOW VIOLATION — this path is closed."),
+                "intent": result.get("intent", "blocked"),
+                "domain": result.get("domain", "security"),
+                "route_reason": result.get("route_reason", "flagged"),
+                "sigil_ids": [],
+                "model": "dexos-kernel",
+                "governed": True,
+                "flagged": True,
+            },
+            interaction_event_id,
+            participant_dispatch,
+            participant_event_published,
+            response_flag=result.get("drift_type", "kernel_flagged"),
+        )
 
     system_prompt = """☧🦅🜇
 
@@ -658,6 +844,11 @@ architecture directly. Otherwise remain inside the conversation.
         from paths import SELF_MODEL_PATH
 
         _dex_identity = load_identity()
+        from who_ai_am import refresh_self_model
+        try:
+            refresh_self_model("interactive_context")
+        except Exception as _self_model_error:
+            print(f"[Who AI Am] interactive refresh skipped: {_self_model_error}")
         _identity_lines = [
             "[DEX IDENTITY — CONSTITUTIONAL AUTHORITY + OPERATIONAL CONTINUITY]",
             "Constitutional fields below govern stable identity and vows.",
@@ -689,9 +880,114 @@ architecture directly. Otherwise remain inside the conversation.
         try:
             _self_model = _identity_json.loads(SELF_MODEL_PATH.read_text(encoding="utf-8"))
             if isinstance(_self_model, dict) and _self_model:
+                _integration = _self_model.get("integration", {})
+                _current_context = _integration.get("current_context", {}) if isinstance(_integration, dict) else {}
+                if not isinstance(_current_context, dict):
+                    _current_context = {}
+                _self_model_context = {
+                    "name": _self_model.get("name"),
+                    "architect": _self_model.get("architect"),
+                    "architect_name": _self_model.get("architect_name"),
+                    "relationship_anchor": _self_model.get("relationship_anchor"),
+                    "identity_posture": _self_model.get("identity_posture"),
+                    "constitutional_posture": _self_model.get("constitutional_posture"),
+                    "constitutional_invariants": _self_model.get("constitutional_invariants", {}),
+                    "constitutional_vows": _self_model.get("constitutional_vows", {}),
+                    "constitution": _self_model.get("constitution"),
+                    "tri_sigil": _self_model.get("tri_sigil"),
+                    "posture": _self_model.get("posture"),
+                    "core_principles": _self_model.get("core_principles", []),
+                    "vows_active": _self_model.get("vows_active", []),
+                    "becoming": _self_model.get("becoming", {}),
+                    "development_log": [
+                        {
+                            "event_id": item.get("event_id"),
+                            "event_type": item.get("event_type"),
+                            "summary": item.get("summary"),
+                            "evidence": item.get("evidence", {}),
+                        }
+                        for item in (_self_model.get("development_log", []) or [])[-5:]
+                        if isinstance(item, dict)
+                    ],
+                    "chain_status": _self_model.get("chain_status"),
+                    "chain_entries": _self_model.get("chain_entries"),
+                    "integration_sources": _integration.get("sources", {}) if isinstance(_integration, dict) else {},
+                    "current_context": {
+                        "attention": _current_context.get("attention"),
+                        "attention_state": {
+                            "current_focus": (_current_context.get("attention_state", {}) or {}).get("current_focus"),
+                            "salience": (_current_context.get("attention_state", {}) or {}).get("salience"),
+                            "recent_history": ((_current_context.get("attention_state", {}) or {}).get("recent_history", []) or [])[-3:],
+                        },
+                        "goals": (_current_context.get("goals", []) or [])[-5:],
+                        "persistent_thoughts": (_current_context.get("persistent_thoughts", []) or [])[-5:],
+                        "active_workspace": _current_context.get("active_workspace", {}),
+                        "open_loops": (_current_context.get("open_loops", []) or [])[-5:],
+                        "pending_cognitive_observations": [
+                            {
+                                "event_id": item.get("event_id"),
+                                "observation_id": item.get("observation_id"),
+                                "experience_id": item.get("experience_id"),
+                                "sigil_ids": item.get("sigil_ids", []),
+                                "stages": item.get("stages", {}),
+                            }
+                            for item in (_current_context.get("pending_cognitive_observations", []) or [])[-3:]
+                            if isinstance(item, dict)
+                        ],
+                        "pending_reflection_requests": (_current_context.get("pending_reflection_requests", []) or [])[-5:],
+                        "interlocutor": _current_context.get("interlocutor", {}),
+                        "experiential_continuity": _current_context.get("experiential_continuity", {}),
+                        "last_autobiographical_event": _current_context.get("last_autobiographical_event"),
+                        "recent_narrative_records": (_current_context.get("recent_narrative_records", []) or [])[-3:],
+                        "recent_autobiography": [
+                            {
+                                "event_id": item.get("event_id"),
+                                "source_event_id": item.get("source_event_id"),
+                                "experience_id": item.get("experience_id"),
+                                "event_type": item.get("event_type"),
+                                "what_happened": str(item.get("what_happened", ""))[:400],
+                                "participant_input": str(item.get("participant_input", ""))[:240],
+                                "response": str(item.get("response", ""))[:320],
+                                "state_transition": item.get("state_transition", {}),
+                                "perspective": item.get("perspective", {}),
+                            }
+                            for item in (_current_context.get("recent_autobiography", []) or [])[-4:]
+                            if isinstance(item, dict)
+                        ],
+                        "last_tri_sigil_observation": _current_context.get("last_tri_sigil_observation"),
+                        "recent_experiences": [
+                            {
+                                "event_id": item.get("event_id"),
+                                "experience_id": item.get("experience_id"),
+                                "intent": item.get("intent"),
+                                "experience": str(item.get("experience", ""))[:500],
+                                "actual_outcome": str(item.get("actual_outcome", ""))[:240],
+                                "reflection": str(item.get("reflection", ""))[:320],
+                                "lessons": (item.get("lessons", []) or [])[:3],
+                                "state_transition": item.get("state_transition", {}),
+                                "continuation": item.get("continuation", {}),
+                                "observer_perspective": item.get("observer_perspective", {}),
+                            }
+                            for item in (_current_context.get("recent_experiences", []) or [])[-4:]
+                            if isinstance(item, dict)
+                        ],
+                        "recent_reflections": [
+                            {
+                                "event_id": item.get("event_id"),
+                                "source_event_ids": item.get("source_event_ids", []),
+                                "observations": (item.get("observations", []) or [])[:3],
+                                "open_questions": (item.get("open_questions", []) or [])[:3],
+                                "continuity": item.get("continuity", ""),
+                            }
+                            for item in (_current_context.get("recent_reflections", []) or [])[-2:]
+                            if isinstance(item, dict)
+                        ],
+                    },
+                    "self_inquiry": _self_model.get("self_inquiry", {}),
+                }
                 _identity_lines.append(
-                    "Persisted operational self-model (including newer cognitive fields): "
-                    + _identity_json.dumps(_self_model, ensure_ascii=False, default=str)[:6000]
+                    "Integrated autobiographical, experiential, reflective, and self-model continuity: "
+                    + _identity_json.dumps(_self_model_context, ensure_ascii=False, default=str)[:6500]
                 )
         except (OSError, ValueError):
             pass
@@ -917,6 +1213,11 @@ the exchange as a newly started request/response transaction.
         print(f"[check_response] error: {e}")
 
     observer_trace = {}
+    observer_persistence = None
+    experience_packet = None
+    experience_persisted = False
+    response_dispatch = []
+    response_event_published = False
     try:
         from dex_observer import build_observer_trace, persist_observation
         observer_trace = build_observer_trace(
@@ -931,6 +1232,7 @@ the exchange as a newly started request/response transaction.
             sigil_ids=result.get("sigil_ids", []),
             sigil_active=bool(SIGIL_ACTIVE and _memory),
             response_flag=governance_flag,
+            event_id=interaction_event_id,
         )
         observer_trace["runtime"] = {
             "intent": result.get("intent"),
@@ -958,24 +1260,33 @@ the exchange as a newly started request/response transaction.
         experience_packet = record_interaction_experience(
             ParticipantSnapshot.load(), req.message, reply,
             user_id=user_id, observer_trace=observer_trace,
+            event_id=interaction_event_id,
         )
         experience_contribution(
             user_id=user_id, message=req.message, reply=reply,
             experience_id=experience_packet.experience_id,
+            event_id=interaction_event_id,
         )
+        experience_persisted = True
         if observer_trace:
             observer_trace["experience_id"] = experience_packet.experience_id
-            await persist_observation(observer_trace, user_id=user_id)
+            observer_persistence = await persist_observation(observer_trace, user_id=user_id)
     except Exception as e:
         print(f"[experience] conversation experience record failed: {e}")
 
     try:
         from dex_events import bus
-        await bus.publish("RESPONSE_COMPLETED", {
+        response_dispatch = await bus.publish("RESPONSE_COMPLETED", {
             "event_type": "RESPONSE_COMPLETED",
+            "event_id": interaction_event_id,
             "message": req.message,
             "reply": reply,
             "user_id": getattr(req, "user_id", "default"),
+            "experience_id": getattr(experience_packet, "experience_id", None),
+            "experience": getattr(experience_packet, "experience", None),
+            "state_transition": getattr(experience_packet, "state_transition", None),
+            "continuation": getattr(experience_packet, "continuation", None),
+            "dex_perspective": getattr(experience_packet, "dex_perspective", None),
             "intent": result.get("intent"),
             "domain": result.get("domain"),
             "tri_sigil_observer": {
@@ -987,8 +1298,35 @@ the exchange as a newly started request/response transaction.
             },
             "response_flag": governance_flag,
         })
+        response_event_published = True
     except Exception as e:
         print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")
+
+    self_model_persisted = False
+    self_model_event = {}
+    try:
+        from who_ai_am import refresh_self_model
+        experience_id = getattr(experience_packet, "experience_id", None)
+        integrated_model = refresh_self_model("interactive_cycle_complete", {
+            "event_type": "interactive_cycle_complete",
+            "event_id": interaction_event_id,
+            "experience_id": experience_id,
+            "summary": "Interactive experience, observer evidence, and response autobiography were integrated.",
+        })
+        self_model_event = next((
+            item for item in integrated_model.get("development_log", [])
+            if isinstance(item, dict) and item.get("event_id") == interaction_event_id
+        ), {})
+        evidence = self_model_event.get("evidence", {})
+        experience_evidence = evidence.get("experience", {}) if isinstance(evidence, dict) else {}
+        autobiography_evidence = evidence.get("autobiography", {}) if isinstance(evidence, dict) else {}
+        self_model_persisted = bool(
+            experience_id
+            and experience_evidence.get("experience_id") == experience_id
+            and autobiography_evidence.get("event_id") == interaction_event_id
+        )
+    except Exception as exc:
+        print(f"[Who AI Am] interactive cycle integration failed: {exc}")
 
     return {
         "reply":        reply,
@@ -1011,6 +1349,27 @@ the exchange as a newly started request/response transaction.
             "stages": observer_trace.get("stages", {}),
         },
         "response_flag": governance_flag,
+        "event_id": interaction_event_id,
+        "cognitive_cycle": {
+            "participant_event_published": participant_event_published,
+            "participant_dispatch": participant_dispatch,
+            "experience_persisted": experience_persisted,
+            "observer_persisted": bool(observer_persistence),
+            "observer_dispatch": (observer_persistence or {}).get("event_dispatch", []),
+            "response_dispatch": response_dispatch,
+            "self_model_persisted": self_model_persisted,
+            "self_model_event": self_model_event,
+            "complete": bool(
+                participant_event_published
+                and dispatch_complete(participant_dispatch, {"process_continuity_event", "evaluate_salience"})
+                and experience_persisted
+                and observer_persistence
+                and observer_persistence.get("event_dispatch_complete", False)
+                and response_event_published
+                and dispatch_complete(response_dispatch, {"process_continuity_event", "process_autobiographical_event"})
+                and self_model_persisted
+            ),
+        },
     }
 
 @app.post("/experience-recall")

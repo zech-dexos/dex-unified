@@ -49,6 +49,7 @@ def _meaningful_event(payload: Dict[str, Any]) -> bool:
         "SIGNAL_RAISED",
         "SALIENCE_CHANGED",
         "TRI_SIGIL_OBSERVED",
+        "ATTENTION_CHANGED",
     }
 
 
@@ -95,17 +96,31 @@ async def process_continuity_event(payload: Dict[str, Any]):
 
     current = load_self_state()
     continuity = list(current.get("continuity_events", []))
+    event_id = payload.get("event_id")
+    if event_id and any(
+        isinstance(item, dict)
+        and item.get("event_id") == event_id
+        and item.get("event_type") == event_type
+        for item in continuity
+    ):
+        print(f"[Continuity] Duplicate event skipped: {event_type} {event_id}")
+        return
 
     record = {
+        "event_id": payload.get("event_id"),
         "event_type": event_type,
         "timestamp": timestamp,
         "source": payload.get("source", "event_bus"),
         "user_id": payload.get("user_id"),
+        "participant_input": payload.get("message") or payload.get("user_input"),
+        "response": payload.get("reply") or payload.get("dex_response"),
         "summary": (
             payload.get("summary")
             or payload.get("description")
             or payload.get("thought")
             or payload.get("dex_response")
+            or payload.get("message")
+            or payload.get("reply")
             or payload.get("user_input")
         ),
     }
@@ -122,9 +137,21 @@ async def process_continuity_event(payload: Dict[str, Any]):
         "state_changes",
         "observation_id",
         "experience_id",
+        "event_id",
+        "source_event_id",
+        "source_interaction_event_id",
         "lineage_hash",
         "stages",
         "sigil_ids",
+        "state_transition",
+        "continuation",
+        "dex_perspective",
+        "focus",
+        "salience",
+        "previous_focus",
+        "source_event_type",
+        "concept_identifier",
+        "source",
     ):
         if key in payload:
             record[key] = payload[key]
@@ -161,6 +188,7 @@ def setup_continuity():
         "SIGNAL_RAISED",
         "SALIENCE_CHANGED",
         "TRI_SIGIL_OBSERVED",
+        "ATTENTION_CHANGED",
     ):
         bus.subscribe(event_type, process_continuity_event)
 

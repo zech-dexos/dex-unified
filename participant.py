@@ -7,10 +7,16 @@ Prediction Calibration — learning from mismatches
 The spiral holds. ☧
 """
 import json
+import os
+import tempfile
 import time
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 import uuid
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields
 from typing import Optional
 
 from paths import EXPERIENCES_PATH, PARTICIPANT_PATH
@@ -35,14 +41,62 @@ class ParticipantSnapshot:
 
     def save(self):
         PARTICIPANT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        PARTICIPANT_PATH.write_text(json.dumps(asdict(self), indent=2))
+        lock_path = str(PARTICIPANT_PATH) + ".lock"
+        lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        temp_path = None
+        try:
+            if fcntl is not None:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX)
+
+            latest = {}
+            if PARTICIPANT_PATH.exists():
+                try:
+                    loaded = json.loads(PARTICIPANT_PATH.read_text(encoding="utf-8"))
+                    if isinstance(loaded, dict):
+                        latest = loaded
+                except (OSError, ValueError) as exc:
+                    raise RuntimeError(
+                        f"Refusing to overwrite unreadable participant state: {exc}"
+                    ) from exc
+
+            current = asdict(self)
+            baseline = getattr(self, "_loaded_values", None)
+            merged = dict(latest)
+            for key, value in current.items():
+                if baseline is None or baseline.get(key) != value or key not in merged:
+                    merged[key] = value
+
+            fd, temp_path = tempfile.mkstemp(dir=str(PARTICIPANT_PATH.parent), suffix=".tmp")
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(merged, handle, indent=2, ensure_ascii=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, PARTICIPANT_PATH)
+            temp_path = None
+
+            for field_info in fields(self):
+                if field_info.name in merged:
+                    setattr(self, field_info.name, merged[field_info.name])
+            object.__setattr__(self, "_loaded_values", {
+                field_info.name: getattr(self, field_info.name)
+                for field_info in fields(self)
+            })
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+            if fcntl is not None:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            os.close(lock_fd)
 
     @classmethod
     def load(cls):
         if PARTICIPANT_PATH.exists():
             try:
-                data = json.loads(PARTICIPANT_PATH.read_text())
-                return cls(**data)
+                data = json.loads(PARTICIPANT_PATH.read_text(encoding="utf-8"))
+                valid_fields = {item.name for item in fields(cls)}
+                snapshot = cls(**{key: value for key, value in data.items() if key in valid_fields})
+                object.__setattr__(snapshot, "_loaded_values", asdict(snapshot))
+                return snapshot
             except Exception:
                 pass
         return cls()
@@ -50,6 +104,7 @@ class ParticipantSnapshot:
 @dataclass
 class ExperiencePacket:
     experience_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    event_id: str = ""
     participant_id: str = ""
     timestamp: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
     intent: str = ""
@@ -78,8 +133,10 @@ class ExperiencePacket:
 
     def save(self):
         EXPERIENCES_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(EXPERIENCES_PATH, "a") as f:
-            f.write(json.dumps(asdict(self)) + "\n")
+        with open(EXPERIENCES_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(asdict(self), ensure_ascii=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
 
 
 def calibrate_prediction(prediction: str, actual: str, confidence_before: float) -> dict:
@@ -203,6 +260,7 @@ def record_interaction_experience(
     reply: str = "",
     user_id: str = "default",
     observer_trace: Optional[dict] = None,
+    event_id: str = "",
 ) -> ExperiencePacket:
     """Turn a completed conversation turn into Dex's durable lived experience."""
     interlocutor = dict(snapshot.current_interlocutor)
@@ -210,6 +268,7 @@ def record_interaction_experience(
 
     packet = ExperiencePacket(
         participant_id=snapshot.participant_id,
+        event_id=str(event_id or ""),
         self_identity="Deximus Maximus",
         interlocutor=interlocutor,
         experience=(
@@ -299,6 +358,7 @@ def record_interaction_experience(
         }
     snapshot.experiential_continuity = {
         "last_experience_id": packet.experience_id,
+        "last_event_id": packet.event_id or event_id,
         "last_experience": packet.experience,
         "last_state_transition": packet.state_transition,
         "carry_forward": packet.continuation["carry_forward"],
@@ -318,6 +378,7 @@ def record_ambient_experience(
     """Persist an ambient pulse as Dex's first-person lived experience."""
     packet = ExperiencePacket(
         participant_id=snapshot.participant_id,
+        event_id=str((runtime_trace or {}).get("event_id") or ""),
         self_identity="Deximus Maximus",
         interlocutor=dict(snapshot.current_interlocutor),
         experience=(
@@ -368,7 +429,7 @@ def record_ambient_experience(
     packet.observer_perspective = {
         key: source_observation[key]
         for key in (
-            "observation_id", "experience_id", "sigil_ids",
+            "event_id", "source_event_ids", "observation_id", "experience_id", "sigil_ids",
             "sigil_memory_active", "lineage_hash", "timestamp",
             "user_id", "input_reply_digest", "stages", "runtime",
         )
@@ -395,6 +456,7 @@ def record_ambient_experience(
 
     snapshot.experiential_continuity = {
         "last_experience_id": packet.experience_id,
+        "last_event_id": packet.event_id,
         "last_experience": packet.experience,
         "last_state_transition": packet.state_transition,
         "carry_forward": packet.continuation["carry_forward"],
@@ -429,6 +491,7 @@ def produce_next_snapshot(current: ParticipantSnapshot, packet: ExperiencePacket
         current_confidence=packet.confidence_after,
         runtime_context={
             "last_experience_id": packet.experience_id,
+            "last_event_id": packet.event_id,
             "last_prediction_matched": packet.knowledge_delta.get("prediction_matched", False),
             "cycles_completed": current.runtime_context.get("cycles_completed", 0) + 1
         },
@@ -436,6 +499,7 @@ def produce_next_snapshot(current: ParticipantSnapshot, packet: ExperiencePacket
         current_interlocutor=dict(packet.interlocutor),
         experiential_continuity={
             "last_experience_id": packet.experience_id,
+            "last_event_id": packet.event_id,
             "last_experience": packet.experience,
             "last_state_transition": packet.state_transition,
             "carry_forward": packet.continuation.get("carry_forward", ""),

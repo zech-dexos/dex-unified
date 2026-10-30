@@ -96,6 +96,10 @@ def activate_thought(
             "related_knowledge_nodes": related_nodes,
             "internal_reflections": [],
             "duration_hint": duration_hint,
+            "attention_salience": 0.0,
+            "source_event_id": None,
+            "source_interaction_event_id": None,
+            "source_event_type": None,
         }
     }
     return update_self_state(delta, path=path)
@@ -107,6 +111,10 @@ def deactivate_thought(path: Path = SELF_STATE_PATH) -> Dict[str, Any]:
         "active_mental_workspace_state": {
             "is_active": False,
             "focus_strength": 0.0,
+            "attention_salience": 0.0,
+            "source_event_id": None,
+            "source_interaction_event_id": None,
+            "source_event_type": None,
         }
     }
     return update_self_state(delta, path=path)

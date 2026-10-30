@@ -16,10 +16,20 @@ jobs:
           node-version: "20"
       - name: Compile Python sources
         run: python -m compileall -q .
+      - name: Test cognitive event delivery
+        run: python dex_events_test.py
+      - name: Test attention and workspace integration
+        run: python dex_cognitive_layers_test.py
       - name: Test local spark capability bridge
         run: python local_spark_test.py
       - name: Test Who AI Am self-model integration
         run: python who_ai_am_test.py
+      - name: Test evidence-linked reflection
+        run: python reflection_evidence_test.py
+      - name: Test interactive, ambient, and restart cognitive continuity
+        run: python dex_cognitive_runtime_acceptance_test.py
+      - name: Syntax-check local runtime launchers
+        run: bash -n run_dex_local.sh start.sh
       - name: Syntax-check inline JavaScript
         shell: bash
         run: |

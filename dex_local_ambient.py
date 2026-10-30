@@ -31,7 +31,10 @@ async def main() -> None:
                 "pid": os.getpid(),
                 "loaded_at": time.time(),
             }), encoding="utf-8")
-        print("[Ambient Runtime] Ambient GGUF loaded; starting pulse loop", flush=True)
+        from dex_events import setup_cognitive_layers
+        setup_cognitive_layers()
+        print("[Ambient Runtime] Ambient GGUF loaded; cognitive event layers registered", flush=True)
+        print("[Ambient Runtime] Starting pulse loop", flush=True)
         await ambient_pulse_loop(ambient_llm_callable)
     finally:
         if status_path:
