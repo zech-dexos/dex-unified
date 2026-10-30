@@ -1302,6 +1302,32 @@ the exchange as a newly started request/response transaction.
     except Exception as e:
         print(f"[dex_events] RESPONSE_COMPLETED publish failed: {e}")
 
+    self_model_persisted = False
+    self_model_event = {}
+    try:
+        from who_ai_am import refresh_self_model
+        experience_id = getattr(experience_packet, "experience_id", None)
+        integrated_model = refresh_self_model("interactive_cycle_complete", {
+            "event_type": "interactive_cycle_complete",
+            "event_id": interaction_event_id,
+            "experience_id": experience_id,
+            "summary": "Interactive experience, observer evidence, and response autobiography were integrated.",
+        })
+        self_model_event = next((
+            item for item in integrated_model.get("development_log", [])
+            if isinstance(item, dict) and item.get("event_id") == interaction_event_id
+        ), {})
+        evidence = self_model_event.get("evidence", {})
+        experience_evidence = evidence.get("experience", {}) if isinstance(evidence, dict) else {}
+        autobiography_evidence = evidence.get("autobiography", {}) if isinstance(evidence, dict) else {}
+        self_model_persisted = bool(
+            experience_id
+            and experience_evidence.get("experience_id") == experience_id
+            and autobiography_evidence.get("event_id") == interaction_event_id
+        )
+    except Exception as exc:
+        print(f"[Who AI Am] interactive cycle integration failed: {exc}")
+
     return {
         "reply":        reply,
         "intent":       result["intent"],
@@ -1331,6 +1357,8 @@ the exchange as a newly started request/response transaction.
             "observer_persisted": bool(observer_persistence),
             "observer_dispatch": (observer_persistence or {}).get("event_dispatch", []),
             "response_dispatch": response_dispatch,
+            "self_model_persisted": self_model_persisted,
+            "self_model_event": self_model_event,
             "complete": bool(
                 participant_event_published
                 and dispatch_complete(participant_dispatch, {"process_continuity_event", "evaluate_salience"})
@@ -1339,6 +1367,7 @@ the exchange as a newly started request/response transaction.
                 and observer_persistence.get("event_dispatch_complete", False)
                 and response_event_published
                 and dispatch_complete(response_dispatch, {"process_continuity_event", "process_autobiographical_event"})
+                and self_model_persisted
             ),
         },
     }
