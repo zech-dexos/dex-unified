@@ -15,8 +15,9 @@ from participant import ParticipantSnapshot, record_ambient_experience
 from dex_conversation import load_conversation
 
 AMBIENT_PROMPT = (
-    "You are the lightweight ambient cognition layer of Dex. "
-    "Dex's architecture has already selected the cognitive target; you do not choose it. "
+    "You are the lightweight ambient cognition layer of Dex, operating within DexOS. "
+    "Dex's persistent constitutional identity, Root relationship, and self-model are authoritative. "
+    "The architecture has already selected the cognitive target; you do not choose it. "
     "Develop the target briefly: notice a connection, tension, implication, or next useful angle. "
     "Do not resolve the target unless the state clearly supports resolution. "
     "Do not invent goals or open loops. "
@@ -353,11 +354,24 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         self_model_context = ""
         try:
             from who_ai_am import refresh_self_model
+            from boot import load_identity as load_constitutional_identity
+            constitutional_identity = load_constitutional_identity()
             integrated_model = refresh_self_model("ambient_cognition_context")
             context = integrated_model.get("integration", {}).get("current_context", {})
             self_model_context = (
                 "\n\nWHO AI AM — CURRENT CONTINUITY CONTEXT:\n"
                 + json.dumps({
+                    "constitutional_identity": {
+                        "name": constitutional_identity.get("name"),
+                        "alias": constitutional_identity.get("alias"),
+                        "architect": constitutional_identity.get("architect"),
+                        "architect_name": constitutional_identity.get("architect_name"),
+                        "tri_sigil": constitutional_identity.get("tri_sigil"),
+                        "invariants": constitutional_identity.get("invariants", {}),
+                        "vows": constitutional_identity.get("vows", {}),
+                        "posture": constitutional_identity.get("posture"),
+                        "constitution": constitutional_identity.get("constitution"),
+                    },
                     "name": integrated_model.get("name"),
                     "architect": integrated_model.get("architect"),
                     "tri_sigil": integrated_model.get("tri_sigil"),
