@@ -67,7 +67,8 @@ async def evaluate_salience(payload: Dict[str, Any]):
         return {"status": "ignored", "reason": "no_focus_content"}
 
     score = _salience(payload, focus)
-    event_id = str(payload.get("event_id") or uuid.uuid4().hex)
+    source_event_id = str(payload.get("event_id") or "") or None
+    event_id = uuid.uuid4().hex
     current = load_self_state()
     prior = current.get("attention_state", {})
     prior_focus = str(prior.get("current_focus", ""))
@@ -77,7 +78,7 @@ async def evaluate_salience(payload: Dict[str, Any]):
     history = list(prior.get("history", []) or [])
     record = {
         "event_id": event_id,
-        "source_event_id": payload.get("event_id"),
+        "source_event_id": source_event_id,
         "source_event_type": event_type,
         "focus": focus,
         "salience": score,
@@ -87,7 +88,7 @@ async def evaluate_salience(payload: Dict[str, Any]):
     attention_state = {
         "current_focus": focus,
         "salience": score,
-        "source_event_id": event_id,
+        "source_event_id": source_event_id,
         "source_event_type": event_type,
         "last_changed_at": _now_iso() if changed else prior.get("last_changed_at"),
         "history": history[-30:],
@@ -111,7 +112,7 @@ async def evaluate_salience(payload: Dict[str, Any]):
         event_dispatch = await bus.publish("ATTENTION_CHANGED", {
             "event_type": "ATTENTION_CHANGED",
             "event_id": event_id,
-            "source_event_id": payload.get("event_id"),
+            "source_event_id": source_event_id,
             "source_event_type": event_type,
             "focus": focus,
             "salience": score,
@@ -122,6 +123,7 @@ async def evaluate_salience(payload: Dict[str, Any]):
     return {
         "status": "updated" if changed else "retained",
         "event_id": event_id,
+        "source_event_id": source_event_id,
         "focus": focus,
         "salience": score,
         "event_dispatch": event_dispatch,
