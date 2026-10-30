@@ -89,7 +89,7 @@ def _build_ambient_context() -> str:
 
     ctx = ["[DEX SELF-STATE — AMBIENT TICK]"]
     workspace = state.get("active_mental_workspace_state", {})
-    if workspace.get("is_active") or workspace.get("concept_identifier"):
+    if workspace.get("is_active"):
         ctx.append(f"Active workspace: {workspace.get('concept_identifier')}")
 
     goals = state.get("active_goals_state", [])
@@ -99,7 +99,7 @@ def _build_ambient_context() -> str:
     thoughts = state.get("persistent_thoughts", [])
     unresolved = [
         t for t in thoughts
-        if t.get("status") in ("active", "deferred")
+        if t.get("status") == "active"
     ]
     if unresolved:
         ctx.append("Unresolved thoughts:")
@@ -712,7 +712,7 @@ architecture directly. Otherwise remain inside the conversation.
         self_state_ctx = ["[DEX SELF-STATE]"]
 
         workspace = state.get("active_mental_workspace_state", {})
-        if workspace.get("is_active") or workspace.get("concept_identifier"):
+        if workspace.get("is_active"):
             self_state_ctx.append(
                 f"Active workspace: {workspace.get('concept_identifier')}"
             )
@@ -737,7 +737,7 @@ architecture directly. Otherwise remain inside the conversation.
         thoughts = state.get("persistent_thoughts", [])
         unresolved = [
             t for t in thoughts
-            if t.get("status") in ("active", "deferred")
+            if t.get("status") == "active"
         ]
 
         if unresolved:
