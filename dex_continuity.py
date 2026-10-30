@@ -148,6 +148,8 @@ async def process_continuity_event(payload: Dict[str, Any]):
         "salience",
         "previous_focus",
         "source_event_type",
+        "concept_identifier",
+        "source",
     ):
         if key in payload:
             record[key] = payload[key]
