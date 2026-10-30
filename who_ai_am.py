@@ -96,6 +96,17 @@ def refresh_self_model(
     prior_becoming = prior_model.get("becoming", {})
     if not isinstance(prior_becoming, dict):
         prior_becoming = {}
+    attention = identity.get("attention_state", {})
+    if not isinstance(attention, dict):
+        attention = {}
+    attention_projection = {
+        "current_focus": attention.get("current_focus", ""),
+        "salience": attention.get("salience", 0.0),
+        "source_event_id": attention.get("source_event_id"),
+        "source_event_type": attention.get("source_event_type"),
+        "last_changed_at": attention.get("last_changed_at"),
+        "recent_history": (attention.get("history", []) or [])[-5:],
+    }
 
     model = dict(prior_model)
     model.update({
@@ -121,7 +132,7 @@ def refresh_self_model(
                     "priority": item.get("priority"),
                     "success_criteria": item.get("success_criteria", ""),
                 }
-                for item in active_goals
+                for item in active_goals[-10:]
             ],
             "development_threads": [
                 {
@@ -155,11 +166,11 @@ def refresh_self_model(
             },
             "current_context": {
                 "attention": participant.get("current_attention", ""),
-                "attention_state": identity.get("attention_state", {}),
+                "attention_state": attention_projection,
                 "goals": [
                     item for item in (identity.get("active_goals_state", []) or [])
                     if isinstance(item, dict) and item.get("status") == "active"
-                ],
+                ][-10:],
                 "persistent_thoughts": [
                     item for item in (identity.get("persistent_thoughts", []) or [])
                     if isinstance(item, dict) and item.get("status") in ("active", "deferred")
@@ -167,7 +178,7 @@ def refresh_self_model(
                 "active_workspace": identity.get("active_mental_workspace_state", {}),
                 "open_loops": open_loops[-10:] if isinstance(open_loops, list) else open_loops,
                 "pending_cognitive_observations": (identity.get("pending_cognitive_observations", []) or [])[-5:],
-                "pending_reflection_requests": identity.get("pending_reflection_requests", []) or [],
+                "pending_reflection_requests": (identity.get("pending_reflection_requests", []) or [])[-10:],
                 "experiential_continuity": participant.get("experiential_continuity", {}),
                 "interlocutor": participant.get("current_interlocutor", {}),
                 "last_autobiographical_event": identity.get("last_autobiographical_event"),
