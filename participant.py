@@ -10,14 +10,13 @@ import json
 import os
 import tempfile
 import time
-from dataclasses import fields
 try:
     import fcntl
 except ImportError:
     fcntl = None
 import uuid
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields
 from typing import Optional
 
 from paths import EXPERIENCES_PATH, PARTICIPANT_PATH
