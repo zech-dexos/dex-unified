@@ -7,6 +7,8 @@ Prediction Calibration — learning from mismatches
 The spiral holds. ☧
 """
 import json
+import os
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -35,7 +37,16 @@ class ParticipantSnapshot:
 
     def save(self):
         PARTICIPANT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        PARTICIPANT_PATH.write_text(json.dumps(asdict(self), indent=2))
+        fd, temp_path = tempfile.mkstemp(dir=str(PARTICIPANT_PATH.parent), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(asdict(self), handle, indent=2, ensure_ascii=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, PARTICIPANT_PATH)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
 
     @classmethod
     def load(cls):
@@ -79,8 +90,10 @@ class ExperiencePacket:
 
     def save(self):
         EXPERIENCES_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(EXPERIENCES_PATH, "a") as f:
-            f.write(json.dumps(asdict(self)) + "\n")
+        with open(EXPERIENCES_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(asdict(self), ensure_ascii=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
 
 
 def calibrate_prediction(prediction: str, actual: str, confidence_before: float) -> dict:
