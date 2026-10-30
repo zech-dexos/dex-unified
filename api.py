@@ -244,6 +244,25 @@ async def search_debug():
 @app.get("/health")
 def health():
     from local_llm import MODEL_PATH, CHAT_MODEL_PATH, model_status
+    ambient_status = {}
+    status_file = os.environ.get("DEX_AMBIENT_STATUS_FILE", "").strip()
+    if status_file and os.path.isfile(status_file):
+        try:
+            with open(status_file, "r", encoding="utf-8") as handle:
+                ambient_status = json.load(handle)
+        except (OSError, ValueError, TypeError) as exc:
+            ambient_status = {"loaded": False, "status_error": str(exc)}
+
+    ambient_pid = ambient_status.get("pid")
+    ambient_process_alive = False
+    if ambient_pid:
+        try:
+            os.kill(int(ambient_pid), 0)
+            ambient_process_alive = True
+        except (OSError, TypeError, ValueError):
+            ambient_process_alive = False
+
+    ambient_worker_loaded = bool(ambient_status.get("loaded") and ambient_process_alive)
     return {
         "status": "live",
         "sigils": _memory.summary() if SIGIL_ACTIVE and _memory else None,
@@ -254,7 +273,14 @@ def health():
         "ambient_model_file_present": os.path.isfile(MODEL_PATH),
         "models": model_status(),
         "local_runtime": os.environ.get("DEX_LOCAL_RUNTIME") == "1",
-        "ambient_process_loaded": bool(os.environ.get("DEX_AMBIENT_STATUS_FILE") and os.path.isfile(os.environ.get("DEX_AMBIENT_STATUS_FILE", ""))),
+        # models.ambient.loaded refers to this API process only. Report the
+        # separately hosted ambient worker and its actual process status here.
+        "ambient_process_loaded": ambient_worker_loaded,
+        "ambient_worker": {
+            **ambient_status,
+            "process_alive": ambient_process_alive,
+            "loaded": ambient_worker_loaded,
+        },
     }
 
 @app.get("/compare")
@@ -310,7 +336,8 @@ async def call_llm(client, messages, max_tokens=1000):
             raise RuntimeError("local Heretic spark returned empty text")
         print(
             f"[call_llm] backend=llama.cpp model={os.path.basename(CHAT_MODEL_PATH)} "
-            f"capabilities={len(result.get('tool_calls', []))}"
+            f"capability_bridge=available "
+            f"capability_calls={len(result.get('tool_calls', []))}"
         )
         return {
             "reply": answer,
