@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
@@ -150,6 +151,66 @@ def run_cycle(
     """
     current = load_self_state(path)
     workspace = current.get("active_mental_workspace_state", {})
+
+    # Root's active interaction owns attention for ten minutes. Ambient goals
+    # remain intact, but the scheduler cannot steal the active workspace.
+    priority_until = current.get("participant_priority_until")
+    try:
+        priority_time = datetime.fromisoformat(
+            str(priority_until).replace("Z", "+00:00")
+        ) if priority_until else None
+    except (TypeError, ValueError):
+        priority_time = None
+    if priority_time and priority_time.tzinfo is None:
+        priority_time = priority_time.replace(tzinfo=timezone.utc)
+    if priority_time and datetime.now(timezone.utc) < priority_time:
+        return {
+            "ran": False,
+            "top_goal": None,
+            "thought_id": None,
+            "thought": None,
+            "thought_source": None,
+            "amw_action": "root_priority_hold",
+            "workspace_released": False,
+            "released_workspace": None,
+        }
+
+    # If an interactive cycle arrives after the lease expires, restore the
+    # interrupted ambient workspace before normal goal arbitration resumes.
+    suspended = list(current.get("suspended_workspaces", []) or [])
+    if (
+        suspended
+        and workspace.get("is_active")
+        and workspace.get("source_event_type") == "PARTICIPANT_EVENT"
+    ):
+        prior = suspended.pop()
+        concept = str(prior.get("concept_identifier") or "").strip()
+        if concept:
+            amw.activate_thought(
+                concept_identifier=concept,
+                description=str(prior.get("description_snapshot") or concept),
+                path=path,
+            )
+            update_self_state({"suspended_workspaces": suspended}, path=path)
+            update_self_state({
+                "active_mental_workspace_state": {
+                    "attention_salience": prior.get("attention_salience", 0.65),
+                    "source_event_id": prior.get("source_event_id"),
+                    "source_event_type": prior.get("source_event_type"),
+                    "resumed_from_root_interrupt": True,
+                }
+            }, path=path)
+            return {
+                "ran": True,
+                "top_goal": None,
+                "thought_id": None,
+                "thought": concept,
+                "thought_source": "resumed_workspace",
+                "amw_action": "restored_suspended_workspace",
+                "workspace_released": False,
+                "released_workspace": None,
+            }
+
     workspace_released = False
     released_workspace = None
 
