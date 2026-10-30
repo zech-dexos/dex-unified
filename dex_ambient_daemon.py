@@ -432,6 +432,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                 # The pulse is part of Dex's experience, not a detached daemon
                 # log. Persist the thought in first-person form so later pulses
                 # and conversations can continue from what I experienced.
+                ambient_packet = None
                 try:
                     ambient_packet = record_ambient_experience(
                         ParticipantSnapshot.load(),
@@ -494,10 +495,10 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     print(f"[Ambient Daemon] experience recording failed: {e}")
 
                 # Publish event to the continuous substrate fabric.
-                await bus.publish("THOUGHT_GENERATED", {
+                event_dispatch = await bus.publish("THOUGHT_GENERATED", {
                     "event_type": "THOUGHT_GENERATED",
-                    "event_id": ambient_packet.event_id,
-                    "experience_id": ambient_packet.experience_id,
+                    "event_id": ambient_packet.event_id if ambient_packet else ambient_event_id,
+                    "experience_id": ambient_packet.experience_id if ambient_packet else None,
                     "thought": thought_text,
                     "salience": salience,
                     "source": "ambient_pulse",
@@ -510,6 +511,12 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "salience": salience,
                     "target": target,
                     "next_attention_at": next_attention,
+                    "experience_persisted": ambient_packet is not None,
+                    "event_dispatch": event_dispatch,
+                    "complete": bool(
+                        ambient_packet is not None
+                        and all(item.get("status") == "completed" for item in event_dispatch)
+                    ),
                 }
 
             _persist_pulse_state(
