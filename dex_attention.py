@@ -106,8 +106,9 @@ async def evaluate_salience(payload: Dict[str, Any]):
     except Exception as exc:
         print(f"[Attention] participant snapshot update failed: {exc}")
 
+    event_dispatch = []
     if changed:
-        await bus.publish("ATTENTION_CHANGED", {
+        event_dispatch = await bus.publish("ATTENTION_CHANGED", {
             "event_type": "ATTENTION_CHANGED",
             "event_id": event_id,
             "source_event_id": payload.get("event_id"),
@@ -123,6 +124,8 @@ async def evaluate_salience(payload: Dict[str, Any]):
         "event_id": event_id,
         "focus": focus,
         "salience": score,
+        "event_dispatch": event_dispatch,
+        "event_dispatch_complete": all(item.get("status") == "completed" for item in event_dispatch),
     }
 
 
