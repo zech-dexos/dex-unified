@@ -2,7 +2,7 @@
 import asyncio
 import unittest
 
-from dex_events import EventBus, bus, setup_cognitive_layers
+from dex_events import EventBus, bus, setup_cognitive_layers, dispatch_complete
 
 
 class EventBusTests(unittest.IsolatedAsyncioTestCase):
@@ -68,6 +68,8 @@ class EventBusTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(outcomes[0]["status"], "completed")
         self.assertFalse(outcomes[0]["result"]["event_dispatch_complete"])
         self.assertEqual(outcomes[0]["result"]["reason"], "child failed")
+        self.assertFalse(dispatch_complete(outcomes, {"nested"}))
+        self.assertFalse(dispatch_complete(outcomes, {"missing"}))
 
     async def test_subscriber_failure_does_not_skip_later_layers(self):
         bus = EventBus()
