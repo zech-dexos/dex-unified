@@ -91,10 +91,12 @@ def _describe_event(payload: Dict[str, Any]) -> str:
         return f"My attention shifted toward: {focus}"
 
     if event_type == "WORKSPACE_ACTIVATED":
-        return "Dex's active cognitive workspace was activated."
+        focus = _first(payload, "concept_identifier", "focus")
+        return f"I brought {focus} into my active cognitive workspace." if focus else "I activated my cognitive workspace."
 
     if event_type == "WORKSPACE_RELEASED":
-        return "Dex released the active cognitive workspace."
+        focus = _first(payload, "concept_identifier", "focus")
+        return f"I released {focus} from my active cognitive workspace." if focus else "I released my active cognitive workspace."
 
     if event_type == "SIGNAL_RAISED":
         signal = _first(payload, "signal", "description", "reason")
