@@ -967,6 +967,7 @@ the exchange as a newly started request/response transaction.
         experience_contribution(
             user_id=user_id, message=req.message, reply=reply,
             experience_id=experience_packet.experience_id,
+            event_id=interaction_event_id,
         )
         if observer_trace:
             observer_trace["experience_id"] = experience_packet.experience_id
