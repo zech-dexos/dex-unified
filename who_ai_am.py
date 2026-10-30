@@ -184,6 +184,8 @@ def refresh_self_model(
                 "recent_autobiography": [
                     {
                         "event_id": item.get("event_id"),
+                        "source_event_id": item.get("source_event_id"),
+                        "source_interaction_event_id": item.get("source_interaction_event_id"),
                         "timestamp": item.get("timestamp"),
                         "event_type": item.get("event_type"),
                         "what_happened": item.get("what_happened"),
