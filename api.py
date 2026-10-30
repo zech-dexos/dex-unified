@@ -346,14 +346,17 @@ class ChatRequest(BaseModel):
 async def chat(req: ChatRequest):
     interaction_event_id = uuid.uuid4().hex
     msg_stripped = req.message.strip().lower()
+    participant_dispatch = []
+    participant_event_published = False
     try:
         from dex_events import bus
-        await bus.publish("PARTICIPANT_EVENT", {
+        participant_dispatch = await bus.publish("PARTICIPANT_EVENT", {
             "event_type": "PARTICIPANT_EVENT",
             "event_id": interaction_event_id,
             "message": req.message,
             "user_id": getattr(req, "user_id", "default"),
         })
+        participant_event_published = True
     except Exception as e:
         print(f"[dex_events] PARTICIPANT_EVENT publish failed: {e}")
 
@@ -1089,12 +1092,21 @@ the exchange as a newly started request/response transaction.
         "response_flag": governance_flag,
         "event_id": interaction_event_id,
         "cognitive_cycle": {
+            "participant_event_published": participant_event_published,
+            "participant_dispatch": participant_dispatch,
             "experience_persisted": experience_persisted,
             "observer_persisted": bool(observer_persistence),
             "observer_dispatch": (observer_persistence or {}).get("event_dispatch", []),
             "response_dispatch": response_dispatch,
             "complete": bool(
-                experience_persisted
+                participant_event_published
+                and all(item.get("status") == "completed" for item in participant_dispatch)
+                and all(
+                    item.get("result", {}).get("event_dispatch_complete", True)
+                    for item in participant_dispatch
+                    if isinstance(item.get("result"), dict)
+                )
+                and experience_persisted
                 and observer_persistence
                 and observer_persistence.get("event_dispatch_complete", False)
                 and response_event_published
