@@ -86,6 +86,25 @@ def _describe_event(payload: Dict[str, Any]) -> str:
             return f"Dex completed an action: {result}"
         return "Dex completed an action."
 
+    if event_type == "TRI_SIGIL_OBSERVED":
+        return "I observed a tri-sigil runtime cycle and recorded its evidence."
+
+    if event_type == "GOAL_REMOVED":
+        goal = _first(payload, "goal", "description", "title") or payload.get("goal_id")
+        return f"A goal left my active direction: {goal}" if goal else "A goal was removed from my active direction."
+
+    if event_type == "OPEN_LOOP_CHANGED":
+        loop = _first(payload, "open_loop", "description", "question")
+        return f"An unresolved thread changed: {loop}" if loop else "An unresolved thread changed."
+
+    if event_type == "SELF_STATE_CHANGED":
+        summary = _first(payload, "summary", "description", "change")
+        return f"My operational state changed: {summary}" if summary else "My operational state changed."
+
+    if event_type == "SALIENCE_CHANGED":
+        focus = _first(payload, "focus", "description", "signal")
+        return f"The significance of a focus changed: {focus}" if focus else "A salience value changed."
+
     if event_type == "ATTENTION_CHANGED":
         focus = _first(payload, "focus", "description") or "a new focus"
         return f"My attention shifted toward: {focus}"
@@ -123,6 +142,11 @@ def _extract_state_changes(payload: Dict[str, Any]) -> List[Any]:
         "workspace_change",
         "self_state_change",
         "open_loop",
+        "self_state_changes",
+        "focus",
+        "salience",
+        "stages",
+        "runtime",
         "state_transition",
         "continuation",
     ):
@@ -152,6 +176,10 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
     entry = {
         "event_id": payload.get("event_id"),
         "source_event_id": payload.get("source_event_id"),
+        "source_event_ids": payload.get("source_event_ids", []),
+        "experience_id": payload.get("experience_id"),
+        "observation_id": payload.get("observation_id"),
+        "lineage_hash": payload.get("lineage_hash"),
         "source_interaction_event_id": payload.get("source_interaction_event_id"),
         "timestamp": timestamp,
         "event_type": event_type,
@@ -225,6 +253,12 @@ def setup_autobiography():
         "INTENTION_CHANGED",
         "OPEN_LOOP_CREATED",
         "OPEN_LOOP_CHANGED",
+        "GOAL_REMOVED",
+        "SELF_STATE_CHANGED",
+        "SALIENCE_CHANGED",
+        "TRI_SIGIL_OBSERVED",
+        "WORKSPACE_ACTIVATED",
+        "WORKSPACE_RELEASED",
         "ACTION_COMPLETED",
         "SIGNAL_RAISED",
         "ATTENTION_CHANGED",
