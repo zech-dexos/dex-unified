@@ -167,6 +167,7 @@ def refresh_self_model(
                 "active_workspace": identity.get("active_mental_workspace_state", {}),
                 "open_loops": open_loops[-10:] if isinstance(open_loops, list) else open_loops,
                 "pending_cognitive_observations": (identity.get("pending_cognitive_observations", []) or [])[-5:],
+                "pending_reflection_requests": identity.get("pending_reflection_requests", []) or [],
                 "experiential_continuity": participant.get("experiential_continuity", {}),
                 "interlocutor": participant.get("current_interlocutor", {}),
                 "last_autobiographical_event": identity.get("last_autobiographical_event"),
