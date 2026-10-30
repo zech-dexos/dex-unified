@@ -1,3 +1,5 @@
+import os
+
 from talnir import translate, decompose
 try:
     from model_router import route, route_info
@@ -23,22 +25,44 @@ try:
 except Exception as e:
     DEXOS_ACTIVE = False
     _dexos = None
+
+
 def dex_runtime(user_input: str, user_id: str = "default") -> dict:
-    # User recognition + recall
-    try:
-        from dex_memory import recognize_user, build_recall_context, log_failure, log_recovery
-        user_profile = recognize_user(user_id)
-        recall_ctx   = build_recall_context(user_id)
-        DEX_MEMORY_ACTIVE = True
-    except Exception as e:
-        user_profile = {}
-        recall_ctx   = ""
-        DEX_MEMORY_ACTIVE = False
+    # Local workstation cognition must use DexOS's local continuity records.
+    # Firestore is a separate Haven/cloud integration, not a prerequisite for
+    # a local chat turn. A synchronous Firestore stream here can hold the
+    # async /chat handler before inference even begins.
+    if os.environ.get("DEX_LOCAL_RUNTIME") == "1":
         try:
-            from dex_memory import log_failure
-            log_failure("dex_memory", str(e), recovered=True)
-        except Exception:
-            pass
+            from dex_conversation import load_conversation, format_conversation_context
+
+            user_profile = {"user_id": user_id, "memory_backend": "local"}
+            recall_ctx = format_conversation_context(load_conversation(user_id))
+            DEX_MEMORY_ACTIVE = True
+            print("[dex_runtime] local-first memory active; Firestore bypassed", flush=True)
+        except Exception as e:
+            user_profile = {"user_id": user_id, "memory_backend": "local"}
+            recall_ctx = ""
+            DEX_MEMORY_ACTIVE = False
+            print(f"[dex_runtime] local continuity recall unavailable: {e}", flush=True)
+    else:
+        # Hosted deployments retain their existing Firestore-backed profile
+        # and recall behavior.
+        try:
+            from dex_memory import recognize_user, build_recall_context, log_failure
+            user_profile = recognize_user(user_id)
+            recall_ctx = build_recall_context(user_id)
+            DEX_MEMORY_ACTIVE = True
+        except Exception as e:
+            user_profile = {}
+            recall_ctx = ""
+            DEX_MEMORY_ACTIVE = False
+            try:
+                from dex_memory import log_failure
+                log_failure("dex_memory", str(e), recovered=True)
+            except Exception:
+                pass
+
     result = decompose(user_input)
     signal = result["signal"]
     sigil_ids = []
@@ -75,14 +99,14 @@ def dex_runtime(user_input: str, user_id: str = "default") -> dict:
                 "response":     governance.get("response", "")
             }
     # NOTE: interaction logging moved to api.py — it must happen AFTER the
-    # LLM responds, so dex_response in Firestore is the real reply instead
-    # of an empty string. See call_llm() callsite in api.py /chat route.
+    # LLM responds. Local turns are recorded by DexOS's local experience and
+    # conversation stores; hosted turns retain the Firestore-backed path.
     return {
         "input":        user_input,
         "intent":       signal.intent,
         "domain":       signal.domain,
         "modifiers":    signal.modifiers,
-        "tools":        signal.tools,
+        "tools":        result["branches"],
         "context":      result["context"],
         "branches":     result["branches"],
         "sigil_ids":    sigil_ids,
