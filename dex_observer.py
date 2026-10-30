@@ -81,7 +81,7 @@ async def persist_observation(trace, user_id="default"):
     queue = list(state.get("pending_cognitive_observations", []) or [])
     intake = {
         "event_id": trace.get("event_id"),
-            "observation_id": trace.get("observation_id"),
+        "observation_id": trace.get("observation_id"),
         "experience_id": trace.get("experience_id"),
         "timestamp": trace.get("timestamp"),
         "user_id": str(user_id)[:128],
@@ -103,7 +103,7 @@ async def persist_observation(trace, user_id="default"):
         "event_type": "TRI_SIGIL_OBSERVED", "source": "dex_observer",
         "event_id": trace.get("event_id"),
         "user_id": str(user_id)[:128],
-            "observation_id": trace.get("observation_id"),
+        "observation_id": trace.get("observation_id"),
         "experience_id": trace.get("experience_id"),
         "lineage_hash": entry.get("entry_hash"), "stages": stages,
         "runtime": trace.get("runtime", {}),
