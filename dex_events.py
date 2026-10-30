@@ -89,3 +89,27 @@ def setup_cognitive_layers() -> None:
     setup_autobiography()
     setup_attention()
     setup_workspace()
+
+
+def dispatch_complete(outcomes, expected_subscribers=()) -> bool:
+    """Validate subscriber delivery, including nested layer dispatches."""
+    if not isinstance(outcomes, list):
+        return False
+    names = {
+        item.get("subscriber")
+        for item in outcomes
+        if isinstance(item, dict) and item.get("status") == "completed"
+    }
+    if not set(expected_subscribers).issubset(names):
+        return False
+    for item in outcomes:
+        if not isinstance(item, dict) or item.get("status") != "completed":
+            return False
+        result = item.get("result")
+        if isinstance(result, dict):
+            if result.get("event_dispatch_complete") is False:
+                return False
+            nested = result.get("event_dispatch")
+            if isinstance(nested, list) and not dispatch_complete(nested):
+                return False
+    return True
