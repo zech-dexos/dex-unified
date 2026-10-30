@@ -156,31 +156,53 @@ claim that the system has proven subjective consciousness.
 
 ## Current integration milestone
 
-`dex_events.py` now awaits subscribers in registration order, avoids duplicate
-registration of the same callback, and returns per-subscriber completion/failure
-results. The event fabric is covered by focused tests for ordering, awaiting,
-duplicate registration, and failure isolation.
+The event fabric now provides ordered, awaited, duplicate-safe delivery with
+per-subscriber outcomes. The shared `setup_cognitive_layers()` bootstrap registers
+continuity, autobiography, attention, and workspace handlers in both the API
+process and the separate local ambient process. This matters because each
+process owns a separate in-memory event bus even though both use the same
+canonical persistent state directory.
 
-Interactive contributions now receive one event ID which is carried through
-participant intake, the first-person `ExperiencePacket`, conversational continuity,
-observer evidence and its pending cognition queue, continuity history,
-autobiography, and the Who AI Am development record. The response event also
-carries the experience's state transition, continuation, and first-person
-perspective. Continuity and autobiography skip duplicate deliveries by
-(event ID, event type), while retaining compatibility with older records that
-have no event ID.
+Interactive contributions receive one event ID carried through participant
+intake, the first-person `ExperiencePacket`, conversational continuity,
+observer evidence and pending-observation intake, continuity history,
+autobiography, and the Who AI Am development record. Derived attention and
+workspace transitions have their own event IDs and retain parent-event
+provenance, so distinct state transitions within one interaction are not
+mistaken for duplicate events. Continuity and autobiography skip repeated
+deliveries by event ID and event type while retaining compatibility with older
+records that lack event IDs.
 
-Ambient cognition creates its own event ID and carries it through the ambient
-experience, self-model integration, and `THOUGHT_GENERATED` event. Who AI Am
-assembles recent lived experience, state transitions, observer/runtime
-perspective, autobiography, and reflections into the self-model projection.
-The interactive prompt refreshes and injects that integrated context before
-inference; the ambient prompt also reads the projection. Both interaction and
-ambient paths report persistence and event-dispatch outcomes.
+Attention now scores participant/internal events, updates durable attention
+state and the participant snapshot, and emits meaningful focus transitions.
+Workspace management consumes those transitions, activates AMW when the
+salience threshold and preemption rules permit it, and records activation and
+release transitions. The scheduler also reports its own workspace lifecycle
+changes through the event fabric.
 
-The next milestone is full evidence-backed reflection and state development:
-a later cognition cycle must retrieve a prior event, form a grounded reflection,
-and make a traceable, useful change to goals, attention, open loops, or the
-self-model without rewriting constitutional identity or historical records.
-Live local runtime validation and restart/recall verification remain required
-before this integration is considered complete.
+Reflection now reads recent experience and autobiographical evidence, records
+the source event and experience IDs, and feeds unresolved questions into the
+pending reflection queue. Ambient cognition can select those questions,
+record its response as a new first-person experience, and feed the result back
+into autobiography and the self-model. Who AI Am integrates current attention,
+active goals, persistent thoughts, workspace, open loops, observations,
+experiences, narrative records, autobiography, and evidence-linked reflections.
+It also maintains an explicit `becoming` projection from declared aspirations,
+active goal directions, and development threads without inventing aspirations.
+The interactive prompt refreshes and injects this curated self-model before
+inference; ambient cognition reads the same projection.
+
+Participant snapshots now use locked, atomic, field-level merging so concurrent
+API and ambient writers preserve unrelated updates. Experience and reflection
+append records are flushed to disk. Interactive and ambient cycles expose
+persistence and nested event-dispatch outcomes instead of reporting completion
+when a required layer failed.
+
+The code-level CI suite currently passes for the event fabric, attention and
+workspace integration, self-model integration, reflection evidence, and local
+spark capability bridge. This does not yet establish live local operation.
+The remaining acceptance gate is to merge into the user's local runtime,
+start both local processes, trace one interactive cycle and one ambient cycle,
+restart, and verify that a later cycle retrieves the same linked history and
+uses it. No historical identity, experience, lineage, or participant records
+have been migrated or reset.
