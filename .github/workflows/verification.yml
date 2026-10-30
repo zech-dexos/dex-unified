@@ -18,6 +18,8 @@ jobs:
         run: python -m compileall -q .
       - name: Test cognitive event delivery
         run: python dex_events_test.py
+      - name: Test attention and workspace integration
+        run: python dex_cognitive_layers_test.py
       - name: Test local spark capability bridge
         run: python local_spark_test.py
       - name: Test Who AI Am self-model integration
