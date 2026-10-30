@@ -66,11 +66,13 @@ def _select_target(state):
         return {
             "kind": "reflection_request",
             "id": item.get("request_id"),
+            "source_event_ids": item.get("source_event_ids", []),
             "text": json.dumps({
                 "focus": item.get("focus", ""),
                 "reason": item.get("reason", ""),
                 "requested_at": item.get("timestamp"),
                 "source": item.get("source", "unknown"),
+                "source_event_ids": item.get("source_event_ids", []),
             }, ensure_ascii=False),
         }
 
@@ -444,6 +446,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                             "lifecycle_mode": lifecycle_mode,
                             "event_id": ambient_event_id,
                             "source_event_id": target.get("id"),
+                            "source_event_ids": target.get("source_event_ids", []),
                         },
                     )
                     # Close the loop: the persisted experience becomes
