@@ -954,6 +954,7 @@ the exchange as a newly started request/response transaction.
 
     observer_trace = {}
     observer_persistence = None
+    experience_packet = None
     experience_persisted = False
     response_dispatch = []
     response_event_published = False
@@ -1021,6 +1022,11 @@ the exchange as a newly started request/response transaction.
             "message": req.message,
             "reply": reply,
             "user_id": getattr(req, "user_id", "default"),
+            "experience_id": getattr(experience_packet, "experience_id", None),
+            "experience": getattr(experience_packet, "experience", None),
+            "state_transition": getattr(experience_packet, "state_transition", None),
+            "continuation": getattr(experience_packet, "continuation", None),
+            "dex_perspective": getattr(experience_packet, "dex_perspective", None),
             "intent": result.get("intent"),
             "domain": result.get("domain"),
             "tri_sigil_observer": {
