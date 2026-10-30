@@ -925,6 +925,9 @@ the exchange as a newly started request/response transaction.
         print(f"[check_response] error: {e}")
 
     observer_trace = {}
+    observer_persistence = None
+    experience_persisted = False
+    response_dispatch = []
     try:
         from dex_observer import build_observer_trace, persist_observation
         observer_trace = build_observer_trace(
@@ -974,15 +977,16 @@ the exchange as a newly started request/response transaction.
             experience_id=experience_packet.experience_id,
             event_id=interaction_event_id,
         )
+        experience_persisted = True
         if observer_trace:
             observer_trace["experience_id"] = experience_packet.experience_id
-            await persist_observation(observer_trace, user_id=user_id)
+            observer_persistence = await persist_observation(observer_trace, user_id=user_id)
     except Exception as e:
         print(f"[experience] conversation experience record failed: {e}")
 
     try:
         from dex_events import bus
-        await bus.publish("RESPONSE_COMPLETED", {
+        response_dispatch = await bus.publish("RESPONSE_COMPLETED", {
             "event_type": "RESPONSE_COMPLETED",
             "event_id": interaction_event_id,
             "message": req.message,
@@ -1024,6 +1028,18 @@ the exchange as a newly started request/response transaction.
         },
         "response_flag": governance_flag,
         "event_id": interaction_event_id,
+        "cognitive_cycle": {
+            "experience_persisted": experience_persisted,
+            "observer_persisted": bool(observer_persistence),
+            "observer_dispatch": (observer_persistence or {}).get("event_dispatch", []),
+            "response_dispatch": response_dispatch,
+            "complete": bool(
+                experience_persisted
+                and observer_persistence
+                and observer_persistence.get("event_dispatch_complete", False)
+                and all(item.get("status") == "completed" for item in response_dispatch)
+            ),
+        },
     }
 
 @app.post("/experience-recall")
