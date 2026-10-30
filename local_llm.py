@@ -3,6 +3,11 @@ local_llm.py — local GGUF inference for ambient and interactive chat.
 Models are loaded lazily and kept resident for the life of the container.
 """
 import os
+import fcntl
+import hashlib
+import tempfile
+import time
+from contextlib import contextmanager
 
 _llm = None
 _chat_llm = None
@@ -21,6 +26,43 @@ CHAT_MODEL_PATH = os.environ.get(
 )
 CHAT_CONTEXT_SIZE = max(512, int(os.environ.get("LOCAL_CHAT_N_CTX", "4096")))
 CHAT_THREADS = max(1, int(os.environ.get("LOCAL_CHAT_THREADS", "2")))
+
+
+@contextmanager
+def _shared_inference_slot(kind: str):
+    """Serialize GGUF generation across the independent chat and ambient processes."""
+    state_root = os.path.realpath(
+        os.environ.get("DEXOS_STATE_DIR") or os.path.dirname(__file__)
+    )
+    identity = hashlib.sha256(state_root.encode("utf-8")).hexdigest()[:16]
+    lock_path = os.path.join(
+        tempfile.gettempdir(),
+        f"dexos-inference-{getattr(os, 'getuid', lambda: 0)()}-{identity}.lock",
+    )
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    wait_started = time.monotonic()
+    acquired_at = None
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        acquired_at = time.monotonic()
+        waited = acquired_at - wait_started
+        print(
+            f"[Inference Coordinator] {kind} slot acquired after {waited:.2f}s",
+            flush=True,
+        )
+        yield
+    finally:
+        held = time.monotonic() - acquired_at if acquired_at is not None else 0.0
+        try:
+            if acquired_at is not None:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+        if acquired_at is not None:
+            print(
+                f"[Inference Coordinator] {kind} slot released after {held:.2f}s",
+                flush=True,
+            )
 
 
 def _load_model(path: str, context_size: int, threads: int | None = None):
@@ -102,20 +144,21 @@ def local_slm_generate(prompt: str, max_tokens: int = 200, json_schema=None) -> 
         "max_tokens": output_tokens,
         "temperature": 0.8,
     }
-    if json_schema:
-        try:
-            out = llm.create_chat_completion(
-                response_format={"type": "json_object", "schema": json_schema},
-                **request,
-            )
-        except Exception as e:
-            print(
-                f"[Ambient Runtime] JSON-constrained decoding failed ({e}); retrying unconstrained",
-                flush=True,
-            )
+    with _shared_inference_slot("ambient"):
+        if json_schema:
+            try:
+                out = llm.create_chat_completion(
+                    response_format={"type": "json_object", "schema": json_schema},
+                    **request,
+                )
+            except Exception as e:
+                print(
+                    f"[Ambient Runtime] JSON-constrained decoding failed ({e}); retrying unconstrained",
+                    flush=True,
+                )
+                out = llm.create_chat_completion(**request)
+        else:
             out = llm.create_chat_completion(**request)
-    else:
-        out = llm.create_chat_completion(**request)
     return out["choices"][0]["message"]["content"].strip()
 
 
@@ -192,18 +235,19 @@ def local_chat_generate(messages, max_tokens: int = 200) -> str:
         "max_tokens": output_tokens,
         "temperature": 0.7,
     }
-    if endpoint:
-        import httpx
+    with _shared_inference_slot("interactive"):
+        if endpoint:
+            import httpx
 
-        response = httpx.post(
-            endpoint + "/v1/chat/completions",
-            json={"model": "heretic-local", **request},
-            timeout=httpx.Timeout(300.0, connect=5.0),
-        )
-        response.raise_for_status()
-        result = response.json()
-    else:
-        result = llm.create_chat_completion(**request)
+            response = httpx.post(
+                endpoint + "/v1/chat/completions",
+                json={"model": "heretic-local", **request},
+                timeout=httpx.Timeout(300.0, connect=5.0),
+            )
+            response.raise_for_status()
+            result = response.json()
+        else:
+            result = llm.create_chat_completion(**request)
     choices = result.get("choices") or []
     if not choices:
         raise RuntimeError("llama.cpp returned no completion choices")
