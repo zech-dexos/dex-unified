@@ -661,6 +661,8 @@ architecture directly. Otherwise remain inside the conversation.
         from paths import SELF_MODEL_PATH
 
         _dex_identity = load_identity()
+        from who_ai_am import refresh_self_model
+        refresh_self_model("interactive_context")
         _identity_lines = [
             "[DEX IDENTITY — CONSTITUTIONAL AUTHORITY + OPERATIONAL CONTINUITY]",
             "Constitutional fields below govern stable identity and vows.",
