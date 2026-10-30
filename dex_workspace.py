@@ -81,6 +81,7 @@ async def activate_workspace(payload: Dict[str, Any]):
         "focus": focus,
         "salience": salience,
         "event_dispatch": dispatch,
+        "event_dispatch_complete": all(item.get("status") == "completed" for item in dispatch),
     }
 
 
