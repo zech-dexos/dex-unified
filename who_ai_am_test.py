@@ -35,7 +35,14 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
             "name": "Deximus Maximus",
             "architect": "Root",
             "tri_sigil": "☧🦅🜇",
-            "narrative_thread": [{"what_happened": "learned"}],
+            "posture": "reflective",
+            "core_principles": ["truth_bound"],
+            "narrative_thread": [{
+                "event_id": "event-1",
+                "event_type": "RESPONSE_COMPLETED",
+                "what_happened": "learned",
+                "participant_input": "Root asked a question",
+            }],
             "last_autobiographical_event": {"what_happened": "learned"},
             "last_tri_sigil_observation": {"observation_id": "obs-1"},
         }), encoding="utf-8")
@@ -52,10 +59,14 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
             "current_interlocutor": {"relationship": "Root"},
         }), encoding="utf-8")
         self.experiences.write_text(json.dumps({
+            "event_id": "event-1",
             "experience_id": "exp-1",
             "timestamp": "now",
             "intent": "continue",
             "experience": "I noticed a pattern.",
+            "reflection": "I carry the pattern forward.",
+            "lessons": ["pattern noted"],
+            "state_transition": {"from_attention": "old", "to_attention": "pattern"},
             "continuation": {"carry_forward": "pattern"},
             "observer_perspective": {"observation_id": "obs-1"},
         }) + "\n", encoding="utf-8")
@@ -64,6 +75,7 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
             "observations": ["I noticed a pattern."],
             "open_questions": ["What does this pattern mean?"],
             "continuity": "carry forward",
+            "cycle_analysis": {"conversation_turns": 1},
         }) + "\n", encoding="utf-8")
         self.ledger.write_text(json.dumps({"event_type": "reflection"}) + "\n", encoding="utf-8")
 
@@ -85,6 +97,12 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
         context = model["integration"]["current_context"]
         self.assertEqual(context["attention"], "observer evidence")
         self.assertEqual(context["recent_experiences"][0]["experience_id"], "exp-1")
+        self.assertEqual(context["recent_experiences"][0]["event_id"], "event-1")
+        self.assertEqual(context["recent_experiences"][0]["reflection"], "I carry the pattern forward.")
+        self.assertEqual(context["recent_autobiography"][0]["participant_input"], "Root asked a question")
+        self.assertEqual(context["recent_reflections"][0]["cycle_analysis"]["conversation_turns"], 1)
+        self.assertEqual(model["relationship_anchor"], "Root")
+        self.assertEqual(model["core_principles"], ["truth_bound"])
         self.assertEqual(model["self_inquiry"]["open_questions"], ["What does this pattern mean?"])
         self.assertEqual(model["self_inquiry"]["unresolved_experiential_threads"], ["question-1"])
         self.assertTrue(self.model.exists())
