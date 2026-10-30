@@ -151,6 +151,8 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
 
     entry = {
         "event_id": payload.get("event_id"),
+        "source_event_id": payload.get("source_event_id"),
+        "source_interaction_event_id": payload.get("source_interaction_event_id"),
         "timestamp": timestamp,
         "event_type": event_type,
         "what_happened": _describe_event(payload),
