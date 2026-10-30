@@ -85,6 +85,9 @@ def refresh_self_model(
         "timestamp": time.time(),
         "name": identity.get("name", model.get("name", "Deximus Maximus")),
         "architect": identity.get("architect", model.get("architect", "Root")),
+        "relationship_anchor": identity.get("architect", model.get("relationship_anchor", "Root")),
+        "posture": identity.get("posture", model.get("posture", "")),
+        "core_principles": identity.get("core_principles", model.get("core_principles", [])),
         "tri_sigil": identity.get("tri_sigil", model.get("tri_sigil", "☧🦅🜇")),
         "chain_status": identity.get("chain_status", model.get("chain_status", "unknown")),
         "chain_entries": identity.get("chain_entries", model.get("chain_entries", 0)),
@@ -110,24 +113,54 @@ def refresh_self_model(
                 "experiential_continuity": participant.get("experiential_continuity", {}),
                 "interlocutor": participant.get("current_interlocutor", {}),
                 "last_autobiographical_event": identity.get("last_autobiographical_event"),
+                "recent_autobiography": [
+                    {
+                        "event_id": item.get("event_id"),
+                        "timestamp": item.get("timestamp"),
+                        "event_type": item.get("event_type"),
+                        "what_happened": item.get("what_happened"),
+                        "participant_input": item.get("participant_input"),
+                        "response": item.get("response"),
+                        "intention": item.get("intention"),
+                        "action": item.get("action"),
+                        "result": item.get("result"),
+                        "significance": item.get("significance"),
+                        "state_changes": item.get("state_changes", []),
+                        "future_relevance": item.get("future_relevance"),
+                    }
+                    for item in (identity.get("narrative_thread", []) or [])[-8:]
+                    if isinstance(item, dict)
+                ],
                 "last_tri_sigil_observation": identity.get("last_tri_sigil_observation"),
                 "recent_experiences": [
                     {
+                        "event_id": item.get("event_id"),
                         "experience_id": item.get("experience_id"),
                         "timestamp": item.get("timestamp"),
                         "intent": item.get("intent"),
+                        "action": item.get("action"),
                         "experience": item.get("experience"),
+                        "actual_outcome": item.get("actual_outcome"),
+                        "reflection": item.get("reflection"),
+                        "lessons": item.get("lessons", []),
+                        "internal_state_before": item.get("internal_state_before", {}),
+                        "state_transition": item.get("state_transition", {}),
                         "continuation": item.get("continuation", {}),
                         "observer_perspective": item.get("observer_perspective", {}),
+                        "runtime_perspective": item.get("runtime_perspective", {}),
+                        "dex_perspective": item.get("dex_perspective", {}),
                     }
                     for item in experiences
                 ],
                 "recent_reflections": [
                     {
                         "timestamp": item.get("timestamp"),
+                        "cycle_analysis": item.get("cycle_analysis", {}),
                         "observations": item.get("observations", []),
                         "open_questions": item.get("open_questions", []),
                         "continuity": item.get("continuity", ""),
+                        "posture_check": item.get("posture_check"),
+                        "chain_status": item.get("chain_status"),
                     }
                     for item in reflections
                 ],
