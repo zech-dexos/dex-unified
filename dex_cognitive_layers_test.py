@@ -21,13 +21,15 @@ class AttentionLayerTests(unittest.IsolatedAsyncioTestCase):
             })
 
         self.assertEqual(result["status"], "updated")
-        self.assertEqual(result["event_id"], "interaction-1")
+        self.assertTrue(result["event_id"])
+        self.assertEqual(result["source_event_id"], "interaction-1")
         self.assertIn("identity", snapshot.current_attention.lower())
         snapshot.save.assert_called_once()
         update_state.assert_called_once()
         publish.assert_awaited_once()
         self.assertEqual(publish.await_args.args[0], "ATTENTION_CHANGED")
-        self.assertEqual(publish.await_args.args[1]["event_id"], "interaction-1")
+        self.assertEqual(publish.await_args.args[1]["event_id"], result["event_id"])
+        self.assertEqual(publish.await_args.args[1]["source_event_id"], "interaction-1")
 
     async def test_workspace_activates_only_for_meaningful_attention(self):
         with patch.object(dex_workspace, "load_self_state", return_value={
