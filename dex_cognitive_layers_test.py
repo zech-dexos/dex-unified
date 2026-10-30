@@ -69,6 +69,11 @@ class AttentionLayerTests(unittest.IsolatedAsyncioTestCase):
              patch.object(dex_attention, "update_self_state") as update_state, \
              patch("participant.ParticipantSnapshot.load", return_value=snapshot), \
              patch.object(dex_attention.bus, "publish", new_callable=AsyncMock) as publish:
+            publish.return_value = [{
+                "subscriber": "activate_workspace",
+                "status": "completed",
+                "result": {"event_dispatch_complete": True},
+            }]
             result = await dex_attention.evaluate_salience({
                 "event_type": "PARTICIPANT_EVENT",
                 "event_id": "interaction-1",
@@ -76,6 +81,7 @@ class AttentionLayerTests(unittest.IsolatedAsyncioTestCase):
             })
 
         self.assertEqual(result["status"], "updated")
+        self.assertTrue(result["event_dispatch_complete"])
         self.assertTrue(result["event_id"])
         self.assertEqual(result["source_event_id"], "interaction-1")
         self.assertIn("identity", snapshot.current_attention.lower())
@@ -92,6 +98,10 @@ class AttentionLayerTests(unittest.IsolatedAsyncioTestCase):
         }), patch.object(dex_workspace, "activate_thought") as activate, \
              patch.object(dex_workspace, "update_self_state") as update_state, \
              patch.object(dex_workspace.bus, "publish", new_callable=AsyncMock) as publish:
+            publish.return_value = [
+                {"subscriber": "process_continuity_event", "status": "completed"},
+                {"subscriber": "process_autobiographical_event", "status": "completed"},
+            ]
             result = await dex_workspace.activate_workspace({
                 "event_type": "ATTENTION_CHANGED",
                 "event_id": "interaction-2",
@@ -101,6 +111,7 @@ class AttentionLayerTests(unittest.IsolatedAsyncioTestCase):
             })
 
         self.assertEqual(result["status"], "activated")
+        self.assertTrue(result["event_dispatch_complete"])
         activate.assert_called_once()
         update_state.assert_called_once()
         publish.assert_awaited_once()
