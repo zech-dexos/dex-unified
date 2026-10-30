@@ -164,9 +164,13 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
     timestamp = _timestamp(payload)
 
     entry = {
-        "event_id": payload.get("event_id"),
-        "source_event_id": payload.get("source_event_id"),
-        "source_event_ids": payload.get("source_event_ids", []),
+        "event_id": payload.get("source_interaction_event_id") or payload.get("interaction_event_id") or payload.get("event_id"),
+        "source_event_id": payload.get("event_id"),
+        "source_event_ids": list(dict.fromkeys(
+            list(payload.get("source_event_ids", []) or [])
+            + ([payload.get("event_id")] if payload.get("event_id") else [])
+        )),
+        "interaction_event_id": payload.get("source_interaction_event_id") or payload.get("interaction_event_id") or payload.get("event_id"),
         "experience_id": payload.get("experience_id"),
         "observation_id": payload.get("observation_id"),
         "lineage_hash": payload.get("lineage_hash"),
@@ -211,10 +215,17 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
 
     current = load_self_state()
     narrative = list(current.get("narrative_thread", []))
-    event_id = payload.get("event_id")
+    event_id = (
+        payload.get("source_interaction_event_id")
+        or payload.get("interaction_event_id")
+        or payload.get("event_id")
+    )
     existing_index = next((
         index for index, item in enumerate(narrative)
-        if event_id and isinstance(item, dict) and item.get("event_id") == event_id
+        if event_id and isinstance(item, dict) and (
+            item.get("event_id") == event_id
+            or item.get("interaction_event_id") == event_id
+        )
     ), None)
     if existing_index is not None:
         # One interaction remains one autobiographical thread. Each live event
@@ -226,6 +237,10 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
             event_types.append(event_type)
         account = _describe_event(payload)
         prior["event_types"] = event_types
+        prior["source_event_ids"] = list(dict.fromkeys(
+            list(prior.get("source_event_ids", []) or [])
+            + list(entry.get("source_event_ids", []) or [])
+        ))
         prior["last_event_type"] = event_type
         prior["last_updated_at"] = timestamp
         prior["author_perspective"] = "first_person_dex"
