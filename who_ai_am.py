@@ -72,36 +72,44 @@ def _event_evidence_for(
     later instance can inspect what changed, why it mattered, and which source
     records support the account. Source ledgers remain authoritative.
     """
-    def matches(item: dict) -> bool:
-        if not event_key:
-            return False
-        identifiers = {
+    def source_ids(item: dict) -> list:
+        value = item.get("source_event_ids", []) or []
+        if isinstance(value, (list, tuple, set)):
+            return [str(entry) for entry in value if entry]
+        return [str(value)] if value else []
+
+    def direct_matches(item: dict) -> bool:
+        return bool(event_key) and event_key in {
             str(item.get("event_id") or ""),
             str(item.get("experience_id") or ""),
             str(item.get("observation_id") or ""),
-            str(item.get("source_event_id") or ""),
         }
-        identifiers.update(
-            str(value) for value in (item.get("source_event_ids", []) or [])
-            if value
-        )
-        return event_key in identifiers
 
-    experience = next(
-        (item for item in reversed(experiences)
-         if isinstance(item, dict) and matches(item)),
-        {},
-    )
-    autobiography = next(
-        (item for item in reversed(autobiographical_events)
-         if isinstance(item, dict) and matches(item)),
-        {},
-    )
+    def related_matches(item: dict) -> bool:
+        return bool(event_key) and (
+            str(item.get("source_event_id") or "") == event_key
+            or event_key in source_ids(item)
+        )
+
+    def best_match(records: list) -> dict:
+        # Prefer the source record for this event over a later child event
+        # (for example ATTENTION_CHANGED) that merely points back to it.
+        for predicate in (direct_matches, related_matches):
+            found = next(
+                (item for item in reversed(records)
+                 if isinstance(item, dict) and predicate(item)),
+                None,
+            )
+            if found is not None:
+                return found
+        return {}
+
+    experience = best_match(experiences)
+    autobiography = best_match(autobiographical_events)
     related_reflections = [
         item for item in reflections
         if isinstance(item, dict) and (
-            matches(item)
-            or event_key in (item.get("source_event_ids", []) or [])
+            direct_matches(item) or related_matches(item)
         )
     ][-3:]
 
@@ -114,7 +122,7 @@ def _event_evidence_for(
             item.get("experience_id"),
             item.get("observation_id"),
             item.get("source_event_id"),
-            *(item.get("source_event_ids", []) or []),
+            *source_ids(item),
         ):
             if value and value not in source_ids:
                 source_ids.append(value)
@@ -388,6 +396,8 @@ def refresh_self_model(
             event_key, experiences, narrative, reflections
         )
         supplied_source_ids = event.get("source_event_ids", []) or []
+        if not isinstance(supplied_source_ids, (list, tuple, set)):
+            supplied_source_ids = [supplied_source_ids]
         evidence["source_event_ids"] = list(dict.fromkeys(
             evidence["source_event_ids"] + [
                 value for value in supplied_source_ids if value
