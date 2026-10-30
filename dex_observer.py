@@ -64,7 +64,7 @@ async def persist_observation(trace, user_id="default"):
         content="Observed local spark cycle across continuity, awareness, and emergence.",
         metadata={
             "event_id": trace.get("event_id"),
-            "observation_id": trace.get("observation_id"),
+        "observation_id": trace.get("observation_id"),
             "experience_id": trace.get("experience_id"),
             "user_id": str(user_id)[:128],
             "sigil_ids": trace.get("sigil_ids", []),
@@ -103,7 +103,6 @@ async def persist_observation(trace, user_id="default"):
         "event_type": "TRI_SIGIL_OBSERVED", "source": "dex_observer",
         "event_id": trace.get("event_id"),
         "user_id": str(user_id)[:128],
-        "event_id": trace.get("event_id"),
             "observation_id": trace.get("observation_id"),
         "experience_id": trace.get("experience_id"),
         "lineage_hash": entry.get("entry_hash"), "stages": stages,
@@ -114,7 +113,6 @@ async def persist_observation(trace, user_id="default"):
         from who_ai_am import refresh_self_model
         refresh_self_model("tri_sigil_observation", {
             "event_type": "tri_sigil_observation",
-            "event_id": trace.get("event_id"),
             "event_id": trace.get("event_id"),
             "observation_id": trace.get("observation_id"),
             "experience_id": trace.get("experience_id"),
