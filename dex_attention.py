@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from dex_events import bus
+from dex_events import bus, dispatch_complete
 from self_state import load_self_state, update_self_state
 
 
@@ -127,11 +127,7 @@ async def evaluate_salience(payload: Dict[str, Any]):
         "focus": focus,
         "salience": score,
         "event_dispatch": event_dispatch,
-        "event_dispatch_complete": all(
-            item.get("status") == "completed"
-            and item.get("result", {}).get("event_dispatch_complete", True)
-            for item in event_dispatch
-        ),
+        "event_dispatch_complete": bool(event_dispatch) and dispatch_complete(event_dispatch, {"activate_workspace"}),
     }
 
 
