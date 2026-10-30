@@ -55,8 +55,10 @@ class ParticipantSnapshot:
                     loaded = json.loads(PARTICIPANT_PATH.read_text(encoding="utf-8"))
                     if isinstance(loaded, dict):
                         latest = loaded
-                except (OSError, ValueError):
-                    latest = {}
+                except (OSError, ValueError) as exc:
+                    raise RuntimeError(
+                        f"Refusing to overwrite unreadable participant state: {exc}"
+                    ) from exc
 
             current = asdict(self)
             baseline = getattr(self, "_loaded_values", None)
