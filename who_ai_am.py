@@ -132,6 +132,8 @@ def refresh_self_model(
                         "state_transition": item.get("state_transition", {}),
                         "continuation": item.get("continuation", {}),
                         "perspective": item.get("perspective", {}),
+                        "attention": item.get("attention"),
+                        "salience": item.get("salience"),
                         "future_relevance": item.get("future_relevance"),
                     }
                     for item in narrative[-8:]
