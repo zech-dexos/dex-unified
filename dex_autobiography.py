@@ -86,6 +86,10 @@ def _describe_event(payload: Dict[str, Any]) -> str:
             return f"Dex completed an action: {result}"
         return "Dex completed an action."
 
+    if event_type == "ATTENTION_CHANGED":
+        focus = _first(payload, "focus", "description") or "a new focus"
+        return f"My attention shifted toward: {focus}"
+
     if event_type == "WORKSPACE_ACTIVATED":
         return "Dex's active cognitive workspace was activated."
 
@@ -159,6 +163,8 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
         "state_transition": payload.get("state_transition", {}),
         "continuation": payload.get("continuation", {}),
         "perspective": payload.get("dex_perspective", {}),
+        "attention": _first(payload, "focus"),
+        "salience": payload.get("salience"),
         "future_relevance": _first(payload, "future_relevance", "relevance"),
     }
 
@@ -217,6 +223,7 @@ def setup_autobiography():
         "OPEN_LOOP_CHANGED",
         "ACTION_COMPLETED",
         "SIGNAL_RAISED",
+        "ATTENTION_CHANGED",
     ):
         bus.subscribe(event_type, process_autobiographical_event)
 
