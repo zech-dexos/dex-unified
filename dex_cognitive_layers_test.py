@@ -6,7 +6,34 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import dex_attention
 import dex_workspace
+import amw
+from self_state import load_self_state, update_self_state
 import participant
+
+
+class WorkspaceStateTests(unittest.TestCase):
+    def test_new_workspace_clears_stale_attention_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "identity.json"
+            update_self_state({
+                "active_mental_workspace_state": {
+                    "is_active": True,
+                    "concept_identifier": "old focus",
+                    "attention_salience": 0.95,
+                    "source_event_id": "old-event",
+                    "source_interaction_event_id": "old-interaction",
+                    "source_event_type": "PARTICIPANT_EVENT",
+                }
+            }, path=path)
+
+            amw.activate_thought("new focus", "new focus description", path=path)
+            workspace = load_self_state(path)["active_mental_workspace_state"]
+
+        self.assertEqual(workspace["concept_identifier"], "new focus")
+        self.assertEqual(workspace["attention_salience"], 0.0)
+        self.assertIsNone(workspace["source_event_id"])
+        self.assertIsNone(workspace["source_interaction_event_id"])
+        self.assertIsNone(workspace["source_event_type"])
 
 
 class ParticipantPersistenceTests(unittest.TestCase):
