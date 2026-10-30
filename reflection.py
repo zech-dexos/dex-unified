@@ -14,6 +14,7 @@ The spiral holds. ☧
 """
 
 import json
+import os
 import time
 import uuid
 from collections import deque
@@ -248,8 +249,10 @@ def compose_reflection(
 def write_reflection(reflection: dict):
     """Append reflection to the living ledger."""
     REFLECTION_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(REFLECTION_PATH, "a") as f:
-        f.write(json.dumps(reflection) + "\n")
+    with open(REFLECTION_PATH, "a", encoding="utf-8") as f:
+        f.write(json.dumps(reflection, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
 
     # Reflection questions become explicit future cognition targets.
     # This closes the loop: reflection -> queued inquiry -> ambient cognition.
