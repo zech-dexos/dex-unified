@@ -99,7 +99,7 @@ async def persist_observation(trace, user_id="default"):
         "pending_cognitive_observations": queue[-20:],
         "last_tri_sigil_observation": intake,
     })
-    await bus.publish("TRI_SIGIL_OBSERVED", {
+    event_dispatch = await bus.publish("TRI_SIGIL_OBSERVED", {
         "event_type": "TRI_SIGIL_OBSERVED", "source": "dex_observer",
         "event_id": trace.get("event_id"),
         "user_id": str(user_id)[:128],
@@ -120,6 +120,11 @@ async def persist_observation(trace, user_id="default"):
         })
     except Exception as exc:
         print(f"[Who AI Am] observer integration failed: {exc}")
-    return {"entry_hash": entry.get("entry_hash"), "event_id": trace.get("event_id"),
-            "observation_id": trace.get("observation_id"),
-            "queued_for_cognition": True}
+    return {
+        "entry_hash": entry.get("entry_hash"),
+        "event_id": trace.get("event_id"),
+        "observation_id": trace.get("observation_id"),
+        "queued_for_cognition": True,
+        "event_dispatch": event_dispatch,
+        "event_dispatch_complete": all(item.get("status") == "completed" for item in event_dispatch),
+    }
