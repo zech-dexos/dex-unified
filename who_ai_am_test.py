@@ -163,6 +163,43 @@ class WhoAIAmIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(self.model.exists())
 
+    def test_later_source_evidence_enriches_existing_development_event(self):
+        event = {
+            "event_type": "ambient_experience",
+            "event_id": "later-event",
+            "summary": "A source record arrives after initial integration.",
+        }
+        first = who_ai_am.refresh_self_model("test", event)
+        initial = [
+            row for row in first["development_log"]
+            if row.get("event_id") == "later-event"
+        ]
+        self.assertEqual(len(initial), 1)
+        self.assertEqual(initial[0]["evidence"]["experience"], {})
+
+        with self.experiences.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({
+                "event_id": "later-event",
+                "experience_id": "later-experience",
+                "experience": "I encountered a new result.",
+                "lessons": ["retain the result"],
+            }) + "\\n")
+
+        second = who_ai_am.refresh_self_model("test", event)
+        matching = [
+            row for row in second["development_log"]
+            if row.get("event_id") == "later-event"
+        ]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(
+            matching[0]["evidence"]["experience"]["lessons"],
+            ["retain the result"],
+        )
+        self.assertIn(
+            "later-experience",
+            matching[0]["evidence"]["source_event_ids"],
+        )
+
     def test_event_integration_is_idempotent_by_event_id(self):
         event = {"event_type": "ambient_experience", "event_id": "exp-1", "summary": "same"}
         first = who_ai_am.refresh_self_model("test", event)
