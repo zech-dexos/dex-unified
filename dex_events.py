@@ -71,3 +71,21 @@ class EventBus:
 
 # Global event bus singleton
 bus = EventBus()
+
+
+def setup_cognitive_layers() -> None:
+    """Register the same persistent cognitive layers in every runtime process.
+
+    The event bus is process-local. API and ambient workers must each register
+    these handlers against their own bus instance while sharing canonical state.
+    EventBus.subscribe makes repeated setup safe.
+    """
+    from dex_continuity import setup_continuity
+    from dex_autobiography import setup_autobiography
+    from dex_attention import setup_attention
+    from dex_workspace import setup_workspace
+
+    setup_continuity()
+    setup_autobiography()
+    setup_attention()
+    setup_workspace()
