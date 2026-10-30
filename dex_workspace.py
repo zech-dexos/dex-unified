@@ -7,7 +7,7 @@ from amw import activate_thought
 
 
 WORKSPACE_ACTIVATION_THRESHOLD = 0.55
-WORKSPACE_PREEMPTION_MARGIN = 0.15
+WORKSPACE_PREEMPTION_MARGIN = 0.1
 
 
 async def activate_workspace(payload: Dict[str, Any]):
