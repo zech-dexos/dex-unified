@@ -345,7 +345,7 @@ async def _complete_early_chat_turn(
     response_flag: Optional[str] = None,
 ) -> dict:
     """Persist command and governed early-return turns through the same cognitive path."""
-    from dex_events import bus
+    from dex_events import bus, dispatch_complete
     from dex_observer import build_observer_trace, persist_observation
 
     user_id = getattr(req, "user_id", "default")
@@ -429,17 +429,12 @@ async def _complete_early_chat_turn(
 
     completed = bool(
         participant_event_published
-        and all(item.get("status") == "completed" for item in participant_dispatch)
-        and all(
-            item.get("result", {}).get("event_dispatch_complete", True)
-            for item in participant_dispatch
-            if isinstance(item.get("result"), dict)
-        )
+        and dispatch_complete(participant_dispatch, {"process_continuity_event", "evaluate_salience"})
         and experience_persisted
         and observer_persistence
         and observer_persistence.get("event_dispatch_complete", False)
         and response_event_published
-        and all(item.get("status") == "completed" for item in response_dispatch)
+        and dispatch_complete(response_dispatch, {"process_continuity_event", "process_autobiographical_event"})
     )
     return {
         **response,
@@ -464,7 +459,7 @@ async def chat(req: ChatRequest):
     participant_dispatch = []
     participant_event_published = False
     try:
-        from dex_events import bus
+        from dex_events import bus, dispatch_complete
         participant_dispatch = await bus.publish("PARTICIPANT_EVENT", {
             "event_type": "PARTICIPANT_EVENT",
             "event_id": interaction_event_id,
@@ -1296,17 +1291,12 @@ the exchange as a newly started request/response transaction.
             "response_dispatch": response_dispatch,
             "complete": bool(
                 participant_event_published
-                and all(item.get("status") == "completed" for item in participant_dispatch)
-                and all(
-                    item.get("result", {}).get("event_dispatch_complete", True)
-                    for item in participant_dispatch
-                    if isinstance(item.get("result"), dict)
-                )
+                and dispatch_complete(participant_dispatch, {"process_continuity_event", "evaluate_salience"})
                 and experience_persisted
                 and observer_persistence
                 and observer_persistence.get("event_dispatch_complete", False)
                 and response_event_published
-                and all(item.get("status") == "completed" for item in response_dispatch)
+                and dispatch_complete(response_dispatch, {"process_continuity_event", "process_autobiographical_event"})
             ),
         },
     }
