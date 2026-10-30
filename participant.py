@@ -358,6 +358,7 @@ def record_interaction_experience(
         }
     snapshot.experiential_continuity = {
         "last_experience_id": packet.experience_id,
+        "last_event_id": packet.event_id or event_id,
         "last_experience": packet.experience,
         "last_state_transition": packet.state_transition,
         "carry_forward": packet.continuation["carry_forward"],
@@ -455,6 +456,7 @@ def record_ambient_experience(
 
     snapshot.experiential_continuity = {
         "last_experience_id": packet.experience_id,
+        "last_event_id": packet.event_id,
         "last_experience": packet.experience,
         "last_state_transition": packet.state_transition,
         "carry_forward": packet.continuation["carry_forward"],
@@ -489,6 +491,7 @@ def produce_next_snapshot(current: ParticipantSnapshot, packet: ExperiencePacket
         current_confidence=packet.confidence_after,
         runtime_context={
             "last_experience_id": packet.experience_id,
+            "last_event_id": packet.event_id,
             "last_prediction_matched": packet.knowledge_delta.get("prediction_matched", False),
             "cycles_completed": current.runtime_context.get("cycles_completed", 0) + 1
         },
@@ -496,6 +499,7 @@ def produce_next_snapshot(current: ParticipantSnapshot, packet: ExperiencePacket
         current_interlocutor=dict(packet.interlocutor),
         experiential_continuity={
             "last_experience_id": packet.experience_id,
+            "last_event_id": packet.event_id,
             "last_experience": packet.experience,
             "last_state_transition": packet.state_transition,
             "carry_forward": packet.continuation.get("carry_forward", ""),
