@@ -87,6 +87,10 @@ def _describe_event(payload: Dict[str, Any]) -> str:
         return "Dex completed an action."
 
     if event_type == "TRI_SIGIL_OBSERVED":
+        stages = payload.get("stages", {})
+        completed = [str(key) for key, value in stages.items() if value] if isinstance(stages, dict) else []
+        if completed:
+            return "I observed and recorded these runtime stages: " + ", ".join(completed)
         return "I observed a tri-sigil runtime cycle and recorded its evidence."
 
     if event_type == "GOAL_REMOVED":
