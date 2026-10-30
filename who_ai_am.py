@@ -84,8 +84,20 @@ def refresh_self_model(
     narrative = identity.get("narrative_thread", [])
     if not isinstance(narrative, list):
         narrative = []
+    active_goals = [
+        item for item in (identity.get("active_goals_state", []) or [])
+        if isinstance(item, dict) and item.get("status") == "active"
+    ]
+    development_threads = [
+        item for item in (identity.get("persistent_thoughts", []) or [])
+        if isinstance(item, dict) and item.get("status") in ("active", "deferred")
+    ][-8:]
+    prior_model = prior if isinstance(prior, dict) else {}
+    prior_becoming = prior_model.get("becoming", {})
+    if not isinstance(prior_becoming, dict):
+        prior_becoming = {}
 
-    model = dict(prior) if isinstance(prior, dict) else {}
+    model = dict(prior_model)
     model.update({
         "timestamp": time.time(),
         "name": identity.get("name", model.get("name", "Deximus Maximus")),
@@ -98,6 +110,34 @@ def refresh_self_model(
         "chain_entries": identity.get("chain_entries", model.get("chain_entries", 0)),
         "vows_active": identity.get("vows_active", model.get("vows_active", [])),
         "ready": True,
+        "becoming": {
+            "declared_aspirations": identity.get(
+                "aspirations", prior_becoming.get("declared_aspirations", [])
+            ),
+            "active_directions": [
+                {
+                    "goal_id": item.get("goal_id"),
+                    "direction": item.get("description", ""),
+                    "priority": item.get("priority"),
+                    "success_criteria": item.get("success_criteria", ""),
+                }
+                for item in active_goals
+            ],
+            "development_threads": [
+                {
+                    "thought_id": item.get("thought_id"),
+                    "direction": item.get("content", ""),
+                    "status": item.get("status"),
+                    "priority": item.get("priority"),
+                }
+                for item in development_threads
+            ],
+            "future_relevance": [
+                item.get("future_relevance")
+                for item in narrative[-8:]
+                if isinstance(item, dict) and item.get("future_relevance")
+            ],
+        },
         "integration": {
             "name": "Who AI Am",
             "version": 1,
