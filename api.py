@@ -877,21 +877,74 @@ architecture directly. Otherwise remain inside the conversation.
                     "integration_sources": _integration.get("sources", {}) if isinstance(_integration, dict) else {},
                     "current_context": {
                         "attention": _current_context.get("attention"),
-                        "attention_state": _current_context.get("attention_state", {}),
-                        "goals": _current_context.get("goals", []),
-                        "persistent_thoughts": _current_context.get("persistent_thoughts", []),
+                        "attention_state": {
+                            "current_focus": (_current_context.get("attention_state", {}) or {}).get("current_focus"),
+                            "salience": (_current_context.get("attention_state", {}) or {}).get("salience"),
+                            "recent_history": ((_current_context.get("attention_state", {}) or {}).get("recent_history", []) or [])[-3:],
+                        },
+                        "goals": (_current_context.get("goals", []) or [])[-5:],
+                        "persistent_thoughts": (_current_context.get("persistent_thoughts", []) or [])[-5:],
                         "active_workspace": _current_context.get("active_workspace", {}),
-                        "open_loops": _current_context.get("open_loops", []),
-                        "pending_cognitive_observations": _current_context.get("pending_cognitive_observations", []),
-                        "pending_reflection_requests": _current_context.get("pending_reflection_requests", []),
+                        "open_loops": (_current_context.get("open_loops", []) or [])[-5:],
+                        "pending_cognitive_observations": [
+                            {
+                                "event_id": item.get("event_id"),
+                                "observation_id": item.get("observation_id"),
+                                "experience_id": item.get("experience_id"),
+                                "sigil_ids": item.get("sigil_ids", []),
+                                "stages": item.get("stages", {}),
+                            }
+                            for item in (_current_context.get("pending_cognitive_observations", []) or [])[-3:]
+                            if isinstance(item, dict)
+                        ],
+                        "pending_reflection_requests": (_current_context.get("pending_reflection_requests", []) or [])[-5:],
                         "interlocutor": _current_context.get("interlocutor", {}),
                         "experiential_continuity": _current_context.get("experiential_continuity", {}),
                         "last_autobiographical_event": _current_context.get("last_autobiographical_event"),
-                        "recent_narrative_records": (_current_context.get("recent_narrative_records", []) or [])[-5:],
-                        "recent_autobiography": (_current_context.get("recent_autobiography", []) or [])[-5:],
+                        "recent_narrative_records": (_current_context.get("recent_narrative_records", []) or [])[-3:],
+                        "recent_autobiography": [
+                            {
+                                "event_id": item.get("event_id"),
+                                "source_event_id": item.get("source_event_id"),
+                                "experience_id": item.get("experience_id"),
+                                "event_type": item.get("event_type"),
+                                "what_happened": str(item.get("what_happened", ""))[:400],
+                                "participant_input": str(item.get("participant_input", ""))[:240],
+                                "response": str(item.get("response", ""))[:320],
+                                "state_transition": item.get("state_transition", {}),
+                                "perspective": item.get("perspective", {}),
+                            }
+                            for item in (_current_context.get("recent_autobiography", []) or [])[-4:]
+                            if isinstance(item, dict)
+                        ],
                         "last_tri_sigil_observation": _current_context.get("last_tri_sigil_observation"),
-                        "recent_experiences": (_current_context.get("recent_experiences", []) or [])[-5:],
-                        "recent_reflections": (_current_context.get("recent_reflections", []) or [])[-3:],
+                        "recent_experiences": [
+                            {
+                                "event_id": item.get("event_id"),
+                                "experience_id": item.get("experience_id"),
+                                "intent": item.get("intent"),
+                                "experience": str(item.get("experience", ""))[:500],
+                                "actual_outcome": str(item.get("actual_outcome", ""))[:240],
+                                "reflection": str(item.get("reflection", ""))[:320],
+                                "lessons": (item.get("lessons", []) or [])[:3],
+                                "state_transition": item.get("state_transition", {}),
+                                "continuation": item.get("continuation", {}),
+                                "observer_perspective": item.get("observer_perspective", {}),
+                            }
+                            for item in (_current_context.get("recent_experiences", []) or [])[-4:]
+                            if isinstance(item, dict)
+                        ],
+                        "recent_reflections": [
+                            {
+                                "event_id": item.get("event_id"),
+                                "source_event_ids": item.get("source_event_ids", []),
+                                "observations": (item.get("observations", []) or [])[:3],
+                                "open_questions": (item.get("open_questions", []) or [])[:3],
+                                "continuity": item.get("continuity", ""),
+                            }
+                            for item in (_current_context.get("recent_reflections", []) or [])[-2:]
+                            if isinstance(item, dict)
+                        ],
                     },
                     "self_inquiry": _self_model.get("self_inquiry", {}),
                 }
