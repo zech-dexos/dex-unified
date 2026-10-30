@@ -2,7 +2,7 @@
 import asyncio
 import unittest
 
-from dex_events import EventBus
+from dex_events import EventBus, bus, setup_cognitive_layers
 
 
 class EventBusTests(unittest.IsolatedAsyncioTestCase):
@@ -28,6 +28,26 @@ class EventBusTests(unittest.IsolatedAsyncioTestCase):
             [("first", "event-1"), ("second", "event-1")],
         )
         self.assertEqual([item["status"] for item in outcomes], ["completed", "completed"])
+
+    async def test_cognitive_layers_register_once_for_each_process(self):
+        setup_cognitive_layers()
+        first_counts = {name: len(callbacks) for name, callbacks in bus._subscribers.items()}
+        setup_cognitive_layers()
+        second_counts = {name: len(callbacks) for name, callbacks in bus._subscribers.items()}
+
+        self.assertEqual(first_counts, second_counts)
+        self.assertIn("process_continuity_event", [
+            callback.__name__ for callback in bus._subscribers["RESPONSE_COMPLETED"]
+        ])
+        self.assertIn("process_autobiographical_event", [
+            callback.__name__ for callback in bus._subscribers["RESPONSE_COMPLETED"]
+        ])
+        self.assertIn("evaluate_salience", [
+            callback.__name__ for callback in bus._subscribers["PARTICIPANT_EVENT"]
+        ])
+        self.assertIn("activate_workspace", [
+            callback.__name__ for callback in bus._subscribers["ATTENTION_CHANGED"]
+        ])
 
     async def test_subscriber_failure_does_not_skip_later_layers(self):
         bus = EventBus()
