@@ -305,6 +305,40 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
             }
 
         state = load_self_state()
+
+        # The ambient worker owns resumption after Root's priority lease
+        # expires, even when no new chat request arrives to wake APE.
+        priority_until = _parse_time(state.get("participant_priority_until"))
+        if (
+            priority_until is None or datetime.now(timezone.utc) >= priority_until
+        ):
+            workspace = state.get("active_mental_workspace_state", {})
+            suspended = list(state.get("suspended_workspaces", []) or [])
+            if (
+                suspended
+                and workspace.get("is_active")
+                and workspace.get("source_event_type") == "PARTICIPANT_EVENT"
+            ):
+                prior = suspended.pop()
+                concept = str(prior.get("concept_identifier") or "").strip()
+                if concept:
+                    from amw import activate_thought
+                    activate_thought(
+                        concept_identifier=concept,
+                        description=str(prior.get("description_snapshot") or concept),
+                    )
+                    update_self_state({"suspended_workspaces": suspended})
+                    update_self_state({
+                        "active_mental_workspace_state": {
+                            "attention_salience": prior.get("attention_salience", 0.65),
+                            "source_event_id": prior.get("source_event_id"),
+                            "source_event_type": prior.get("source_event_type"),
+                            "resumed_from_root_interrupt": True,
+                        }
+                    })
+                    print(f"[Ambient Daemon] Resumed suspended workspace: {concept}")
+
+        state = load_self_state()
         target = _select_target(state)
 
         # No target means Dex should rest, not invoke an LLM just to stay busy.
