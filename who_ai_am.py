@@ -247,6 +247,7 @@ def refresh_self_model(
                         "event_id": item.get("event_id"),
                         "timestamp": item.get("timestamp"),
                         "source_event_ids": item.get("source_event_ids", []),
+                        "lineage_evidence": item.get("lineage_evidence", []),
                         "experience_evidence": item.get("experience_evidence", []),
                         "autobiographical_evidence": item.get("autobiographical_evidence", []),
                         "cycle_analysis": item.get("cycle_analysis", {}),
