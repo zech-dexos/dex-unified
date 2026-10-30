@@ -88,7 +88,7 @@ def _event_evidence_for(
     def related_matches(item: dict) -> bool:
         return bool(event_key) and (
             str(item.get("source_event_id") or "") == event_key
-            or event_key in source_ids(item)
+            or event_key in _source_id_values(item)
         )
 
     def best_match(records: list) -> dict:
