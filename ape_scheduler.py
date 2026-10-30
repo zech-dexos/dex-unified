@@ -148,6 +148,17 @@ def run_cycle(
     The resulting reflection is persisted, then the thought engine may
     advance the thought on the next cycle.
     """
+    current = load_self_state(path)
+    workspace = current.get("active_mental_workspace_state", {})
+
+    # A workspace is a focus, not a permanent pin. If it has been refreshed
+    # repeatedly without a new development, release it so current goals and
+    # newer thoughts can take the lead. The historical record remains intact.
+    reflections = workspace.get("internal_reflections", [])
+    if workspace.get("is_active") and len(reflections) >= ATTENTION_THRESHOLD:
+        amw.deactivate_thought(path=path)
+        current = load_self_state(path)
+
     ranked = gosdw.prioritize_goals(path=path)
 
     if not ranked:
@@ -165,28 +176,38 @@ def run_cycle(
         }
 
     top_goal = ranked[0]
-    current = load_self_state(path)
-
     thought_record = _derive_autonomous_thought(current, ranked)
 
     if thought_record.get("source") == "persistent_thought":
-        # Already exists in persistent_thoughts -- don't duplicate it.
-        concept = thought_record.get("content", "")
-        thought_id = thought_record.get("thought_id")
-        revisited = thought.revisit_thought(thought_id, path=path)
+        # Revisit a persistent thought, but do not let repeated non-progress
+        # keep it at the front of cognition forever.
+        old_concept = thought_record.get("content", "")
+        old_thought_id = thought_record.get("thought_id")
+        revisited = thought.revisit_thought(old_thought_id, path=path)
         if revisited and revisited.get("attention_count", 0) >= ATTENTION_THRESHOLD:
             thought.update_thought(
-                thought_id,
+                old_thought_id,
                 decision="defer",
-                note=f"No development after {revisited['attention_count']} attentions; deferring to rotate focus.",
+                note=f"No development after {revisited['attention_count']} attentions; deferred to rotate focus.",
                 path=path,
             )
+            current_workspace = load_self_state(path).get("active_mental_workspace_state", {})
+            if current_workspace.get("is_active") and current_workspace.get("concept_identifier") == old_concept:
+                amw.deactivate_thought(path=path)
+            current = load_self_state(path)
+            thought_record = _derive_autonomous_thought(current, ranked)
+
+    if thought_record.get("source") == "persistent_thought":
+        concept = thought_record.get("content", "")
+        thought_id = thought_record.get("thought_id")
     else:
         persisted = _persist_autonomous_thought(thought_record, path)
         concept = persisted["content"]
         thought_id = persisted["thought_id"]
 
-    amw_state = current.get("active_mental_workspace_state", {})
+    # Reload after lifecycle changes; never refresh a workspace that was just
+    # released, and never reactivate the same deferred thought this cycle.
+    amw_state = load_self_state(path).get("active_mental_workspace_state", {})
 
     if (
         amw_state.get("is_active")
