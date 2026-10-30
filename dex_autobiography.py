@@ -142,6 +142,7 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
     timestamp = _timestamp(payload)
 
     entry = {
+        "event_id": payload.get("event_id"),
         "timestamp": timestamp,
         "event_type": event_type,
         "what_happened": _describe_event(payload),
@@ -181,6 +182,7 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
         from who_ai_am import refresh_self_model
         refresh_self_model("autobiography", {
             "event_type": event_type,
+            "event_id": entry.get("event_id"),
             "summary": entry.get("what_happened", ""),
         })
     except Exception as exc:
