@@ -148,12 +148,16 @@ def setup_cognitive_layers() -> None:
     from dex_attention import setup_attention
     from dex_workspace import setup_workspace
     from participant import setup_live_experience_observer
+    from dex_observer import setup_live_observer
+    from reflection import setup_live_reflection_observer
 
     setup_continuity()
     setup_autobiography()
     setup_attention()
     setup_workspace()
     setup_live_experience_observer()
+    setup_live_observer()
+    setup_live_reflection_observer()
 
 
 def dispatch_complete(outcomes, expected_subscribers=()) -> bool:
