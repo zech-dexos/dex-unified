@@ -204,7 +204,7 @@ async def process_live_observation_event(payload):
             list(record.get("source_event_ids", []) or [])
             + [item.get("event_id") for item in buffered_trace if item.get("event_id")]
         ))[-600:]
-    elif event_type == "CAPABILITY_EXECUTED":
+    if event_type == "CAPABILITY_EXECUTED":
         calls = list(record.get("capability_activity", []) or [])
         calls.append({
             "timestamp": now,
