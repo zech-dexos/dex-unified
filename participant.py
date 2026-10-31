@@ -626,7 +626,7 @@ async def process_live_experience_event(payload: dict):
         trace.extend(buffered_trace)
         current["generation_trace"] = trace[-512:]
         current["generation_status"] = "in_progress"
-    elif event_type == "CAPABILITY_EXECUTED":
+    if event_type == "CAPABILITY_EXECUTED":
         calls = list(current.get("capability_activity", []) or [])
         calls.append({
             "timestamp": now,
