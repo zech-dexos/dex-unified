@@ -151,7 +151,7 @@ async def process_live_observation_event(payload):
     if event_type == "RESPONSE_GENERATION_PROGRESS":
         trace = _LIVE_OBSERVER_TRACES.setdefault(str(interaction_id), [])
         trace.append({
-            "timestamp": now,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "event_id": payload.get("event_id"),
             "generation_round": payload.get("generation_round"),
             "generation_stage": payload.get("generation_stage"),
