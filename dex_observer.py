@@ -4,6 +4,9 @@ import time
 import uuid
 
 
+_LIVE_OBSERVER_TRACES = {}
+
+
 def build_observer_trace(snapshot, user_id, message, reply, model, provider,
                          capability_available, capability_calls, sigil_ids,
                          sigil_active, response_flag=None, event_id=None):
@@ -145,6 +148,21 @@ async def process_live_observation_event(payload):
     if not interaction_id:
         return
     event_type = str(payload.get("event_type") or "")
+    if event_type == "RESPONSE_GENERATION_PROGRESS":
+        trace = _LIVE_OBSERVER_TRACES.setdefault(str(interaction_id), [])
+        trace.append({
+            "timestamp": now,
+            "event_id": payload.get("event_id"),
+            "generation_round": payload.get("generation_round"),
+            "generation_stage": payload.get("generation_stage"),
+            "content_delta": str(payload.get("content_delta") or ""),
+        })
+        del trace[:-512]
+        return {"observed_live_delta": True, "persisted": False}
+
+    buffered_trace = []
+    if event_type in ("RESPONSE_GENERATION_FINISHED", "RESPONSE_INTERRUPTED", "RESPONSE_COMPLETED"):
+        buffered_trace = _LIVE_OBSERVER_TRACES.pop(str(interaction_id), [])
     state = load_self_state()
     observations = list(state.get("live_interaction_observations", []) or [])
     index = next((
@@ -178,15 +196,14 @@ async def process_live_observation_event(payload):
     if event_type == "PARTICIPANT_EVENT":
         record["participant_input"] = str(payload.get("message") or "")[:4000]
         record["user_id"] = payload.get("user_id")
-    elif event_type == "RESPONSE_GENERATION_PROGRESS":
+    if buffered_trace:
         trace = list(record.get("generation_trace", []) or [])
-        trace.append({
-            "timestamp": now,
-            "generation_round": payload.get("generation_round"),
-            "generation_stage": payload.get("generation_stage"),
-            "content_delta": str(payload.get("content_delta") or "")[:2000],
-        })
-        record["generation_trace"] = trace[-80:]
+        trace.extend(buffered_trace)
+        record["generation_trace"] = trace[-512:]
+        record["source_event_ids"] = list(dict.fromkeys(
+            list(record.get("source_event_ids", []) or [])
+            + [item.get("event_id") for item in buffered_trace if item.get("event_id")]
+        ))[-600:]
     elif event_type == "CAPABILITY_EXECUTED":
         calls = list(record.get("capability_activity", []) or [])
         calls.append({
