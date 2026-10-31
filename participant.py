@@ -21,6 +21,9 @@ from typing import Optional
 
 from paths import EXPERIENCES_PATH, PARTICIPANT_PATH
 
+
+_LIVE_EXPERIENCE_TRACES = {}
+
 @dataclass
 class ParticipantSnapshot:
     participant_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
@@ -578,6 +581,21 @@ async def process_live_experience_event(payload: dict):
     if not interaction_id:
         return
 
+    if event_type == "RESPONSE_GENERATION_PROGRESS":
+        trace = _LIVE_EXPERIENCE_TRACES.setdefault(str(interaction_id), [])
+        trace.append({
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "generation_round": payload.get("generation_round"),
+            "generation_stage": payload.get("generation_stage"),
+            "content_delta": str(payload.get("content_delta") or ""),
+        })
+        del trace[:-512]
+        return {"observed_live_delta": True, "persisted": False}
+
+    buffered_trace = []
+    if event_type in ("RESPONSE_GENERATION_FINISHED", "RESPONSE_INTERRUPTED", "RESPONSE_COMPLETED"):
+        buffered_trace = _LIVE_EXPERIENCE_TRACES.pop(str(interaction_id), [])
+
     snapshot = ParticipantSnapshot.load()
     runtime = dict(snapshot.runtime_context or {})
     active = dict(runtime.get("active_experiences", {}) or {})
@@ -603,15 +621,10 @@ async def process_live_experience_event(payload: dict):
             str(current.get("experience") or "I received a contribution.")
             + " I began forming a response within this continuing interaction."
         )
-    elif event_type == "RESPONSE_GENERATION_PROGRESS":
+    if buffered_trace:
         trace = list(current.get("generation_trace", []) or [])
-        trace.append({
-            "timestamp": now,
-            "generation_round": payload.get("generation_round"),
-            "generation_stage": payload.get("generation_stage"),
-            "content_delta": str(payload.get("content_delta") or "")[:2000],
-        })
-        current["generation_trace"] = trace[-80:]
+        trace.extend(buffered_trace)
+        current["generation_trace"] = trace[-512:]
         current["generation_status"] = "in_progress"
     elif event_type == "CAPABILITY_EXECUTED":
         calls = list(current.get("capability_activity", []) or [])
