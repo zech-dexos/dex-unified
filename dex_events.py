@@ -100,6 +100,19 @@ class EventBus:
             finally:
                 self._draining_bridge = False
 
+    async def publish_transient(self, event_type: str, payload: Dict[str, Any]) -> List[dict]:
+        """Dispatch a live event to this process without journaling each token.
+
+        Token-level generation is high-frequency. All local cognitive layers
+        observe each delta concurrently, while durable interaction milestones
+        remain journaled through publish().
+        """
+        event = dict(payload or {})
+        event.setdefault("event_id", uuid.uuid4().hex)
+        event.setdefault("event_type", event_type)
+        event.setdefault("event_origin", self._consumer_id)
+        return await self._dispatch_local(event_type, event)
+
     async def publish(self, event_type: str, payload: Dict[str, Any]) -> List[dict]:
         """Journal an event, drain remote events, then complete local delivery."""
         event = dict(payload or {})
