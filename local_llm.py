@@ -41,9 +41,31 @@ def _shared_inference_slot(kind: str):
         f"dexos-inference-{getattr(os, 'getuid', lambda: 0)()}-{identity}.lock",
     )
     descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    # Interactive chat takes the exclusive priority gate. Ambient work must
+    # first hold a shared gate, so a waiting chat request prevents new ambient
+    # generations from repeatedly cutting in line.
+    priority_fd = os.open(lock_path + ".priority", os.O_CREAT | os.O_RDWR, 0o600)
     wait_started = time.monotonic()
     acquired_at = None
+    priority_acquired = False
     try:
+        if kind == "interactive":
+            fcntl.flock(priority_fd, fcntl.LOCK_EX)
+            priority_acquired = True
+        else:
+            ambient_deadline = wait_started + 8.0
+            while True:
+                try:
+                    fcntl.flock(priority_fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                    priority_acquired = True
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= ambient_deadline:
+                        raise TimeoutError(
+                            "ambient inference yielded its slot to waiting interactive chat"
+                        )
+                    time.sleep(0.05)
+
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         acquired_at = time.monotonic()
         waited = acquired_at - wait_started
@@ -57,7 +79,10 @@ def _shared_inference_slot(kind: str):
         try:
             if acquired_at is not None:
                 fcntl.flock(descriptor, fcntl.LOCK_UN)
+            if priority_acquired:
+                fcntl.flock(priority_fd, fcntl.LOCK_UN)
         finally:
+            os.close(priority_fd)
             os.close(descriptor)
         if acquired_at is not None:
             print(
