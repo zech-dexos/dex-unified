@@ -5,6 +5,20 @@ from dex_events import bus
 from self_state import load_self_state, update_self_state
 
 
+# Token deltas are observed immediately but coalesced in process memory. The
+# complete first-person generation trace is persisted at the interaction
+# milestone, avoiding durable JSON rewrites for every generated token.
+_LIVE_GENERATION_TRACES = {}
+
+
+def _interaction_id(payload):
+    return (
+        payload.get("source_interaction_event_id")
+        or payload.get("interaction_event_id")
+        or payload.get("event_id")
+    )
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -159,8 +173,25 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
     """
 
     event_type = _event_type(payload)
-    print(f"[Autobiography] Analyzing event for autobiographical significance: {event_type}")
+    interaction_id = _interaction_id(payload)
+    if event_type == "RESPONSE_GENERATION_PROGRESS":
+        if interaction_id:
+            trace = _LIVE_GENERATION_TRACES.setdefault(str(interaction_id), [])
+            trace.append({
+                "timestamp": _timestamp(payload),
+                "event_id": payload.get("event_id"),
+                "round": payload.get("generation_round"),
+                "stage": payload.get("generation_stage"),
+                "delta": str(payload.get("content_delta") or ""),
+            })
+            del trace[:-512]
+        return {"observed_live_delta": True, "persisted": False}
 
+    payload = dict(payload)
+    if event_type in ("RESPONSE_GENERATION_FINISHED", "RESPONSE_INTERRUPTED", "RESPONSE_COMPLETED") and interaction_id:
+        payload["_live_generation_trace"] = _LIVE_GENERATION_TRACES.pop(str(interaction_id), [])
+
+    print(f"[Autobiography] Analyzing event for autobiographical significance: {event_type}")
     timestamp = _timestamp(payload)
 
     entry = {
@@ -260,14 +291,10 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
         if entry.get("response"):
             prior["response"] = entry["response"]
         trace = list(prior.get("generation_trace", []) or [])
-        if event_type == "RESPONSE_GENERATION_PROGRESS":
-            trace.append({
-                "timestamp": timestamp,
-                "round": payload.get("generation_round"),
-                "stage": payload.get("generation_stage"),
-                "delta": str(payload.get("content_delta") or "")[:2000],
-            })
-            prior["generation_trace"] = trace[-80:]
+        buffered_trace = payload.get("_live_generation_trace", [])
+        if buffered_trace:
+            trace.extend(buffered_trace)
+            prior["generation_trace"] = trace[-512:]
         if event_type == "CAPABILITY_EXECUTED":
             calls = list(prior.get("capability_activity", []) or [])
             calls.append({
@@ -283,15 +310,8 @@ async def process_autobiographical_event(payload: Dict[str, Any]):
         entry["event_types"] = [event_type]
         entry["last_event_type"] = event_type
         entry["last_updated_at"] = timestamp
-        entry["generation_trace"] = []
+        entry["generation_trace"] = list(payload.get("_live_generation_trace", []) or [])[-512:]
         entry["capability_activity"] = []
-        if event_type == "RESPONSE_GENERATION_PROGRESS":
-            entry["generation_trace"] = [{
-                "timestamp": timestamp,
-                "round": payload.get("generation_round"),
-                "stage": payload.get("generation_stage"),
-                "delta": str(payload.get("content_delta") or "")[:2000],
-            }]
         if event_type == "CAPABILITY_EXECUTED":
             entry["capability_activity"] = [{
                 "timestamp": timestamp,
