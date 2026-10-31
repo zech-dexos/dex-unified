@@ -509,7 +509,7 @@ async def process_live_reflection_event(payload: dict):
         "success": payload.get("success"),
         "content_delta": str(payload.get("content_delta") or "")[:1200],
     })
-    current["evidence"] = evidence[-80:]
+    current["evidence"] = evidence[-600:]
     if event_type == "PARTICIPANT_EVENT":
         current["participant_input"] = str(payload.get("message") or "")[:4000]
         current["first_person_context"] = (
