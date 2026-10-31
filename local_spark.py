@@ -172,29 +172,19 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
         for round_index in range(effective_tool_rounds + 1):
             if callable(on_event):
                 on_event("MODEL_PASS_STARTED", {"generation_round": round_index})
-            token_buffer = []
-
             def observe_token(delta):
-                if not isinstance(delta, str) or not delta:
-                    return
-                token_buffer.append(delta)
-                if sum(len(part) for part in token_buffer) >= 128:
-                    chunk = "".join(token_buffer)
-                    token_buffer.clear()
-                    if callable(on_token):
-                        on_token(chunk, {
-                            "generation_round": round_index,
-                            "generation_stage": "model_generation",
-                        })
+                # Forward each actual llama.cpp/SSE delta immediately. Do not
+                # coalesce tokens into character-sized batches: the live
+                # cognitive subscribers observe generation as it unfolds.
+                if isinstance(delta, str) and delta and callable(on_token):
+                    on_token(delta, {
+                        "generation_round": round_index,
+                        "generation_stage": "model_generation",
+                    })
 
             answer = local_chat_generate(
                 conversation, max_tokens=max_tokens, on_token=observe_token
             )
-            if token_buffer and callable(on_token):
-                on_token("".join(token_buffer), {
-                    "generation_round": round_index,
-                    "generation_stage": "model_generation",
-                })
             if not isinstance(answer, str) or not answer.strip():
                 raise RuntimeError("local GGUF returned empty text")
             requests = _parse_tool_request(answer)
