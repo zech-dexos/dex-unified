@@ -24,6 +24,9 @@ from lineage import create_entry, get_recent, verify_chain
 from paths import IDENTITY_PATH, AMENDMENT_PATH, REFLECTION_PATH, EXPERIENCES_PATH, NARRATIVE_PATH
 
 
+_LIVE_REFLECTION_TRACES = {}
+
+
 def load_identity() -> dict:
     if IDENTITY_PATH.exists():
         return json.loads(IDENTITY_PATH.read_text())
@@ -451,6 +454,23 @@ async def process_live_reflection_event(payload: dict):
     )
     if not interaction_id:
         return
+    event_type = str(payload.get("event_type") or "")
+    if event_type == "RESPONSE_GENERATION_PROGRESS":
+        trace = _LIVE_REFLECTION_TRACES.setdefault(str(interaction_id), [])
+        trace.append({
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "event_type": event_type,
+            "generation_round": payload.get("generation_round"),
+            "generation_stage": payload.get("generation_stage"),
+            "content_delta": str(payload.get("content_delta") or ""),
+        })
+        del trace[:-512]
+        return {"observed_live_delta": True, "persisted": False}
+
+    buffered_trace = []
+    if event_type in ("RESPONSE_GENERATION_FINISHED", "RESPONSE_INTERRUPTED", "RESPONSE_COMPLETED"):
+        buffered_trace = _LIVE_REFLECTION_TRACES.pop(str(interaction_id), [])
+
     state = load_self_state()
     contexts = list(state.get("live_reflection_context", []) or [])
     index = next((
@@ -477,8 +497,9 @@ async def process_live_reflection_event(payload: dict):
     source_id = payload.get("event_id")
     if source_id and source_id not in current["source_event_ids"]:
         current["source_event_ids"].append(source_id)
-    event_type = str(payload.get("event_type") or "")
     evidence = list(current.get("evidence", []) or [])
+    if buffered_trace:
+        evidence.extend(buffered_trace)
     evidence.append({
         "timestamp": now,
         "event_type": event_type,
@@ -488,7 +509,7 @@ async def process_live_reflection_event(payload: dict):
         "success": payload.get("success"),
         "content_delta": str(payload.get("content_delta") or "")[:1200],
     })
-    current["evidence"] = evidence[-80:]
+    current["evidence"] = evidence[-600:]
     if event_type == "PARTICIPANT_EVENT":
         current["participant_input"] = str(payload.get("message") or "")[:4000]
         current["first_person_context"] = (
