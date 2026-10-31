@@ -201,35 +201,59 @@ def local_chat_generate(messages, max_tokens: int = 200, on_token=None) -> str:
         except Exception:
             return sum(len(item["content"]) // 3 + 4 for item in items)
 
-    while len(normalized) > 2 and token_count(normalized) > context_size - output_tokens - 16:
-        # Keep the first system instruction and the newest conversational turns.
-        if normalized[0]["role"] == "system":
-            normalized.pop(1)
-        else:
-            normalized.pop(0)
+    # Preserve the live conversation before trimming historical context.
+    # The previous implementation repeatedly removed index 1 whenever the
+    # system prompt was first, silently deleting every prior user correction.
+    prompt_budget = max(256, context_size - output_tokens - 256)
+    system = dict(normalized[0]) if normalized[0]["role"] == "system" else None
+    turns = normalized[1:] if system else list(normalized)
 
-    # Leave room for the model's chat-template tokens as well as the
-    # completion. Raw message token counts alone do not include that overhead.
-    prompt_budget = max(128, context_size - output_tokens - 256)
+    # Keep the newest three exchanges (up to six messages), including the
+    # current user turn. Older transcript entries are the first material cut.
+    while len(turns) > 6 and token_count(([system] if system else []) + turns) > prompt_budget:
+        turns.pop(0)
+    while len(turns) > 2 and token_count(([system] if system else []) + turns) > prompt_budget:
+        turns.pop(0)
+
+    def trim_system_content(content, target_tokens):
+        if not content:
+            return content
+        if llm is not None:
+            encoded = llm.tokenize(content.encode("utf-8"), add_bos=False)
+            if len(encoded) <= target_tokens:
+                return content
+            # Retain the opening identity/constitution and the closing live
+            # conversation rules instead of keeping only a stale prompt prefix.
+            head_n = max(128, int(target_tokens * 0.68))
+            tail_n = max(64, target_tokens - head_n)
+            head = llm.detokenize(encoded[:head_n]).decode("utf-8", errors="replace")
+            tail = llm.detokenize(encoded[-tail_n:]).decode("utf-8", errors="replace")
+            return head + "\n\n[DexOS context compacted; live conversation retained]\n\n" + tail
+        max_chars = max(1024, target_tokens * 3)
+        if len(content) <= max_chars:
+            return content
+        head_n = int(max_chars * 0.68)
+        tail_n = max_chars - head_n
+        return content[:head_n] + "\n\n[DexOS context compacted; live conversation retained]\n\n" + content[-tail_n:]
+
+    messages_for_budget = ([system] if system else []) + turns
+    if token_count(messages_for_budget) > prompt_budget and system:
+        conversation_tokens = sum(token_count([turn]) for turn in turns)
+        system_budget = max(384, prompt_budget - conversation_tokens)
+        system["content"] = trim_system_content(system["content"], system_budget)
+        messages_for_budget = [system] + turns
+
+    # If the model's template overhead still makes the context too large,
+    # remove only the oldest remaining transcript messages. Never discard
+    # the current participant contribution.
+    while len(turns) > 1 and token_count(([system] if system else []) + turns) > prompt_budget:
+        turns.pop(0)
+    normalized = ([system] if system else []) + turns
     if token_count(normalized) > prompt_budget:
-        system = dict(normalized[0]) if normalized[0]["role"] == "system" else None
-        last = dict(normalized[-1])
-        normalized = ([system] if system else []) + [last]
-
-        # The old code shortened only the final message, leaving an oversized
-        # system prompt intact. That could still produce a 3k+ token prompt
-        # against the configured 2k context. Shrink the system prompt's tail
-        # first, preserving its opening instructions, then shorten the input.
-        while token_count(normalized) > prompt_budget:
-            if system and len(system["content"]) > 256:
-                system["content"] = system["content"][:max(256, int(len(system["content"]) * 0.8))]
-            elif len(last["content"]) > 256:
-                last["content"] = last["content"][-max(256, int(len(last["content"]) * 0.8)):]
-            else:
-                raise ValueError(
-                    f"Unable to fit chat messages into context window: "
-                    f"{token_count(normalized)} tokens, budget {prompt_budget}"
-                )
+        raise ValueError(
+            f"Current turn and compacted identity exceed context window: "
+            f"{token_count(normalized)} tokens, budget {prompt_budget}"
+        )
 
     request = {
         "messages": normalized,
