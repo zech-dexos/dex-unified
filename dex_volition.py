@@ -152,7 +152,8 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
     if decision == "create_goal":
         candidate = data.get("goal") if isinstance(data.get("goal"), dict) else {}
         description = str(candidate.get("description", "")).strip()
-        if len(description) >= 12:
+        success_criteria = str(candidate.get("success_criteria", "")).strip()
+        if len(description) >= 12 and len(success_criteria) >= 12:
             state = load_self_state(path)
             duplicate = next((g for g in state.get("active_goals_state", [])
                               if g.get("status") == "active"
@@ -168,7 +169,7 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
                 goal = create_internal_goal(
                     description=description[:700],
                     priority=priority,
-                    success_criteria=str(candidate.get("success_criteria", ""))[:700],
+                    success_criteria=success_criteria[:700],
                     path=path,
                 )
                 events.append(("GOAL_CREATED", {"goal_id": goal["goal_id"], "goal": goal["description"],
@@ -191,11 +192,20 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
                                                  "progress": data.get("progress"), "source": "autonomous_volition"}))
                 result["continue_cognition"] = bool(data.get("continue_cognition", True))
         else:
-            from gosdw import update_goal_status
-            goal = update_goal_status(goal_id, "completed", progress_report=str(data.get("progress", "Completed through autonomous review."))[:1200], path=path)
-            if goal:
-                events.append(("GOAL_COMPLETED", {"goal_id": goal_id, "goal": goal.get("description", ""),
-                                                   "result": data.get("progress", ""), "source": "autonomous_volition"}))
+            # Completion requires an existing success criterion and an explicit
+            # evidence report; a model label alone cannot close a goal.
+            state = load_self_state(path)
+            candidate_goal = next((g for g in state.get("active_goals_state", [])
+                                   if g.get("goal_id") == goal_id and g.get("status") == "active"), None)
+            evidence = str(data.get("progress", "")).strip()
+            if candidate_goal and len(str(candidate_goal.get("success_criteria", "")).strip()) >= 12 and len(evidence) >= 20:
+                from gosdw import update_goal_status
+                goal = update_goal_status(goal_id, "completed", progress_report=evidence[:1200], path=path)
+                if goal:
+                    events.append(("GOAL_COMPLETED", {"goal_id": goal_id, "goal": goal.get("description", ""),
+                                                       "result": evidence[:1200], "source": "autonomous_volition"}))
+            else:
+                result["completion_rejected"] = "existing success criteria and a substantive evidence report are required"
 
     elif decision == "communicate":
         candidate = data.get("communication") if isinstance(data.get("communication"), dict) else {}
