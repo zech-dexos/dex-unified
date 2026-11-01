@@ -370,6 +370,16 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
             integrated_model = refresh_self_model("ambient_cognition_context")
             context = integrated_model.get("integration", {}).get("current_context", {})
             becoming = integrated_model.get("becoming", {})
+            active_intentions = []
+            try:
+                from dataclasses import asdict
+                from intent import load_intents
+                active_intentions = [
+                    asdict(item) for item in load_intents()
+                    if getattr(item, "status", "") == "active"
+                ][-5:]
+            except Exception as intention_error:
+                print(f"[Volition] existing intent context unavailable: {intention_error}")
             ambient_context = {
                 "attention": context.get("attention"),
                 "attention_state": {
@@ -384,7 +394,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                 "interlocutor": context.get("interlocutor", {}),
                 "experiential_continuity": context.get("experiential_continuity", {}),
                 "pending_reflection_requests": (context.get("pending_reflection_requests", []) or [])[-5:],
-                "active_intentions": (state.get("intentions", []) or state.get("active_intentions", []) or [])[-5:],
+                "active_intentions": active_intentions,
                 "pending_communications": [
                     {"message": item.get("message"), "reason": item.get("reason"), "urgency": item.get("urgency")}
                     for item in (state.get("communication_outbox", []) or [])[-5:]
