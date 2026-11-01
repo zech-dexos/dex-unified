@@ -417,6 +417,7 @@ AMBIENT_JSON_SCHEMA = {
             "additionalProperties": False,
         },
         "goal_id": {"type": "string"},
+        "handled_target_id": {"type": "string", "maxLength": 128},
         "subgoal": {"type": "string", "maxLength": 500},
         "progress": {"type": "string", "maxLength": 1200},
         "communication": {
