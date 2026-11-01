@@ -252,7 +252,7 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                         "[DEXOS TOOL VALIDATION FEEDBACK] Your proposed tool request was rejected: "
                         + parsed.get("reason", "invalid request")
                         + ". Correct the JSON and required arguments, or answer normally if no tool is needed. "
-                        "The original participant request remains: "
+                        "The original request remains: "
                         + root_request[:2500]
                     ),
                 })
