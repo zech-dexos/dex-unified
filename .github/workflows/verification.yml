@@ -20,6 +20,8 @@ jobs:
         run: python dex_events_test.py
       - name: Test cross-process SelfState durability
         run: python self_state_test.py
+      - name: Test local runtime provider isolation
+        run: python dex_runtime_local_test.py
       - name: Test durable cross-process event bridge
         run: python dex_event_bridge_test.py
       - name: Test attention and workspace integration
