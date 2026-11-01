@@ -137,16 +137,28 @@ def enqueue_communication(message: str, reason: str = "", urgency: str = "normal
         "delivery_attempts": 0,
     }
     outbox.append(item)
-    update_self_state({"communication_outbox": outbox[-100:]}, path=path)
+    # Retain every pending/in-flight intention. Bound only completed history,
+    # so a busy period cannot silently evict a message Root has not received.
+    pending = [
+        record for record in outbox
+        if isinstance(record, dict) and record.get("status") in ("pending", "delivering")
+    ]
+    history = [
+        record for record in outbox
+        if isinstance(record, dict) and record.get("status") not in ("pending", "delivering")
+    ][-100:]
+    update_self_state({"communication_outbox": history + pending}, path=path)
     return item
 
 
 def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = None,
                                cycle_id: str = "", path=SELF_STATE_PATH) -> dict:
     """Apply one model choice to durable cognition; return auditable state changes."""
-    decision = str(data.get("decision", "think")).lower()
+    if not isinstance(data, dict):
+        raise TypeError("volitional decision must be a dictionary")
+    decision = str(data.get("decision", "")).strip().lower()
     if decision not in VALID_DECISIONS:
-        decision = "think"
+        raise ValueError("volitional decision must contain an explicit valid decision")
     thought = None if decision == "rest" else _persist_thought(data.get("thought", ""), data.get("salience", 0.35), path=path)
     events = []
     result = {"decision": decision, "thought_id": thought.get("thought_id") if thought else None,
@@ -245,8 +257,30 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
 
 
 def pending_communications(path=SELF_STATE_PATH) -> list:
+    """Return pending messages and recover deliveries stranded by a process crash."""
     state = load_self_state(path)
-    return [dict(item) for item in state.get("communication_outbox", []) or []
+    outbox = list(state.get("communication_outbox", []) or [])
+    now = datetime.now(timezone.utc)
+    recovered = False
+    for item in outbox:
+        if not isinstance(item, dict) or item.get("status") != "delivering":
+            continue
+        attempted = item.get("last_delivery_attempt_at")
+        try:
+            parsed = datetime.fromisoformat(str(attempted).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            parsed = None
+        # A live delivery gets two minutes to finish. Older/incomplete claims
+        # are made pending again; the durable message itself is never dropped.
+        if parsed is None or (now - parsed).total_seconds() >= 120:
+            item["status"] = "pending"
+            item["recovered_at"] = _now_iso()
+            recovered = True
+    if recovered:
+        update_self_state({"communication_outbox": outbox}, path=path)
+    return [dict(item) for item in outbox
             if isinstance(item, dict) and item.get("status") == "pending"]
 
 
@@ -298,7 +332,10 @@ async def deliver_pending_communications(path=SELF_STATE_PATH) -> dict:
                 response = await client.post(
                     f"https://discord.com/api/v10/channels/{channel_id}/messages",
                     headers={"Authorization": f"Bot {token}"},
-                    json={"content": f"**Dex — {target.get('urgency', 'normal')}**\n{target.get('message', '')}"},
+                    json={
+                        "content": f"**Dex — {target.get('urgency', 'normal')}**\n{target.get('message', '')}",
+                        "allowed_mentions": {"parse": []},
+                    },
                 )
                 response.raise_for_status()
                 payload = response.json()
