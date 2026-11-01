@@ -81,6 +81,33 @@ class AmbientSchedulerTests(unittest.TestCase):
         self.assertGreater(delay, 0)
         self.assertLessEqual(delay, 300)
 
+    def test_legacy_null_deadlines_do_not_force_immediate_reinference(self):
+        attended = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state = {
+            "persistent_thoughts": [{
+                "thought_id": "legacy-thought",
+                "status": "active",
+                "content": "A previously attended thought.",
+                "last_attended_at": attended,
+                "next_attention_at": None,
+            }],
+            "active_goals_state": [{
+                "goal_id": "legacy-goal",
+                "status": "active",
+                "creation_timestamp": attended,
+                "next_attention_at": None,
+            }],
+            "pending_reflection_requests": [],
+            "pending_cognitive_observations": [],
+            "active_mental_workspace_state": {},
+            "communication_outbox": [],
+        }
+        self.assertFalse(_scheduled_cognition_due(state))
+        delay = _next_scheduled_wake_seconds(state)
+        self.assertIsNotNone(delay)
+        self.assertGreater(delay, 0)
+        self.assertLessEqual(delay, 300)
+
     def test_rest_suppresses_due_work_until_deadline_but_event_can_interrupt(self):
         future = (datetime.now(timezone.utc) + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
         state = {
