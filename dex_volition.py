@@ -272,38 +272,39 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
             )
             if (
                 candidate_goal
+                and candidate_goal.get("status") in ("active", "completion_proposed")
                 and len(str(candidate_goal.get("success_criteria", "")).strip()) >= 12
                 and len(evidence) >= 20
                 and verified_evidence
             ):
-                from gosdw import update_goal_status
-                goal = update_goal_status(
-                    goal_id, "completed",
-                    progress_report=evidence[:1200],
-                    path=path,
-                )
-                if goal:
-                    goal["completion_evidence"] = verified_evidence
-                    state = load_self_state(path)
-                    goals = list(state.get("active_goals_state", []) or [])
-                    for record in goals:
-                        if record.get("goal_id") == goal_id:
-                            record["completion_evidence"] = verified_evidence
-                            break
-                    update_self_state({"active_goals_state": goals}, path=path)
-                    events.append(("GOAL_COMPLETED", {
-                        "goal_id": goal_id,
-                        "goal": goal.get("description", ""),
-                        "result": evidence[:1200],
-                        "completion_evidence": verified_evidence,
-                        "source": "autonomous_volition",
-                    }))
-                    result["completion_evidence"] = verified_evidence
-                    result["continue_cognition"] = bool(data.get("continue_cognition", False))
+                # Model-supplied evidence can establish provenance, not that
+                # the goal's semantic acceptance criteria were actually met.
+                # Keep the goal open for explicit verification by Root or an
+                # independently trusted verifier.
+                goals = list(state.get("active_goals_state", []) or [])
+                for record in goals:
+                    if record.get("goal_id") == goal_id:
+                        record["status"] = "completion_proposed"
+                        record["completion_proposed_at"] = _now_iso()
+                        record["completion_report"] = evidence[:1200]
+                        record["completion_evidence"] = verified_evidence
+                        break
+                update_self_state({"active_goals_state": goals}, path=path)
+                events.append(("GOAL_COMPLETION_PROPOSED", {
+                    "goal_id": goal_id,
+                    "goal": candidate_goal.get("description", ""),
+                    "success_criteria": candidate_goal.get("success_criteria", ""),
+                    "result": evidence[:1200],
+                    "completion_evidence": verified_evidence,
+                    "source": "autonomous_volition",
+                }))
+                result["completion_proposed"] = True
+                result["completion_evidence"] = verified_evidence
+                result["continue_cognition"] = False
             else:
                 result["completion_rejected"] = (
-                    "completion requires an active goal, success criteria, a substantive report, "
-                    "and at least one verified artifact checksum or persisted event reference"
+                    "completion proposal requires an active goal, defined success criteria, "
+                    "a substantive report, and at least one verified artifact checksum or persisted event reference"
                 )
 
     elif decision == "communicate":
@@ -338,6 +339,41 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
 
 
 DELIVERY_LEASE_SECONDS = 120
+
+
+def verify_goal_completion(goal_id: str, verifier: str, verification: str,
+                           path=SELF_STATE_PATH) -> Optional[dict]:
+    """Finalize a proposal only after an explicit trusted human/verifier decision."""
+    verifier = str(verifier or "").strip()
+    verification = str(verification or "").strip()
+    if len(verifier) < 2 or len(verification) < 12:
+        raise ValueError("explicit verifier identity and substantive verification are required")
+    state = load_self_state(path)
+    goals = list(state.get("active_goals_state", []) or [])
+    target = next((item for item in goals
+                   if item.get("goal_id") == goal_id
+                   and item.get("status") == "completion_proposed"), None)
+    if not target:
+        return None
+    from gosdw import update_goal_status
+    completed = update_goal_status(
+        goal_id, "completed",
+        progress_report=str(target.get("completion_report", ""))[:1200],
+        path=path,
+    )
+    if not completed:
+        return None
+    refreshed = load_self_state(path)
+    goals = list(refreshed.get("active_goals_state", []) or [])
+    for item in goals:
+        if item.get("goal_id") == goal_id:
+            item["completion_verified_by"] = verifier[:120]
+            item["completion_verification"] = verification[:1200]
+            item["completion_verified_at"] = _now_iso()
+            item["completion_evidence"] = target.get("completion_evidence", [])
+            break
+    update_self_state({"active_goals_state": goals}, path=path)
+    return next((item for item in goals if item.get("goal_id") == goal_id), None)
 
 
 def pending_communications(path=SELF_STATE_PATH) -> list:
