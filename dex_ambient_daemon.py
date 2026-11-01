@@ -115,8 +115,14 @@ def _select_target(state):
             "text": t["content"],
         }
 
-    # Active goals are explicit cognitive work.
-    goals = prioritize_goals()
+    # Active goals are explicit cognitive work, revisited only when due.
+    goals = [
+        goal for goal in prioritize_goals()
+        if (
+            _parse_time(goal.get("next_attention_at")) is None
+            or now >= _parse_time(goal.get("next_attention_at"))
+        )
+    ]
     if goals:
         goal = goals[0]
         subtasks = [
@@ -235,6 +241,16 @@ def _persist_pulse_state(target, thought_text, salience, status, next_attention_
     # Keep the active workspace as the durable place where the selected
     # cognitive thread develops. We never create a new persistent thought
     # merely because the ambient model emitted text.
+    if target and target.get("kind") in ("goal", "goal_subtask") and target.get("goal_id"):
+        goals = list(current.get("active_goals_state", []) or [])
+        for goal in goals:
+            if goal.get("goal_id") == target["goal_id"] and goal.get("status") == "active":
+                goal["last_attended_at"] = _now_iso()
+                if next_attention_at:
+                    goal["next_attention_at"] = next_attention_at
+                delta["active_goals_state"] = goals
+                break
+
     if target and target.get("kind") == "persistent_thought" and target.get("id"):
         thoughts = list(current.get("persistent_thoughts", []))
         for item in thoughts:
@@ -305,16 +321,25 @@ def _register_target_failure(target):
                 update_self_state({key: items})
                 return
         return
-    if kind == "persistent_thought":
+    if kind in ("persistent_thought", "goal", "goal_subtask"):
         retry_at = (
             datetime.now(timezone.utc) + timedelta(seconds=AMBIENT_REVISIT_SECONDS)
         ).strftime("%Y-%m-%dT%H:%M:%SZ")
-        thoughts = list(load_self_state().get("persistent_thoughts", []) or [])
-        for item in thoughts:
-            if item.get("thought_id") == target["id"]:
-                item["next_attention_at"] = retry_at
-                update_self_state({"persistent_thoughts": thoughts})
-                return
+        state = load_self_state()
+        if kind == "persistent_thought":
+            thoughts = list(state.get("persistent_thoughts", []) or [])
+            for item in thoughts:
+                if item.get("thought_id") == target["id"]:
+                    item["next_attention_at"] = retry_at
+                    update_self_state({"persistent_thoughts": thoughts})
+                    return
+        else:
+            goals = list(state.get("active_goals_state", []) or [])
+            for item in goals:
+                if item.get("goal_id") == target.get("goal_id"):
+                    item["next_attention_at"] = retry_at
+                    update_self_state({"active_goals_state": goals})
+                    return
 
 
 def _reflection_target_was_handled(target, data, volition_result, thought_text) -> bool:
@@ -336,13 +361,18 @@ def _next_scheduled_wake_seconds(state=None):
     state = state if isinstance(state, dict) else load_self_state()
     now = datetime.now(timezone.utc)
     deadlines = []
-    for item in state.get("persistent_thoughts", []) or []:
-        if not isinstance(item, dict) or item.get("status") not in ("active", "deferred"):
-            continue
-        due = _parse_time(item.get("next_attention_at"))
-        if due is None:
-            return 0.0
-        deadlines.append((due - now).total_seconds())
+    for collection in ("persistent_thoughts", "active_goals_state"):
+        for item in state.get(collection, []) or []:
+            if not isinstance(item, dict):
+                continue
+            if collection == "persistent_thoughts" and item.get("status") not in ("active", "deferred"):
+                continue
+            if collection == "active_goals_state" and item.get("status") != "active":
+                continue
+            due = _parse_time(item.get("next_attention_at"))
+            if due is None:
+                return 0.0
+            deadlines.append((due - now).total_seconds())
     for key in ("pending_reflection_requests", "pending_cognitive_observations"):
         for item in state.get(key, []) or []:
             if not isinstance(item, dict) or item.get("status") != "deferred":
@@ -375,8 +405,14 @@ def _scheduled_cognition_due(state=None):
     return any(
         _parse_time(item.get("next_attention_at")) is None
         or datetime.now(timezone.utc) >= _parse_time(item.get("next_attention_at"))
-        for item in state.get("persistent_thoughts", []) or []
-        if isinstance(item, dict) and item.get("status") in ("active", "deferred")
+        for collection in ("persistent_thoughts", "active_goals_state")
+        for item in state.get(collection, []) or []
+        if isinstance(item, dict)
+        and (
+            item.get("status") in ("active", "deferred")
+            if collection == "persistent_thoughts"
+            else item.get("status") == "active"
+        )
     ) or (
         bool(
             (state.get("active_mental_workspace_state", {}) or {}).get("is_active")
