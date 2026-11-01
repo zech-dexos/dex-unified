@@ -5,7 +5,6 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Callable, Awaitable, Dict, Any
 
-from drift_tape import add_thought
 from dex_memory import claim_ambient_tick
 from dex_events import bus, dispatch_complete, setup_cognitive_layers
 from self_state import load_self_state, update_self_state
@@ -563,7 +562,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                         "recent_reflection_requests": completed[-10:],
                     })
 
-                add_thought(thought_text, salience)
+                # apply_volitional_decision already persisted this thought once.
 
                 next_attention = (
                     datetime.now(timezone.utc)
@@ -751,12 +750,11 @@ async def ambient_pulse_loop(llm_callable: Callable[[str], Awaitable[str]]):
                     await asyncio.sleep(0.5)
             first_cycle = False
             result = await run_ambient_tick(llm_callable, event_driven=True)
-            steps = 1
-            while result.get("continue_cognition") and steps < 3:
+            # Dex's explicit rest choice ends a chain. Non-rest decisions
+            # continue into another decision; each tick drains the shared event
+            # journal before inference so new interaction is incorporated.
+            while result.get("continue_cognition"):
                 result = await run_ambient_tick(llm_callable, event_driven=True)
-                steps += 1
-            if steps >= 3 and result.get("continue_cognition"):
-                print("[Volition] yielded after three linked decisions; waiting for a new event", flush=True)
         except asyncio.CancelledError:
             print("[Ambient Daemon] Event-driven loop cancelled, shutting down")
             break
