@@ -63,6 +63,21 @@ _EVOCABLE = {
 }
 
 
+def _bounded_observation(value, max_chars: int = 1800):
+    """Keep capability feedback bounded without emitting malformed JSON."""
+    try:
+        encoded = json.dumps(value, ensure_ascii=False, default=str)
+    except Exception:
+        encoded = str(value)
+    if len(encoded) <= max_chars:
+        return value
+    return {
+        "truncated": True,
+        "preview": encoded[:max_chars - 100],
+        "original_character_count": len(encoded),
+    }
+
+
 def _parse_tool_request_result(text):
     """Distinguish ordinary prose, valid tool requests, and rejected tool requests."""
     candidate = str(text or "").strip()
@@ -253,7 +268,7 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                         + parsed.get("reason", "invalid request")
                         + ". Correct the JSON and required arguments, or answer normally if no tool is needed. "
                         "The original request remains: "
-                        + root_request[:2500]
+                        + root_request
                     ),
                 })
                 continue
@@ -292,9 +307,16 @@ def local_spark_generate(messages, max_tokens=256, max_tool_rounds=MAX_TOOL_ROUN
                 "role": "user",
                 "content": (
                     "[ROOT'S ORIGINAL REQUEST — KEEP THIS TASK IN VIEW]\n"
-                    + root_request[:2500]
+                    + root_request
                     + "\n\n[ACTUAL DEXOS CAPABILITY OBSERVATIONS]\n"
-                    + json.dumps(observations, ensure_ascii=False, default=str)[:6000]
+                    + json.dumps([
+                        {
+                            "name": item.get("name"),
+                            "arguments": item.get("arguments", {}),
+                            "observation": _bounded_observation(item.get("observation")),
+                        }
+                        for item in observations
+                    ], ensure_ascii=False, default=str)
                     + "\nUse these actual observations to answer the original request naturally. "
                       "Never claim observations that are not present here."
                 ),
