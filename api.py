@@ -654,8 +654,12 @@ async def chat(req: ChatRequest):
     result = dex_runtime(req.message, user_id=getattr(req, "user_id", "default"))
     # Cognitive cycle: pick/advance a persistent thought before building the prompt.
     try:
-        from ape_scheduler import run_cycle
-        cycle_result = run_cycle()
+        from dex_cognitive_cycle import run_local_cognitive_cycle
+        # APE reflection uses the resident local Heretic GGUF and runs off the
+        # FastAPI event loop; no Gemini, Vertex, or hosted fallback is involved.
+        cycle_result = await asyncio.get_running_loop().run_in_executor(
+            None, run_local_cognitive_cycle
+        )
         print(f"[ape_scheduler] {cycle_result}")
         from dex_events import bus as _cognitive_event_bus
         if cycle_result.get("workspace_released"):
