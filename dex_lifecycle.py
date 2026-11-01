@@ -121,6 +121,20 @@ def enter_active_mode(state):
     return mode
 
 
+
+def enter_resting_mode():
+    """Persist Dex's explicit choice to stop the current cognition chain."""
+    previous = _load_lifecycle(update_self_state({}).get("runtime_lifecycle", {}))
+    now = _iso()
+    _write_lifecycle(previous, {
+        "mode": "resting",
+        "previous_mode": previous.get("mode", "active"),
+        "last_transition_at": now,
+        "last_rest_choice_at": now,
+    })
+    return {"mode": "resting", "last_rest_choice_at": now}
+
+
 def run_rest_maintenance(state):
     """Perform bounded, non-generative maintenance and otherwise remain idle."""
     previous = _load_lifecycle(state)
