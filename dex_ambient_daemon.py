@@ -539,6 +539,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
         # Read the integrated self-model as continuity context for the next
         # cognitive step. A failure here must not stop the ambient loop.
         self_model_context = ""
+        operational_context_text = ""
         try:
             from who_ai_am import refresh_self_model
             from boot import load_identity as load_constitutional_identity
@@ -650,8 +651,11 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                 },
             }
             operational_projection = {
-                "attention": str(ambient_context.get("attention") or "")[:220],
-                "attention_state": ambient_context.get("attention_state", {}),
+                "attention": str(ambient_context.get("attention") or "")[:180],
+                "attention_state": {
+                    "current_focus": str((ambient_context.get("attention_state", {}) or {}).get("current_focus") or "")[:180],
+                    "salience": (ambient_context.get("attention_state", {}) or {}).get("salience"),
+                },
                 "goals": [
                     {
                         "goal_id": item.get("goal_id"),
@@ -662,12 +666,12 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                     for item in (ambient_context.get("goals", []) or [])[-3:]
                     if isinstance(item, dict)
                 ],
-                "active_workspace": ambient_context.get("active_workspace", {}),
-                "open_loops": (ambient_context.get("open_loops", []) or [])[-3:],
-                "active_intentions": (active_intentions or [])[-3:],
-                "pending_reflection_requests": (ambient_context.get("pending_reflection_requests", []) or [])[-3:],
-                "pending_communications": (ambient_context.get("pending_communications", []) or [])[-3:],
-                "experiential_continuity": ambient_context.get("experiential_continuity", {}),
+                "active_workspace": str(ambient_context.get("active_workspace", {}))[:240],
+                "open_loops": [str(item)[:160] for item in (ambient_context.get("open_loops", []) or [])[-2:]],
+                "active_intentions": [str(item)[:160] for item in (active_intentions or [])[-2:]],
+                "pending_reflection_requests": [str(item)[:160] for item in (ambient_context.get("pending_reflection_requests", []) or [])[-2:]],
+                "pending_communications": [str(item)[:160] for item in (ambient_context.get("pending_communications", []) or [])[-2:]],
+                "experiential_continuity": str(ambient_context.get("experiential_continuity", {}))[:240],
                 "persistent_thoughts": [
                     str(item.get("content", ""))[:180]
                     for item in (ambient_context.get("persistent_thoughts", []) or [])[-2:]
@@ -692,16 +696,27 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                 "identity": identity_projection,
                 "historical_context": historical_projection,
             }
+            # Put the bounded operational state directly after the governing
+            # instructions. The ambient fitter preserves a larger prompt head,
+            # so live goals/workspace/intentions survive before historical tail.
+            operational_context_text = (
+                "\n\nPRIORITY OPERATIONAL SELF STATE (current work):\n"
+                + json.dumps(operational_projection, ensure_ascii=False, default=str)
+            )
             self_model_context = (
-                "\n\nWHO AI AM — COMPACT CONTINUITY PROJECTION:\n"
-                + json.dumps(self_model_projection, ensure_ascii=False, default=str)
+                "\n\nWHO AI AM — IDENTITY AND HISTORICAL CONTINUITY:\n"
+                + json.dumps({
+                    "identity": identity_projection,
+                    "historical_context": historical_projection,
+                }, ensure_ascii=False, default=str)
             )
         except Exception as exc:
             print(f"[Who AI Am] ambient context unavailable: {exc}")
 
         target_prompt = (
             f"{AMBIENT_PROMPT}\n\n"
-            f"SUGGESTED CONTEXT ({target['kind']}; not binding):\n{target['text']}\n\n"
+            + operational_context_text
+            + f"\n\nSUGGESTED CONTEXT ({target['kind']}; not binding):\n{target['text']}\n\n"
             + talnir_context
             + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
             # Keep the integrated identity/autobiography projection at the end
