@@ -313,6 +313,20 @@ def _register_target_failure(target):
                 return
 
 
+def _reflection_target_was_handled(target, data, volition_result, thought_text) -> bool:
+    """Only an explicit matching think decision can acknowledge a reflection request."""
+    return bool(
+        isinstance(target, dict)
+        and target.get("kind") == "reflection_request"
+        and isinstance(data, dict)
+        and data.get("decision") == "think"
+        and data.get("handled_target_id") == target.get("id")
+        and str(thought_text or "").strip()
+        and isinstance(volition_result, dict)
+        and volition_result.get("thought_id")
+    )
+
+
 def _next_scheduled_wake_seconds(state=None):
     """Return the next durable work deadline; None means wait for an event."""
     state = state if isinstance(state, dict) else load_self_state()
@@ -333,6 +347,11 @@ def _next_scheduled_wake_seconds(state=None):
             if due is None:
                 return 0.0
             deadlines.append((due - now).total_seconds())
+    workspace = state.get("active_mental_workspace_state", {}) or {}
+    if workspace.get("is_active") and workspace.get("concept_identifier"):
+        last = _parse_time(workspace.get("last_refresh_timestamp"))
+        due = (last or now) + timedelta(seconds=AMBIENT_REVISIT_SECONDS)
+        deadlines.append((due - now).total_seconds())
     if os.environ.get("DISCORD_TOKEN", "").strip() and os.environ.get("DEX_INITIATIVE_CHANNEL_ID", "").strip():
         for item in state.get("communication_outbox", []) or []:
             if not isinstance(item, dict):
@@ -354,6 +373,16 @@ def _scheduled_cognition_due(state=None):
         or datetime.now(timezone.utc) >= _parse_time(item.get("next_attention_at"))
         for item in state.get("persistent_thoughts", []) or []
         if isinstance(item, dict) and item.get("status") in ("active", "deferred")
+    ) or (
+        bool(
+            (state.get("active_mental_workspace_state", {}) or {}).get("is_active")
+            and (state.get("active_mental_workspace_state", {}) or {}).get("concept_identifier")
+            and (
+                _parse_time((state.get("active_mental_workspace_state", {}) or {}).get("last_refresh_timestamp")) is None
+                or datetime.now(timezone.utc) - _parse_time((state.get("active_mental_workspace_state", {}) or {}).get("last_refresh_timestamp"))
+                >= timedelta(seconds=AMBIENT_REVISIT_SECONDS)
+            )
+        )
     ) or any(
         item.get("status") == "pending"
         or (
@@ -678,9 +707,9 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
 
             if (
                 thought_text
-                and target.get("kind") == "reflection_request"
-                and volition_result.get("decision") == "think"
-                and data.get("handled_target_id") == target.get("id")
+                and _reflection_target_was_handled(
+                    target, data, volition_result, thought_text
+                )
             ):
                 # Only the model's explicit acknowledgment of this exact request
                 # may close it. Unrelated goal/communication decisions leave it pending.
