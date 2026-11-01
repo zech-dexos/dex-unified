@@ -1,4 +1,5 @@
 """Deterministic persistence checks for Dex's volition and communication outbox."""
+import hashlib
 import json
 import tempfile
 import unittest
@@ -127,12 +128,55 @@ class VolitionTests(unittest.TestCase):
         completed = apply_volitional_decision({
             "decision": "complete_goal",
             "goal_id": goal_id,
-            "progress": "Acceptance evidence confirms the defined success criteria.",
-            "thought": "The work item is complete based on recorded evidence.",
+            "progress": "The implementation artifact was checked against its recorded checksum.",
+            "completion_evidence": [{
+                "type": "artifact",
+                "path": "dex_volition.py",
+                "sha256": hashlib.sha256((Path(__file__).resolve().parent / "dex_volition.py").read_bytes()).hexdigest(),
+                "claim": "The source artifact exists and matches its SHA-256 checksum.",
+            }],
+            "thought": "The work item is complete based on verified artifact evidence.",
             "salience": 0.4,
         }, path=self.path)
         self.assertTrue(completed["events"])
         self.assertEqual(load_self_state(self.path)["active_goals_state"][0]["status"], "completed")
+
+    def test_goal_completion_requires_a_real_checksummed_artifact(self):
+        created = apply_volitional_decision({
+            "decision": "create_goal",
+            "thought": "A goal must close only against a verifiable result.",
+            "salience": 0.5,
+            "goal": {
+                "description": "Verify a real artifact before completion",
+                "priority": "medium",
+                "success_criteria": "A tracked source artifact exists with the expected checksum.",
+            },
+        }, path=self.path)
+        artifact = Path(__file__).resolve().parent / "dex_volition.py"
+        digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        rejected = apply_volitional_decision({
+            "decision": "complete_goal",
+            "goal_id": created["goal_id"],
+            "progress": "The implementation has been reviewed and the artifact is present.",
+            "completion_evidence": [{
+                "type": "artifact", "path": "dex_volition.py",
+                "sha256": "0" * 64, "claim": "Deliberately incorrect checksum",
+            }],
+        }, path=self.path)
+        self.assertIn("completion_rejected", rejected)
+        accepted = apply_volitional_decision({
+            "decision": "complete_goal",
+            "goal_id": created["goal_id"],
+            "progress": "The implementation has been reviewed and the artifact is present.",
+            "completion_evidence": [{
+                "type": "artifact", "path": "dex_volition.py",
+                "sha256": digest, "claim": "The committed implementation artifact was checked.",
+            }],
+        }, path=self.path)
+        self.assertTrue(accepted.get("completion_evidence"))
+        goal = load_self_state(self.path)["active_goals_state"][0]
+        self.assertEqual(goal["status"], "completed")
+        self.assertEqual(goal["completion_evidence"][0]["sha256"], digest)
 
     def test_goal_cannot_be_completed_without_success_evidence(self):
         created = apply_volitional_decision({
