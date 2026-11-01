@@ -1,12 +1,14 @@
 """Tests for event-driven, choice-preserving ambient wake behavior."""
+import asyncio
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from datetime import datetime, timedelta, timezone
 
 from dex_ambient_daemon import (
     _next_scheduled_wake_seconds,
     _cognitive_rest_active,
     _should_run_ambient_cycle,
+    ambient_pulse_loop,
     _reflection_target_was_handled,
     _scheduled_cognition_due,
 )
@@ -122,6 +124,37 @@ class AmbientSchedulerTests(unittest.TestCase):
         self.assertIsNotNone(delay)
         self.assertGreater(delay, 0)
         self.assertLessEqual(delay, 120)
+
+    def test_actual_ambient_loop_does_not_reinfer_after_rest(self):
+        async def scenario():
+            state = {
+                "active_goals_state": [{"goal_id": "g1", "status": "active"}],
+                "persistent_thoughts": [],
+                "pending_reflection_requests": [],
+                "pending_cognitive_observations": [],
+                "active_mental_workspace_state": {},
+            }
+            calls = []
+
+            async def choose_rest(_llm, event_driven=False):
+                calls.append("inference")
+                state["cognitive_rest_until"] = (
+                    datetime.now(timezone.utc) + timedelta(minutes=5)
+                ).strftime("%Y-%m-%dT%H:%M:%SZ")
+                return {"status": "resting", "continue_cognition": False}
+
+            async def stop_waiting(_seconds):
+                raise asyncio.CancelledError()
+
+            with patch("dex_ambient_daemon.load_self_state", return_value=state), \
+                 patch("dex_ambient_daemon.run_ambient_tick", side_effect=choose_rest), \
+                 patch("dex_event_bridge.pending_events", return_value=[]), \
+                 patch("dex_ambient_daemon.asyncio.sleep", new=stop_waiting):
+                await ambient_pulse_loop(lambda _prompt: "unused")
+
+            self.assertEqual(calls, ["inference"])
+
+        asyncio.run(scenario())
 
     def test_reflection_request_requires_matching_explicit_acknowledgment(self):
         target = {"kind": "reflection_request", "id": "request-1"}
