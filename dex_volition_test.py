@@ -11,6 +11,7 @@ from dex_volition import (
     apply_volitional_decision,
     parse_volitional_output,
     pending_communications,
+    verify_goal_completion,
 )
 from self_state import load_self_state, update_self_state
 from local_llm import AMBIENT_JSON_SCHEMA
@@ -138,8 +139,16 @@ class VolitionTests(unittest.TestCase):
             "thought": "The work item is complete based on verified artifact evidence.",
             "salience": 0.4,
         }, path=self.path)
-        self.assertTrue(completed["events"])
-        self.assertEqual(load_self_state(self.path)["active_goals_state"][0]["status"], "completed")
+        self.assertTrue(completed.get("completion_proposed"))
+        self.assertEqual(load_self_state(self.path)["active_goals_state"][0]["status"], "completion_proposed")
+        self.assertIsNone(verify_goal_completion(goal_id, "Root", ""))
+        verified = verify_goal_completion(
+            goal_id, "Root",
+            "I reviewed the stated acceptance criteria and independently confirmed the required outcome.",
+            path=self.path,
+        )
+        self.assertEqual(verified["status"], "completed")
+        self.assertEqual(verified["completion_verified_by"], "Root")
 
     def test_goal_completion_requires_a_real_checksummed_artifact(self):
         created = apply_volitional_decision({
@@ -173,10 +182,15 @@ class VolitionTests(unittest.TestCase):
                 "sha256": digest, "claim": "The committed implementation artifact was checked.",
             }],
         }, path=self.path)
-        self.assertTrue(accepted.get("completion_evidence"))
+        self.assertTrue(accepted.get("completion_proposed"))
         goal = load_self_state(self.path)["active_goals_state"][0]
-        self.assertEqual(goal["status"], "completed")
+        self.assertEqual(goal["status"], "completion_proposed")
         self.assertEqual(goal["completion_evidence"][0]["sha256"], digest)
+        self.assertEqual(verify_goal_completion(
+            created["goal_id"], "Root",
+            "I independently checked the acceptance criteria and confirmed they are satisfied.",
+            path=self.path,
+        )["status"], "completed")
 
     def test_goal_cannot_be_completed_without_success_evidence(self):
         created = apply_volitional_decision({
