@@ -1,5 +1,6 @@
 """Tests for event-driven, choice-preserving ambient wake behavior."""
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 
 from dex_ambient_daemon import (
@@ -98,6 +99,29 @@ class AmbientSchedulerTests(unittest.TestCase):
         self.assertFalse(_cognitive_rest_active(state))
         self.assertTrue(_scheduled_cognition_due(state))
         self.assertTrue(_should_run_ambient_cycle(state))
+
+    def test_fresh_delivery_claim_has_a_scheduled_lease_expiry(self):
+        attempted = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state = {
+            "persistent_thoughts": [],
+            "active_goals_state": [],
+            "pending_reflection_requests": [],
+            "pending_cognitive_observations": [],
+            "active_mental_workspace_state": {},
+            "communication_outbox": [{
+                "message_id": "in-flight",
+                "status": "delivering",
+                "last_delivery_attempt_at": attempted,
+            }],
+        }
+        with patch.dict("os.environ", {
+            "DISCORD_TOKEN": "configured",
+            "DEX_INITIATIVE_CHANNEL_ID": "channel",
+        }):
+            delay = _next_scheduled_wake_seconds(state)
+        self.assertIsNotNone(delay)
+        self.assertGreater(delay, 0)
+        self.assertLessEqual(delay, 120)
 
     def test_reflection_request_requires_matching_explicit_acknowledgment(self):
         target = {"kind": "reflection_request", "id": "request-1"}
