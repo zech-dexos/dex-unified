@@ -141,7 +141,8 @@ class VolitionTests(unittest.TestCase):
         }, path=self.path)
         self.assertTrue(completed.get("completion_proposed"))
         self.assertEqual(load_self_state(self.path)["active_goals_state"][0]["status"], "completion_proposed")
-        self.assertIsNone(verify_goal_completion(goal_id, "Root", ""))
+        with self.assertRaisesRegex(ValueError, "explicit verifier"):
+            verify_goal_completion(goal_id, "Root", "")
         verified = verify_goal_completion(
             goal_id, "Root",
             "I reviewed the stated acceptance criteria and independently confirmed the required outcome.",
