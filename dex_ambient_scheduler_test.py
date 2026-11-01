@@ -38,6 +38,9 @@ class AmbientSchedulerTests(unittest.TestCase):
         self.assertTrue(_scheduled_cognition_due(state))
         self.assertEqual(_next_scheduled_wake_seconds(state), 0.0)
 
+        workspace_past = (
+            datetime.now(timezone.utc) - timedelta(minutes=10)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
         workspace_state = {
             "persistent_thoughts": [],
             "pending_reflection_requests": [],
@@ -45,7 +48,7 @@ class AmbientSchedulerTests(unittest.TestCase):
             "active_mental_workspace_state": {
                 "is_active": True,
                 "concept_identifier": "continuity",
-                "last_refresh_timestamp": past,
+                "last_refresh_timestamp": workspace_past,
             },
         }
         self.assertTrue(_scheduled_cognition_due(workspace_state))
