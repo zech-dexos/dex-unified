@@ -69,7 +69,14 @@ def _select_target(state):
     # architecture should take another pass, while the scheduler still owns execution.
     pending_reflections = [
         item for item in state.get("pending_reflection_requests", [])
-        if isinstance(item, dict) and item.get("status", "pending") == "pending"
+        if isinstance(item, dict)
+        and (
+            item.get("status", "pending") == "pending"
+            or (
+                item.get("status") == "deferred"
+                and (_parse_time(item.get("retry_at")) is None or now >= _parse_time(item.get("retry_at")))
+            )
+        )
     ]
     if pending_reflections:
         item = pending_reflections[0]
@@ -127,7 +134,14 @@ def _select_target(state):
     # Observer evidence is a first-class ambient cognition target.
     pending_observations = [
         item for item in state.get("pending_cognitive_observations", [])
-        if isinstance(item, dict) and item.get("status", "pending") == "pending"
+        if isinstance(item, dict)
+        and (
+            item.get("status", "pending") == "pending"
+            or (
+                item.get("status") == "deferred"
+                and (_parse_time(item.get("retry_at")) is None or now >= _parse_time(item.get("retry_at")))
+            )
+        )
     ]
     if pending_observations:
         item = pending_observations[0]
@@ -280,6 +294,9 @@ def _register_target_failure(target):
                 if attempts >= AMBIENT_MAX_TARGET_FAILURES:
                     item["status"] = "deferred"
                     item["deferred_reason"] = "ambient_parse_failure"
+                    item["retry_at"] = (
+                        datetime.now(timezone.utc) + timedelta(minutes=15)
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ")
                 items[index] = item
                 update_self_state({key: items})
                 return
@@ -294,6 +311,62 @@ def _register_target_failure(target):
                 item["next_attention_at"] = retry_at
                 update_self_state({"persistent_thoughts": thoughts})
                 return
+
+
+def _next_scheduled_wake_seconds(state=None):
+    """Return the next durable work deadline; None means wait for an event."""
+    state = state if isinstance(state, dict) else load_self_state()
+    now = datetime.now(timezone.utc)
+    deadlines = []
+    for item in state.get("persistent_thoughts", []) or []:
+        if not isinstance(item, dict) or item.get("status") not in ("active", "deferred"):
+            continue
+        due = _parse_time(item.get("next_attention_at"))
+        if due is None:
+            return 0.0
+        deadlines.append((due - now).total_seconds())
+    for key in ("pending_reflection_requests", "pending_cognitive_observations"):
+        for item in state.get(key, []) or []:
+            if not isinstance(item, dict) or item.get("status") != "deferred":
+                continue
+            due = _parse_time(item.get("retry_at"))
+            if due is None:
+                return 0.0
+            deadlines.append((due - now).total_seconds())
+    if os.environ.get("DISCORD_TOKEN", "").strip() and os.environ.get("DEX_INITIATIVE_CHANNEL_ID", "").strip():
+        for item in state.get("communication_outbox", []) or []:
+            if not isinstance(item, dict):
+                continue
+            if item.get("status") == "pending":
+                return 0.0
+            if item.get("status") == "retry_wait":
+                due = _parse_time(item.get("next_delivery_attempt_at"))
+                if due is None:
+                    return 0.0
+                deadlines.append((due - now).total_seconds())
+    return max(0.0, min(deadlines)) if deadlines else None
+
+
+def _scheduled_cognition_due(state=None):
+    state = state if isinstance(state, dict) else load_self_state()
+    return any(
+        _parse_time(item.get("next_attention_at")) is None
+        or datetime.now(timezone.utc) >= _parse_time(item.get("next_attention_at"))
+        for item in state.get("persistent_thoughts", []) or []
+        if isinstance(item, dict) and item.get("status") in ("active", "deferred")
+    ) or any(
+        item.get("status") == "pending"
+        or (
+            item.get("status") == "deferred"
+            and (
+                _parse_time(item.get("retry_at")) is None
+                or datetime.now(timezone.utc) >= _parse_time(item.get("retry_at"))
+            )
+        )
+        for key in ("pending_reflection_requests", "pending_cognitive_observations")
+        for item in state.get(key, []) or []
+        if isinstance(item, dict)
+    )
 
 
 async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_driven: bool = False) -> Dict[str, Any]:
@@ -313,6 +386,14 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
         bridge_result = await bus.drain_shared()
         if bridge_result.get("received"):
             print(f"[Ambient Daemon] shared cognitive events: {bridge_result}")
+        if os.environ.get("DISCORD_TOKEN", "").strip() and os.environ.get("DEX_INITIATIVE_CHANNEL_ID", "").strip():
+            try:
+                from dex_volition import deliver_pending_communications
+                delivery = await deliver_pending_communications()
+                if delivery.get("delivered"):
+                    print(f"[Ambient Daemon] delivered queued initiatives: {delivery}")
+            except Exception as delivery_error:
+                print(f"[Ambient Daemon] queued initiative delivery deferred: {delivery_error}")
 
         # Cloud scheduler compatibility retains its durable cadence gate.
         # The resident local process enters through startup, a cross-process
@@ -806,7 +887,20 @@ async def ambient_pulse_loop(llm_callable: Callable[[str], Awaitable[str]]):
             if not first_cycle:
                 # Event-journal watcher: no model calls and no thought generation.
                 while not await asyncio.to_thread(pending_events, consumer, 1):
-                    await asyncio.sleep(0.5)
+                    state = await asyncio.to_thread(load_self_state)
+                    if _scheduled_cognition_due(state):
+                        break
+                    wake_after = _next_scheduled_wake_seconds(state)
+                    if wake_after is not None and wake_after <= 0:
+                        # A delivery retry is work, not a reason to manufacture
+                        # a cognition cycle. Deliver it and return to the watcher.
+                        if os.environ.get("DISCORD_TOKEN", "").strip() and os.environ.get("DEX_INITIATIVE_CHANNEL_ID", "").strip():
+                            from dex_volition import deliver_pending_communications
+                            await deliver_pending_communications()
+                        else:
+                            await asyncio.sleep(0.5)
+                    else:
+                        await asyncio.sleep(min(0.5, wake_after) if wake_after is not None else 0.5)
             first_cycle = False
             result = await run_ambient_tick(llm_callable, event_driven=True)
             # Dex's explicit rest choice ends a chain. Non-rest decisions
