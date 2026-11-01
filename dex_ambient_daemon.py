@@ -449,12 +449,13 @@ def _should_run_ambient_cycle(state=None, has_qualifying_event=False):
 
 def _scheduled_cognition_due(state=None):
     state = state if isinstance(state, dict) else load_self_state()
+    now = datetime.now(timezone.utc)
     # A rest decision suppresses scheduled cognition until its durable deadline.
     # The event watcher still wakes on new events, which are allowed to interrupt rest.
     if _cognitive_rest_active(state):
         return False
     return any(
-        datetime.now(timezone.utc) >= _attention_due_at(item, datetime.now(timezone.utc))
+        now >= _attention_due_at(item, now)
         for collection in ("persistent_thoughts", "active_goals_state")
         for item in state.get(collection, []) or []
         if isinstance(item, dict)
