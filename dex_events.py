@@ -87,7 +87,10 @@ class EventBus:
                         acknowledged += 1
                         continue
                     outcomes = await self._dispatch_local(event_type, payload)
-                    if all(item.get("status") == "completed" for item in outcomes):
+                    # A subscriber may return successfully while reporting
+                    # an incomplete nested dispatch. Do not acknowledge that event:
+                    # the consumer must retry the whole idempotent delivery.
+                    if dispatch_complete(outcomes):
                         acknowledge_event(self._consumer_id, event["event_id"])
                         acknowledged += 1
                     else:
