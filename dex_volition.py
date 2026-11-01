@@ -337,6 +337,9 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
     return result
 
 
+DELIVERY_LEASE_SECONDS = 120
+
+
 def pending_communications(path=SELF_STATE_PATH) -> list:
     """Return pending messages and recover deliveries stranded by a process crash."""
     state = load_self_state(path)
@@ -367,9 +370,9 @@ def pending_communications(path=SELF_STATE_PATH) -> list:
                 parsed = parsed.replace(tzinfo=timezone.utc)
         except (TypeError, ValueError):
             parsed = None
-        # A live delivery gets two minutes to finish. Older/incomplete claims
-        # are made pending again; the durable message itself is never dropped.
-        if parsed is None or (now - parsed).total_seconds() >= 120:
+        # A live delivery gets a lease. The scheduler also wakes at this exact
+        # expiry so a restart during the lease cannot strand the outbox forever.
+        if parsed is None or (now - parsed).total_seconds() >= DELIVERY_LEASE_SECONDS:
             item["status"] = "pending"
             item["recovered_at"] = _now_iso()
             recovered = True
