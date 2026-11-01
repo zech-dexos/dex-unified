@@ -56,6 +56,24 @@ def _parse_time(value):
         return None
 
 
+def _attention_due_at(item, now=None):
+    """Resolve a missing legacy deadline from the record's last known activity."""
+    now = now or datetime.now(timezone.utc)
+    due = _parse_time(item.get("next_attention_at"))
+    if due is not None:
+        return due
+    for key in (
+        "last_attended_at", "last_updated_timestamp", "last_updated_at",
+        "creation_timestamp", "created_at",
+    ):
+        anchor = _parse_time(item.get(key))
+        if anchor is not None:
+            return anchor + timedelta(seconds=AMBIENT_REVISIT_SECONDS)
+    # An incomplete legacy record is eligible once, then the normal decision
+    # path persists its next deadline.
+    return now
+
+
 def _open_loops(path):
     try:
         if not path.exists():
@@ -106,8 +124,8 @@ def _select_target(state):
     ]
     due_thoughts = []
     for t in thoughts:
-        next_at = _parse_time(t.get("next_attention_at"))
-        if next_at is None or now >= next_at:
+        next_at = _attention_due_at(t, now)
+        if now >= next_at:
             due_thoughts.append(t)
     if due_thoughts:
         t = due_thoughts[0]
@@ -121,8 +139,7 @@ def _select_target(state):
     goals = [
         goal for goal in prioritize_goals()
         if (
-            _parse_time(goal.get("next_attention_at")) is None
-            or now >= _parse_time(goal.get("next_attention_at"))
+            now >= _attention_due_at(goal, now)
         )
     ]
     if goals:
@@ -371,9 +388,7 @@ def _next_scheduled_wake_seconds(state=None):
                 continue
             if collection == "active_goals_state" and item.get("status") != "active":
                 continue
-            due = _parse_time(item.get("next_attention_at"))
-            if due is None:
-                return 0.0
+            due = _attention_due_at(item, now)
             deadlines.append((due - now).total_seconds())
     for key in ("pending_reflection_requests", "pending_cognitive_observations"):
         for item in state.get(key, []) or []:
@@ -429,8 +444,7 @@ def _scheduled_cognition_due(state=None):
     if _cognitive_rest_active(state):
         return False
     return any(
-        _parse_time(item.get("next_attention_at")) is None
-        or datetime.now(timezone.utc) >= _parse_time(item.get("next_attention_at"))
+        datetime.now(timezone.utc) >= _attention_due_at(item, datetime.now(timezone.utc))
         for collection in ("persistent_thoughts", "active_goals_state")
         for item in state.get(collection, []) or []
         if isinstance(item, dict)
