@@ -38,9 +38,12 @@ def parse_volitional_output(raw: str) -> Dict[str, Any]:
     data = json.loads(text[start:end + 1])
     if not isinstance(data, dict):
         raise ValueError("volition output must be a JSON object")
-    decision = str(data.get("decision", "think")).strip().lower()
+    decision = str(data.get("decision", "")).strip().lower()
     if decision not in VALID_DECISIONS:
-        decision = "think"
+        raise ValueError(
+            "volition output must include a valid decision; "
+            "refusing to silently convert missing or invalid choices into think"
+        )
     data["decision"] = decision
     data["thought"] = str(data.get("thought", "")).strip()[:2000]
     try:
