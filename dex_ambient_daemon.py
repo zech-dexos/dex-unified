@@ -85,6 +85,26 @@ def _select_target(state):
             }, ensure_ascii=False),
         }
 
+    # Active goals are explicit cognitive work.
+    goals = prioritize_goals()
+    if goals:
+        goal = goals[0]
+        subtasks = [
+            x for x in goal.get("sub_tasks", [])
+            if isinstance(x, dict) and x.get("status") not in ("completed", "failed")
+        ]
+        text = (
+            subtasks[0].get("description") or subtasks[0].get("task")
+            if subtasks else goal.get("description", "")
+        )
+        if text:
+            return {
+                "kind": "goal_subtask" if subtasks else "goal",
+                "id": goal.get("goal_id"),
+                "goal_id": goal.get("goal_id"),
+                "text": text,
+            }
+
     # Existing persistent thoughts are revisitable work, but not every tick.
     thoughts = [
         t for t in state.get("persistent_thoughts", [])
