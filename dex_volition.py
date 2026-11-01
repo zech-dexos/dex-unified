@@ -21,10 +21,17 @@ VALID_DECISIONS = {
     "complete_goal", "communicate", "rest",
 }
 VALID_PRIORITIES = {"high", "medium", "low"}
+VOLITION_REVISIT_SECONDS = 300
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _next_attention_iso() -> str:
+    return (datetime.now(timezone.utc) + timedelta(seconds=VOLITION_REVISIT_SECONDS)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
 
 
 def parse_volitional_output(raw: str) -> Dict[str, Any]:
@@ -70,7 +77,13 @@ def _persist_thought(content: str, salience: float, path=SELF_STATE_PATH) -> Opt
             return item
     from thought import form_thought
     priority = "high" if salience >= 0.8 else "medium" if salience >= 0.45 else "low"
-    return form_thought(text, priority=priority, confidence=salience, path=path)
+    return form_thought(
+        text,
+        priority=priority,
+        confidence=salience,
+        next_attention_at=_next_attention_iso(),
+        path=path,
+    )
 
 
 def _record_goal_progress(goal_id: str, progress: str, path=SELF_STATE_PATH) -> Optional[dict]:
@@ -86,6 +99,7 @@ def _record_goal_progress(goal_id: str, progress: str, path=SELF_STATE_PATH) -> 
             goal["progress_history"] = history[-30:]
             goal["progress_report"] = entry["report"]
             goal["last_updated_timestamp"] = entry["timestamp"]
+            goal["next_attention_at"] = _next_attention_iso()
             update_self_state({"active_goals_state": goals}, path=path)
             return goal
     return None
@@ -113,6 +127,7 @@ def _create_subgoal(goal_id: str, description: str, path=SELF_STATE_PATH) -> Opt
         })
         goal["sub_tasks"] = tasks
         goal["last_updated_timestamp"] = _now_iso()
+        goal["next_attention_at"] = _next_attention_iso()
         update_self_state({"active_goals_state": goals}, path=path)
         return goal
     return None
@@ -241,6 +256,14 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
                     success_criteria=success_criteria[:700],
                     path=path,
                 )
+                # A newly-created goal is not the current target; give it an
+                # explicit revisit deadline so it cannot trigger an immediate loop.
+                goals = list(load_self_state(path).get("active_goals_state", []) or [])
+                for record in goals:
+                    if record.get("goal_id") == goal.get("goal_id"):
+                        record["next_attention_at"] = _next_attention_iso()
+                        break
+                update_self_state({"active_goals_state": goals}, path=path)
                 events.append(("GOAL_CREATED", {"goal_id": goal["goal_id"], "goal": goal["description"],
                                                  "source": "autonomous_volition", "reason": str(data.get("reason", ""))[:500]}))
             result["goal_id"] = goal.get("goal_id")
