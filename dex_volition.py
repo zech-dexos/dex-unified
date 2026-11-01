@@ -148,6 +148,8 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
     events = []
     result = {"decision": decision, "thought_id": thought.get("thought_id") if thought else None,
               "events": events, "continue_cognition": False}
+    if decision == "think" and thought:
+        result["continue_cognition"] = bool(data.get("continue_cognition", False))
 
     if decision == "create_goal":
         candidate = data.get("goal") if isinstance(data.get("goal"), dict) else {}
