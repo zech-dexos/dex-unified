@@ -411,6 +411,11 @@ def model_status() -> dict:
 
 
 AMBIENT_JSON_SCHEMA = {
+    # Do not set JSON Schema maxLength on ambient strings. llama.cpp expands
+    # each bound into repeated grammar productions; the combined schema can
+    # exceed its grammar-complexity limit before inference starts. max_tokens
+    # already bounds the generated decision, and the decision parser validates
+    # the returned structure before it can affect persistent cognition.
     "type": "object",
     "properties": {
         "decision": {
@@ -420,32 +425,32 @@ AMBIENT_JSON_SCHEMA = {
                 "complete_goal", "communicate", "rest",
             ],
         },
-        "reason": {"type": "string", "maxLength": 500},
-        "thought": {"type": "string", "maxLength": 500},
+        "reason": {"type": "string"},
+        "thought": {"type": "string"},
         "salience": {"type": "number", "minimum": 0, "maximum": 1},
         "goal": {
             "type": "object",
             "properties": {
-                "description": {"type": "string", "maxLength": 700},
+                "description": {"type": "string"},
                 "priority": {"type": "string", "enum": ["high", "medium", "low"]},
-                "success_criteria": {"type": "string", "maxLength": 700},
+                "success_criteria": {"type": "string"},
             },
             "additionalProperties": False,
         },
         "goal_id": {"type": "string"},
-        "handled_target_id": {"type": "string", "maxLength": 128},
-        "subgoal": {"type": "string", "maxLength": 500},
-        "progress": {"type": "string", "maxLength": 1200},
+        "handled_target_id": {"type": "string"},
+        "subgoal": {"type": "string"},
+        "progress": {"type": "string"},
         "completion_evidence": {
             "type": "array",
             "items": {
                 "type": "object",
                 "properties": {
                     "type": {"type": "string", "enum": ["artifact", "event"]},
-                    "path": {"type": "string", "maxLength": 500},
-                    "sha256": {"type": "string", "maxLength": 64},
-                    "event_id": {"type": "string", "maxLength": 128},
-                    "claim": {"type": "string", "maxLength": 300},
+                    "path": {"type": "string"},
+                    "sha256": {"type": "string"},
+                    "event_id": {"type": "string"},
+                    "claim": {"type": "string"},
                 },
                 "additionalProperties": False,
             },
@@ -454,8 +459,8 @@ AMBIENT_JSON_SCHEMA = {
         "communication": {
             "type": "object",
             "properties": {
-                "message": {"type": "string", "maxLength": 1800},
-                "reason": {"type": "string", "maxLength": 500},
+                "message": {"type": "string"},
+                "reason": {"type": "string"},
                 "urgency": {"type": "string", "enum": ["low", "normal", "high"]},
             },
             "additionalProperties": False,
