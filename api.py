@@ -321,10 +321,21 @@ async def call_llm(client, messages, max_tokens=1000, event_id=None, user_id="de
             pending_events.append(future)
 
         def observe_token(delta, metadata=None):
-            publish_from_worker("RESPONSE_GENERATION_PROGRESS", {
-                "content_delta": str(delta)[:2000],
+            payload = {
+                "content_delta": str(delta),
                 **(metadata if isinstance(metadata, dict) else {}),
-            })
+                "event_id": uuid.uuid4().hex,
+                "source_interaction_event_id": event_id,
+                "user_id": user_id,
+                "source": "local_spark",
+            }
+            # Every generated delta reaches all in-process cognitive layers
+            # immediately. Durable journal writes are reserved for milestones
+            # and completed experiences, not every individual token.
+            future = asyncio.run_coroutine_threadsafe(
+                bus.publish_transient("RESPONSE_GENERATION_PROGRESS", payload), loop
+            )
+            pending_events.append(future)
 
         def observe_event(event_type, detail):
             if event_type == "CAPABILITY_EXECUTED":
@@ -1196,6 +1207,27 @@ the exchange as a newly started request/response transaction.
     except Exception as exc:
         print(f"[talnir] prompt routing guidance skipped: {exc}")
 
+    # The newest participant contribution and explicit corrections govern
+    # the active turn. Older workspace, autobiography, and ambient memories
+    # remain available as history but must not override a current instruction
+    # to change topic, close a thread, or correct stale context.
+    system_prompt += """
+
+CURRENT-TURN CONTINUITY AND TOPIC AUTHORITY
+
+The newest participant contribution is the immediate conversational focus.
+Use prior turns to understand corrections, commitments, and the live thread.
+A direct correction from Root supersedes conflicting older memories, workspace
+focus, autobiographical summaries, and ambient thoughts.
+When Root says a topic is solved, closed, finished, or not to be mentioned,
+treat that topic as closed. Do not resurrect it through recall or stale context
+unless Root explicitly reopens it.
+Do not repeat an earlier answer when the participant has moved forward.
+Answer the actual latest question using relevant identity, experience,
+autobiography, reflection, and self-model context. If a relevant fact is absent,
+say so plainly rather than inventing one.
+
+"""
     # Dex constitutional identity is always the root system layer.
     # Request-level system instructions may extend Dex, but never replace him.
     if req.system:
