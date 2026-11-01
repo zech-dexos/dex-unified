@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 from dex_ambient_daemon import (
     _next_scheduled_wake_seconds,
+    _cognitive_rest_active,
+    _should_run_ambient_cycle,
     _reflection_target_was_handled,
     _scheduled_cognition_due,
 )
@@ -75,6 +77,27 @@ class AmbientSchedulerTests(unittest.TestCase):
         self.assertIsNotNone(delay)
         self.assertGreater(delay, 0)
         self.assertLessEqual(delay, 300)
+
+    def test_rest_suppresses_due_work_until_deadline_but_event_can_interrupt(self):
+        future = (datetime.now(timezone.utc) + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state = {
+            "cognitive_rest_until": future,
+            "active_goals_state": [{"goal_id": "g1", "status": "active"}],
+            "persistent_thoughts": [],
+            "pending_reflection_requests": [],
+            "pending_cognitive_observations": [],
+            "active_mental_workspace_state": {},
+        }
+        self.assertTrue(_cognitive_rest_active(state))
+        self.assertFalse(_scheduled_cognition_due(state))
+        self.assertFalse(_should_run_ambient_cycle(state))
+        self.assertTrue(_should_run_ambient_cycle(state, has_qualifying_event=True))
+
+        expired = (datetime.now(timezone.utc) - timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state["cognitive_rest_until"] = expired
+        self.assertFalse(_cognitive_rest_active(state))
+        self.assertTrue(_scheduled_cognition_due(state))
+        self.assertTrue(_should_run_ambient_cycle(state))
 
     def test_reflection_request_requires_matching_explicit_acknowledgment(self):
         target = {"kind": "reflection_request", "id": "request-1"}
