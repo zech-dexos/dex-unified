@@ -157,8 +157,21 @@ def local_slm_generate(prompt: str, max_tokens: int = 200, json_schema=None) -> 
         # Verify the final text still fits after re-tokenization.
         fitted = llm.tokenize(prompt.encode("utf-8"), add_bos=False)
         if len(fitted) > prompt_budget:
-            fitted = fitted[-prompt_budget:]
-            prompt = llm.detokenize(fitted).decode("utf-8", errors="replace")
+            # Preserve the same priority split on the final retokenization;
+            # never fall back to a tail-only slice that drops live state.
+            marker_tokens = llm.tokenize(marker.encode("utf-8"), add_bos=False)
+            available = max(128, prompt_budget - len(marker_tokens))
+            head_keep = min(768, max(384, (available * 2) // 3))
+            tail_keep = max(1, available - head_keep)
+            head_text = llm.detokenize(fitted[:head_keep]).decode("utf-8", errors="replace")
+            tail_text = llm.detokenize(fitted[-tail_keep:]).decode("utf-8", errors="replace")
+            prompt = head_text + marker + tail_text
+            final_tokens = llm.tokenize(prompt.encode("utf-8"), add_bos=False)
+            if len(final_tokens) > prompt_budget:
+                overflow = len(final_tokens) - prompt_budget
+                tail_keep = max(1, tail_keep - overflow - 8)
+                tail_text = llm.detokenize(fitted[-tail_keep:]).decode("utf-8", errors="replace")
+                prompt = head_text + marker + tail_text
 
         print(
             f"[Ambient Runtime] Prompt trimmed to fit: "
