@@ -93,6 +93,9 @@ def _describe_event(payload: Dict[str, Any]) -> str:
     if event_type == "INTENTION_CHANGED":
         intention = _first(payload, "intention", "description")
         return f"My intention changed: {intention}" if intention else "My intention changed."
+    if event_type == "COMMUNICATION_INTENT_CREATED":
+        message = _first(payload, "message", "description")
+        return f"I chose to bring this to Root's attention: {message}" if message else "I formed an intention to communicate with Root."
     if event_type == "OPEN_LOOP_CREATED":
         loop = _first(payload, "open_loop", "description", "question")
         return f"I carried an unresolved thread forward: {loop}" if loop else "I carried a new unresolved thread forward."
@@ -355,6 +358,7 @@ def setup_autobiography():
         "GOAL_CHANGED",
         "GOAL_COMPLETED",
         "INTENTION_CHANGED",
+        "COMMUNICATION_INTENT_CREATED",
         "OPEN_LOOP_CREATED",
         "OPEN_LOOP_CHANGED",
         "GOAL_REMOVED",
