@@ -30,6 +30,9 @@ def _focus_text(payload: Dict[str, Any]) -> str:
             or payload.get("description")
             or payload.get("summary")
             or payload.get("thought")
+            or payload.get("goal")
+            or payload.get("intention")
+            or payload.get("message")
             or ""
         )
     return " ".join(str(value).split())[:500]
@@ -148,7 +151,16 @@ async def evaluate_salience(payload: Dict[str, Any]):
 
 def setup_attention():
     """Subscribe attention to participant contributions and internal events."""
-    bus.subscribe("PARTICIPANT_EVENT", evaluate_salience)
-    bus.subscribe("THOUGHT_GENERATED", evaluate_salience)
-    bus.subscribe("SIGNAL_RAISED", evaluate_salience)
+    for event_type in (
+        "PARTICIPANT_EVENT",
+        "THOUGHT_GENERATED",
+        "SIGNAL_RAISED",
+        "GOAL_CREATED",
+        "GOAL_CHANGED",
+        "GOAL_COMPLETED",
+        "INTENTION_CHANGED",
+        "COMMUNICATION_INTENT_CREATED",
+        "ACTION_COMPLETED",
+    ):
+        bus.subscribe(event_type, evaluate_salience)
     print("[Attention] Event listeners registered.")

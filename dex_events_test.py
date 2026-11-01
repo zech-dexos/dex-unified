@@ -1,6 +1,7 @@
 """Focused tests for DexOS event delivery guarantees."""
 import asyncio
 import unittest
+from unittest.mock import patch
 
 from dex_events import EventBus, bus, setup_cognitive_layers, dispatch_complete
 
@@ -85,6 +86,32 @@ class EventBusTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(outcomes[0]["result"]["reason"], "child failed")
         self.assertFalse(dispatch_complete(outcomes, {"nested"}))
         self.assertFalse(dispatch_complete(outcomes, {"missing"}))
+
+    async def test_shared_event_is_not_acknowledged_when_nested_dispatch_fails(self):
+        local_bus = EventBus()
+
+        async def subscriber(_payload):
+            return {
+                "event_dispatch_complete": False,
+                "event_dispatch": [{
+                    "subscriber": "nested_layer",
+                    "status": "failed",
+                    "error": "persistence failed",
+                }],
+            }
+
+        local_bus.subscribe("NESTED_FAILURE", subscriber)
+        event = {
+            "event_id": "nested-failure-event",
+            "event_type": "NESTED_FAILURE",
+            "payload": {"event_id": "nested-failure-event"},
+        }
+        with patch("dex_events.pending_events", return_value=[event]), \
+             patch("dex_events.acknowledge_event") as acknowledge:
+            result = await local_bus.drain_shared()
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(result["acknowledged"], 0)
+        acknowledge.assert_not_called()
 
     async def test_subscriber_failure_does_not_skip_later_layers(self):
         bus = EventBus()

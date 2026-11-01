@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 
 import os
 import requests
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request as FastAPIRequest
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -24,8 +24,6 @@ except ImportError:
     _memory = None
 
 # Firestore + Vertex AI auth — XPRIZE requirements A and C
-import firebase_admin
-from firebase_admin import credentials, firestore as fs
 import datetime
 import base64, tempfile, os
 
@@ -34,8 +32,13 @@ _firestore = None
 
 def _get_firestore():
     global _fb_app, _firestore
+    # Local DexOS is designed to run without Google services or credentials.
+    if os.environ.get("DEX_LOCAL_RUNTIME") == "1":
+        return None
     if _firestore is None:
         try:
+            import firebase_admin
+            from firebase_admin import credentials, firestore as fs
             key_b64 = os.environ.get("FIREBASE_KEY_B64", "")
             key_path = os.path.join(os.path.dirname(__file__), "firebase-key.json")
             if key_b64:
@@ -164,19 +167,20 @@ async def start_continuous_substrate():
         from dex_substrate import run_substrate_loop
         from dex_events import setup_cognitive_layers
 
-        # Rehydrate Dex's durable state before any continuity/workspace
-        # subscriber can read or mutate it. Cloud Run instances are ephemeral;
-        # GitHub is the durable ledger for DexOS state.
-        try:
-            from github_persistence import pull_from_github
-            if pull_from_github():
-                print("[Continuity] Durable DexOS state rehydrated from GitHub")
-            else:
-                print("[Continuity] No GitHub state rehydrated; using existing local state")
-        except Exception as e:
-            # A persistence outage must not prevent the API from serving.
-            # Firestore interaction memory remains independently available.
-            print(f"[Continuity] GitHub state rehydration skipped: {e}")
+        # Hosted instances may rehydrate their remote continuity ledger.
+        # A local workstation owns its files directly and must not overwrite
+        # them from GitHub during startup.
+        if os.environ.get("DEX_LOCAL_RUNTIME") != "1":
+            try:
+                from github_persistence import pull_from_github
+                if pull_from_github():
+                    print("[Continuity] Durable DexOS state rehydrated from GitHub")
+                else:
+                    print("[Continuity] No GitHub state rehydrated; using existing local state")
+            except Exception as e:
+                print(f"[Continuity] GitHub state rehydration skipped: {e}")
+        else:
+            print("[Continuity] Local state is authoritative; remote rehydration disabled")
 
         # Initialize event subscriptions only after durable state is present.
         setup_cognitive_layers()
@@ -256,6 +260,42 @@ def health():
         "local_runtime": os.environ.get("DEX_LOCAL_RUNTIME") == "1",
         "ambient_process_loaded": bool(os.environ.get("DEX_AMBIENT_STATUS_FILE") and os.path.isfile(os.environ.get("DEX_AMBIENT_STATUS_FILE", ""))),
     }
+
+def _require_initiative_access(request: FastAPIRequest, supplied_key: Optional[str]) -> None:
+    """Keep the initiative outbox private unless an explicit API key is configured."""
+    expected = os.environ.get("DEX_INITIATIVE_API_KEY", "").strip()
+    if expected and supplied_key and __import__("secrets").compare_digest(supplied_key, expected):
+        return
+    remote = request.client.host if request.client else ""
+    if remote in ("127.0.0.1", "::1", "localhost", "testclient"):
+        return
+    raise HTTPException(status_code=403, detail="Initiative outbox is local-only; configure DEX_INITIATIVE_API_KEY for remote access.")
+
+
+@app.get("/initiative/outbox")
+def initiative_outbox(
+    request: FastAPIRequest,
+    x_dex_initiative_key: Optional[str] = Header(default=None),
+):
+    """Read Dex's pending out-of-turn communication intentions."""
+    _require_initiative_access(request, x_dex_initiative_key)
+    from dex_volition import pending_communications
+    return {"status": "ok", "pending": pending_communications()}
+
+
+@app.post("/initiative/outbox/{message_id}/ack")
+def acknowledge_initiative(
+    message_id: str,
+    request: FastAPIRequest,
+    x_dex_initiative_key: Optional[str] = Header(default=None),
+):
+    """Acknowledge a delivered/read initiative without deleting its history."""
+    _require_initiative_access(request, x_dex_initiative_key)
+    from dex_volition import acknowledge_communication
+    if not acknowledge_communication(message_id):
+        raise HTTPException(status_code=404, detail="Pending initiative not found.")
+    return {"status": "acknowledged", "message_id": message_id}
+
 
 @app.get("/compare")
 def compare():
@@ -614,8 +654,12 @@ async def chat(req: ChatRequest):
     result = dex_runtime(req.message, user_id=getattr(req, "user_id", "default"))
     # Cognitive cycle: pick/advance a persistent thought before building the prompt.
     try:
-        from ape_scheduler import run_cycle
-        cycle_result = run_cycle()
+        from dex_cognitive_cycle import run_local_cognitive_cycle
+        # APE reflection uses the resident local Heretic GGUF and runs off the
+        # FastAPI event loop; no Gemini, Vertex, or hosted fallback is involved.
+        cycle_result = await asyncio.get_running_loop().run_in_executor(
+            None, run_local_cognitive_cycle
+        )
         print(f"[ape_scheduler] {cycle_result}")
         from dex_events import bus as _cognitive_event_bus
         if cycle_result.get("workspace_released"):
@@ -639,9 +683,10 @@ async def chat(req: ChatRequest):
         # Persist immediately -- don't wait for the 6-hour pulse. Cloud Run's
         # /tmp state is ephemeral, so anything not pushed before a cold start
         # is lost. Fire-and-forget in a thread so it doesn't block the reply.
-        import asyncio as _asyncio
-        from github_persistence import push_to_github
-        _asyncio.get_event_loop().run_in_executor(None, push_to_github)
+        if os.environ.get("DEX_LOCAL_RUNTIME") != "1":
+            import asyncio as _asyncio
+            from github_persistence import push_to_github
+            _asyncio.get_event_loop().run_in_executor(None, push_to_github)
     except Exception as e:
         print(f"[ape_scheduler] run_cycle failed: {e}")
 

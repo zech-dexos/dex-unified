@@ -1,7 +1,7 @@
 name: DexOS verification
 on:
   push:
-    branches: ["fix/**"]
+    branches: ["fix/**", "feat/**"]
   pull_request:
 jobs:
   syntax:
@@ -18,16 +18,28 @@ jobs:
         run: python -m compileall -q .
       - name: Test cognitive event delivery
         run: python dex_events_test.py
+      - name: Test cross-process SelfState durability
+        run: python self_state_test.py
+      - name: Test local runtime provider isolation
+        run: python dex_runtime_local_test.py
       - name: Test durable cross-process event bridge
         run: python dex_event_bridge_test.py
       - name: Test attention and workspace integration
         run: python dex_cognitive_layers_test.py
+      - name: Test local APE cognitive reflection wiring
+        run: python dex_cognitive_cycle_test.py
       - name: Test local spark capability bridge
         run: python local_spark_test.py
       - name: Test Who AI Am self-model integration
         run: python who_ai_am_test.py
       - name: Test evidence-linked reflection
         run: python reflection_evidence_test.py
+      - name: Test autonomous volition and communication initiative
+        run: python dex_volition_test.py
+      - name: Test scheduled ambient wake and target acknowledgment
+        run: python dex_ambient_scheduler_test.py
+      - name: Test final ambient context fitting
+        run: python local_llm_context_test.py
       - name: Test interactive, ambient, and restart cognitive continuity
         run: python dex_cognitive_runtime_acceptance_test.py
       - name: Syntax-check local runtime launchers

@@ -127,11 +127,18 @@ resolve_models() {
 
 check_dependencies() {
   [[ -x "$PYTHON" ]] || { say "Project venv Python missing: $PYTHON"; return 1; }
-  if ! "$PYTHON" -c 'import fastapi, uvicorn, llama_cpp, gtts, firebase_admin, stripe' >/dev/null 2>&1; then
+  local imports
+  if [[ "${DEX_LOCAL_RUNTIME:-1}" == "1" ]]; then
+    # Local Dex does not require Firebase/Google SDKs to start or think.
+    imports='import fastapi, uvicorn, llama_cpp, gtts, stripe'
+  else
+    imports='import fastapi, uvicorn, llama_cpp, gtts, firebase_admin, stripe'
+  fi
+  if ! "$PYTHON" -c "$imports" >/dev/null 2>&1; then
     say "Installing missing project dependencies into the existing venv."
     "$PYTHON" -m pip install -r "$ROOT/requirements.txt"
   fi
-  "$PYTHON" -c 'import fastapi, uvicorn, llama_cpp, gtts, firebase_admin, stripe'
+  "$PYTHON" -c "$imports"
 }
 
 install_dex_command() {

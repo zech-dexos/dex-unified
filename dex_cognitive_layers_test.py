@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 import dex_attention
+import dex_continuity
 import dex_workspace
 import amw
 from self_state import load_self_state, update_self_state
@@ -91,6 +92,34 @@ class AttentionLayerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(publish.await_args.args[0], "ATTENTION_CHANGED")
         self.assertEqual(publish.await_args.args[1]["event_id"], result["event_id"])
         self.assertEqual(publish.await_args.args[1]["source_event_id"], "interaction-1")
+
+    async def test_proactive_communication_enters_attention_and_continuity(self):
+        snapshot = Mock()
+        snapshot.current_attention = ""
+        with patch.object(dex_attention, "load_self_state", return_value={}), \
+             patch.object(dex_attention, "update_self_state") as update_state, \
+             patch("participant.ParticipantSnapshot.load", return_value=snapshot), \
+             patch.object(dex_attention.bus, "publish", new_callable=AsyncMock) as publish:
+            publish.return_value = [{
+                "subscriber": "activate_workspace",
+                "status": "completed",
+                "result": {"event_dispatch_complete": True},
+            }]
+            result = await dex_attention.evaluate_salience({
+                "event_type": "COMMUNICATION_INTENT_CREATED",
+                "event_id": "initiative-1",
+                "message": "Root should know that the continuity audit uncovered a critical gap.",
+            })
+
+        self.assertEqual(result["status"], "updated")
+        self.assertIn("continuity", snapshot.current_attention.lower())
+        update_state.assert_called_once()
+        publish.assert_awaited_once()
+        self.assertTrue(dex_continuity._meaningful_event({
+            "event_type": "COMMUNICATION_INTENT_CREATED",
+            "event_id": "initiative-1",
+            "message": "Root should know that the continuity audit uncovered a critical gap.",
+        }))
 
     async def test_workspace_activates_only_for_meaningful_attention(self):
         with patch.object(dex_workspace, "load_self_state", return_value={

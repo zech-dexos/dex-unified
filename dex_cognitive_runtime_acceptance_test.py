@@ -103,8 +103,11 @@ elif mode == "ambient":
 
     async def fake_model(_prompt):
         return json.dumps({
+            "decision": "think",
+            "reason": "The current focus connects to a concrete continuity thread.",
             "thought": "I connected this focus to the history I carry forward.",
             "salience": 0.35,
+            "continue_cognition": False,
         })
 
     result = asyncio.run(daemon.run_ambient_tick(fake_model))

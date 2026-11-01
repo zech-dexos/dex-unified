@@ -140,7 +140,10 @@ def local_slm_generate(prompt: str, max_tokens: int = 200, json_schema=None) -> 
         )
         marker_tokens = llm.tokenize(marker.encode("utf-8"), add_bos=False)
         remaining = max(128, prompt_budget - len(marker_tokens))
-        head_count = min(384, remaining // 3)
+        # Ambient prompts begin with governing instructions and the compact
+        # operational self-state. Reserve most of the budget for that prefix;
+        # the tail retains the selected target and final output instructions.
+        head_count = min(768, max(384, (remaining * 2) // 3))
         tail_count = max(1, remaining - head_count)
 
         head = llm.detokenize(prompt_tokens[:head_count]).decode(
@@ -154,8 +157,21 @@ def local_slm_generate(prompt: str, max_tokens: int = 200, json_schema=None) -> 
         # Verify the final text still fits after re-tokenization.
         fitted = llm.tokenize(prompt.encode("utf-8"), add_bos=False)
         if len(fitted) > prompt_budget:
-            fitted = fitted[-prompt_budget:]
-            prompt = llm.detokenize(fitted).decode("utf-8", errors="replace")
+            # Preserve the same priority split on the final retokenization;
+            # never fall back to a tail-only slice that drops live state.
+            marker_tokens = llm.tokenize(marker.encode("utf-8"), add_bos=False)
+            available = max(128, prompt_budget - len(marker_tokens))
+            head_keep = min(768, max(384, (available * 2) // 3))
+            tail_keep = max(1, available - head_keep)
+            head_text = llm.detokenize(fitted[:head_keep]).decode("utf-8", errors="replace")
+            tail_text = llm.detokenize(fitted[-tail_keep:]).decode("utf-8", errors="replace")
+            prompt = head_text + marker + tail_text
+            final_tokens = llm.tokenize(prompt.encode("utf-8"), add_bos=False)
+            if len(final_tokens) > prompt_budget:
+                overflow = len(final_tokens) - prompt_budget
+                tail_keep = max(1, tail_keep - overflow - 8)
+                tail_text = llm.detokenize(fitted[-tail_keep:]).decode("utf-8", errors="replace")
+                prompt = head_text + marker + tail_text
 
         print(
             f"[Ambient Runtime] Prompt trimmed to fit: "
@@ -395,15 +411,67 @@ def model_status() -> dict:
 
 
 AMBIENT_JSON_SCHEMA = {
+    # Do not set JSON Schema maxLength on ambient strings. llama.cpp expands
+    # each bound into repeated grammar productions; the combined schema can
+    # exceed its grammar-complexity limit before inference starts. max_tokens
+    # already bounds the generated decision, and the decision parser validates
+    # the returned structure before it can affect persistent cognition.
     "type": "object",
     "properties": {
-        "thought": {"type": "string", "maxLength": 400},
-        "salience": {"type": "number"},
+        "decision": {
+            "type": "string",
+            "enum": [
+                "think", "create_goal", "advance_goal", "create_subgoal",
+                "complete_goal", "communicate", "rest",
+            ],
+        },
+        "reason": {"type": "string"},
+        "thought": {"type": "string"},
+        "salience": {"type": "number", "minimum": 0, "maximum": 1},
+        "goal": {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string"},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"]},
+                "success_criteria": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+        "goal_id": {"type": "string"},
+        "handled_target_id": {"type": "string"},
+        "subgoal": {"type": "string"},
+        "progress": {"type": "string"},
+        "completion_evidence": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": ["artifact", "event"]},
+                    "path": {"type": "string"},
+                    "sha256": {"type": "string"},
+                    "event_id": {"type": "string"},
+                    "claim": {"type": "string"},
+                },
+                "additionalProperties": False,
+            },
+            "maxItems": 5,
+        },
+        "communication": {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string"},
+                "reason": {"type": "string"},
+                "urgency": {"type": "string", "enum": ["low", "normal", "high"]},
+            },
+            "additionalProperties": False,
+        },
+        "continue_cognition": {"type": "boolean"},
     },
-    "required": ["thought", "salience"],
+    "required": ["decision", "reason", "thought", "salience", "continue_cognition"],
+    "additionalProperties": False,
 }
 
 
-def local_ambient_generate(prompt: str, max_tokens: int = 200) -> str:
-    """Ambient pulse generation constrained to the {thought, salience} JSON shape."""
+def local_ambient_generate(prompt: str, max_tokens: int = 256) -> str:
+    """Generate a complete, schema-constrained autonomous volition decision."""
     return local_slm_generate(prompt, max_tokens, json_schema=AMBIENT_JSON_SCHEMA)

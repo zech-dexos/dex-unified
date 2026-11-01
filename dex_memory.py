@@ -20,6 +20,9 @@ _db = None
 
 def _get_db():
     global _db
+    # DexOS local mode is self-contained; never initialize Firebase/Firestore.
+    if os.environ.get("DEX_LOCAL_RUNTIME") == "1":
+        return None
     if _db is None:
         try:
             import firebase_admin

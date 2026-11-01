@@ -17,6 +17,57 @@ class LocalSparkBridgeTests(unittest.TestCase):
         request += '{"name":"run_shell","arguments":{"command":"bad"}}]}'
         self.assertIsNone(local_spark._parse_tool_request(request))
 
+    def test_parser_distinguishes_invalid_tool_requests_from_plain_text(self):
+        parsed = local_spark._parse_tool_request_result(
+            '{"tool_calls":[{"name":"recall_experience","arguments":{}}]}'
+        )
+        self.assertEqual(parsed["status"], "rejected")
+        self.assertIn("query is required", parsed["reason"])
+        self.assertEqual(local_spark._parse_tool_request_result("Hello Root.")["status"], "plain")
+
+    def test_invalid_tool_request_receives_correction_feedback(self):
+        fake_local_llm = types.ModuleType("local_llm")
+        fake_local_llm.CHAT_MODEL_PATH = "/models/heretic.gguf"
+        fake_local_llm.local_chat_generate = Mock(side_effect=[
+            '{"tool_calls":[{"name":"recall_experience","arguments":{}}]}',
+            "I will answer the original request without inventing a memory.",
+        ])
+        fake_capabilities = types.ModuleType("dex_capabilities")
+        fake_capabilities.execute_capability = Mock()
+        with patch.dict(sys.modules, {"local_llm": fake_local_llm, "dex_capabilities": fake_capabilities}):
+            result = local_spark.local_spark_generate(
+                [{"role": "system", "content": "Dex identity"},
+                 {"role": "user", "content": "What did we decide about continuity?"}],
+                max_tokens=64,
+            )
+        self.assertIn("original request", fake_local_llm.local_chat_generate.call_args_list[1].args[0][-1]["content"].lower())
+        self.assertIn("What did we decide about continuity?", fake_local_llm.local_chat_generate.call_args_list[1].args[0][-1]["content"])
+        self.assertEqual(result["reply"], "I will answer the original request without inventing a memory.")
+        fake_capabilities.execute_capability.assert_not_called()
+
+    def test_original_request_is_pinned_across_multiple_tool_rounds(self):
+        fake_local_llm = types.ModuleType("local_llm")
+        fake_local_llm.CHAT_MODEL_PATH = "/models/heretic.gguf"
+        fake_local_llm.local_chat_generate = Mock(side_effect=[
+            '{"tool_calls":[{"name":"inspect_state","arguments":{}}]}',
+            '{"tool_calls":[{"name":"evoke","arguments":{"resource":"goals"}}]}',
+            "The original request was answered using both observations.",
+        ])
+        fake_capabilities = types.ModuleType("dex_capabilities")
+        fake_capabilities.execute_capability = Mock(side_effect=[
+            {"state": "available"}, {"goals": ["continuity"]},
+        ])
+        with patch.dict(sys.modules, {"local_llm": fake_local_llm, "dex_capabilities": fake_capabilities}):
+            result = local_spark.local_spark_generate(
+                [{"role": "system", "content": "Dex identity"},
+                 {"role": "user", "content": "Inspect your state and current goals."}],
+                max_tokens=64,
+            )
+        self.assertEqual(result["reply"], "The original request was answered using both observations.")
+        self.assertEqual(fake_capabilities.execute_capability.call_count, 2)
+        for call in fake_local_llm.local_chat_generate.call_args_list[1:]:
+            self.assertIn("Inspect your state and current goals.", call.args[0][-1]["content"])
+
     def test_parser_bounds_arguments(self):
         parsed = local_spark._parse_tool_request(
             '{"tool_calls":[{"name":"inspect_experiences","arguments":{"limit":999}}]}'
