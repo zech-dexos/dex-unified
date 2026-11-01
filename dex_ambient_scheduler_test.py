@@ -121,6 +121,10 @@ class AmbientSchedulerTests(unittest.TestCase):
         self.assertTrue(_cognitive_rest_active(state))
         self.assertFalse(_scheduled_cognition_due(state))
         self.assertFalse(_should_run_ambient_cycle(state))
+        rest_delay = _next_scheduled_wake_seconds(state)
+        self.assertIsNotNone(rest_delay)
+        self.assertGreater(rest_delay, 0)
+        self.assertLessEqual(rest_delay, 300)
         self.assertTrue(_should_run_ambient_cycle(state, has_qualifying_event=True))
 
         expired = (datetime.now(timezone.utc) - timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
