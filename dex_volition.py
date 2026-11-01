@@ -225,6 +225,11 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
             }))
     elif decision == "rest":
         result["continue_cognition"] = False
+        events.append(("INTENTION_CHANGED", {
+            "intention": "I chose to rest because no current objective warranted further action.",
+            "source": "autonomous_volition",
+            "decision": "rest",
+        }))
 
     result["events"] = events
     result["target"] = target or {}
