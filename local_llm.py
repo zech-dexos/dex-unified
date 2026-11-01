@@ -397,13 +397,44 @@ def model_status() -> dict:
 AMBIENT_JSON_SCHEMA = {
     "type": "object",
     "properties": {
-        "thought": {"type": "string", "maxLength": 400},
-        "salience": {"type": "number"},
+        "decision": {
+            "type": "string",
+            "enum": [
+                "think", "create_goal", "advance_goal", "create_subgoal",
+                "complete_goal", "communicate", "rest",
+            ],
+        },
+        "reason": {"type": "string", "maxLength": 500},
+        "thought": {"type": "string", "maxLength": 500},
+        "salience": {"type": "number", "minimum": 0, "maximum": 1},
+        "goal": {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string", "maxLength": 700},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"]},
+                "success_criteria": {"type": "string", "maxLength": 700},
+            },
+            "additionalProperties": False,
+        },
+        "goal_id": {"type": "string"},
+        "subgoal": {"type": "string", "maxLength": 500},
+        "progress": {"type": "string", "maxLength": 1200},
+        "communication": {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string", "maxLength": 1800},
+                "reason": {"type": "string", "maxLength": 500},
+                "urgency": {"type": "string", "enum": ["low", "normal", "high"]},
+            },
+            "additionalProperties": False,
+        },
+        "continue_cognition": {"type": "boolean"},
     },
-    "required": ["thought", "salience"],
+    "required": ["decision", "reason", "thought", "salience", "continue_cognition"],
+    "additionalProperties": False,
 }
 
 
-def local_ambient_generate(prompt: str, max_tokens: int = 200) -> str:
-    """Ambient pulse generation constrained to the {thought, salience} JSON shape."""
+def local_ambient_generate(prompt: str, max_tokens: int = 256) -> str:
+    """Generate a complete, schema-constrained autonomous volition decision."""
     return local_slm_generate(prompt, max_tokens, json_schema=AMBIENT_JSON_SCHEMA)
