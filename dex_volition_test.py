@@ -54,6 +54,7 @@ class VolitionTests(unittest.TestCase):
             "subgoal": "Define the persistent intention record and lifecycle.",
             "thought": "A subgoal makes the larger direction actionable.",
             "salience": 0.5,
+            "continue_cognition": True,
         }, path=self.path)
         self.assertTrue(subgoal["continue_cognition"])
         state = load_self_state(self.path)
