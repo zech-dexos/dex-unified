@@ -40,6 +40,7 @@ def _meaningful_event(payload: Dict[str, Any]) -> bool:
         "GOAL_COMPLETED",
         "GOAL_REMOVED",
         "INTENTION_CHANGED",
+        "COMMUNICATION_INTENT_CREATED",
         "OPEN_LOOP_CREATED",
         "OPEN_LOOP_CHANGED",
         "SELF_STATE_CHANGED",
