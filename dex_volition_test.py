@@ -130,11 +130,13 @@ class VolitionTests(unittest.TestCase):
     def test_rest_does_not_create_a_goal(self):
         result = apply_volitional_decision({
             "decision": "rest",
-            "thought": "",
+            "thought": "I have chosen to rest because no current objective needs action.",
             "salience": 0.0,
         }, path=self.path)
         self.assertFalse(result["continue_cognition"])
-        self.assertEqual(load_self_state(self.path)["active_goals_state"], [])
+        state = load_self_state(self.path)
+        self.assertEqual(state["active_goals_state"], [])
+        self.assertEqual(state["persistent_thoughts"], [])
 
 
 if __name__ == "__main__":
