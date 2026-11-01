@@ -34,16 +34,16 @@ class LocalCognitiveCycleTests(unittest.TestCase):
         self.assertEqual(local_knowledge_lookup("continuity"), [])
 
     def test_ape_cycle_receives_both_callables(self):
-        with patch("ape_scheduler.run_cycle", return_value={"ran": True}) as run_cycle:
+        with patch("ape_scheduler.run_cycle", return_value={"ran": True}) as run_cycle, \\
+             patch("local_llm.local_chat_generate", return_value="A substantive local reflection.") as generate:
             result = run_local_cognitive_cycle()
+            kwargs = run_cycle.call_args.kwargs
+            reflection = kwargs["llm_reflect"]("context", "concept")
         self.assertEqual(result, {"ran": True})
-        kwargs = run_cycle.call_args.kwargs
         self.assertTrue(callable(kwargs["kg_lookup"]))
         self.assertTrue(callable(kwargs["llm_reflect"]))
-        self.assertEqual(
-            kwargs["llm_reflect"]("context", "concept"),
-            "I identified a new connection.",
-        ) if False else None
+        self.assertEqual(reflection, "A substantive local reflection.")
+        generate.assert_called_once()
 
 
 if __name__ == "__main__":
