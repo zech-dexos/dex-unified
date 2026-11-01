@@ -25,7 +25,13 @@ import json
 import os
 import tempfile
 import uuid
+from contextlib import contextmanager
 from copy import deepcopy
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows fallback
+    fcntl = None
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -90,29 +96,55 @@ def _default_self_state(dex_id: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
+@contextmanager
+def _state_file_lock(path: Path):
+    """Serialize state creation and commits across API/ambient processes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(path.name + ".lock")
+    handle = open(lock_path, "a+", encoding="utf-8")
+    try:
+        if fcntl is not None:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        if fcntl is not None:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        handle.close()
+
+
+def _read_existing_state(path: Path) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as handle:
+        state = json.load(handle)
+    if not isinstance(state, dict):
+        raise ValueError(f"SelfState at {path} must contain a JSON object")
+    return state
+
+
+def _write_state_unlocked(state: Dict[str, Any], path: Path) -> Dict[str, Any]:
+    state["last_updated_timestamp"] = _now_iso()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent) or ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(state, handle, indent=2, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+    return state
+
+
 def load_self_state(path: Path = SELF_STATE_PATH) -> Dict[str, Any]:
-    """Load SelfState from disk. Creates a fresh default state on first run."""
-    if not path.exists() or not path.read_text(encoding="utf-8").strip():
+    """Load SelfState; serialize first creation so parallel processes cannot reset it."""
+    if path.exists() and path.stat().st_size:
+        return _read_existing_state(path)
+    with _state_file_lock(path):
+        if path.exists() and path.stat().st_size:
+            return _read_existing_state(path)
         state = _default_self_state()
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-        fd, tmp_path = tempfile.mkstemp(
-            dir=str(path.parent) or ".",
-            suffix=".tmp"
-        )
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(state, f, indent=2, ensure_ascii=False)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp_path, path)
-        finally:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-
-        return state
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        return _write_state_unlocked(state, path)
 
 
 def save_self_state(
@@ -129,29 +161,15 @@ def save_self_state(
     handles this for you — most code should call update_self_state(),
     not save_self_state(), directly.
     """
-    if _expected_version != "__unset__" and path.exists():
-        on_disk = load_self_state(path)
-        if on_disk.get("version", 0) != _expected_version:
-            raise RuntimeError(
-                f"SelfState version conflict: expected {_expected_version}, "
-                f"found {on_disk.get('version')} on disk. Re-read and retry."
-            )
-
-    state["last_updated_timestamp"] = _now_iso()
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent) or ".", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2, ensure_ascii=False)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-
-    return state
+    with _state_file_lock(path):
+        if _expected_version != "__unset__" and path.exists() and path.stat().st_size:
+            on_disk = _read_existing_state(path)
+            if on_disk.get("version", 0) != _expected_version:
+                raise RuntimeError(
+                    f"SelfState version conflict: expected {_expected_version}, "
+                    f"found {on_disk.get('version')} on disk. Re-read and retry."
+                )
+        return _write_state_unlocked(state, path)
 
 
 def update_self_state(
@@ -186,12 +204,76 @@ def update_self_state(
     )
 
 
+def _record_identity(item: dict):
+    """Return a stable identity for append/update records stored in SelfState lists."""
+    for key in (
+        "goal_id", "thought_id", "message_id", "observation_id", "request_id",
+        "loop_id", "subtask_id", "intent_id", "experience_id",
+    ):
+        if item.get(key):
+            return (key, str(item[key]))
+    if item.get("event_id"):
+        return ("event_id", str(item["event_id"]), str(item.get("event_type") or ""))
+    if item.get("timestamp"):
+        return (
+            "timestamp",
+            str(item.get("timestamp")),
+            str(item.get("event_type") or ""),
+            str(item.get("summary") or item.get("report") or item.get("reflection") or ""),
+        )
+    return None
+
+
+def _merge_record_list(base: list, delta: list, key: str) -> list:
+    """Merge stable records so a retry cannot erase another process's additions."""
+    if not delta:
+        return []
+    if not all(isinstance(item, dict) and _record_identity(item) for item in base + delta):
+        return deepcopy(delta)
+
+    merged = deepcopy(base)
+    positions = {_record_identity(item): index for index, item in enumerate(merged)}
+    for item in delta:
+        identity = _record_identity(item)
+        if identity in positions:
+            index = positions[identity]
+            merged[index] = _deep_merge(merged[index], item)
+        else:
+            positions[identity] = len(merged)
+            merged.append(deepcopy(item))
+
+    limits = {
+        "narrative_thread": 500,
+        "continuity_events": 100,
+        "history": 30,
+        "recent_cognitive_observations": 10,
+        "recent_reflection_requests": 10,
+        "ambient_reflections": 5,
+        "progress_history": 30,
+        "revisions": 100,
+    }
+    if key == "communication_outbox":
+        pending = [
+            item for item in merged
+            if item.get("status") in ("pending", "delivering")
+        ]
+        history = [
+            item for item in merged
+            if item.get("status") not in ("pending", "delivering")
+        ][-100:]
+        return history + pending
+    limit = limits.get(key)
+    return merged[-limit:] if limit else merged
+
+
 def _deep_merge(base: Dict[str, Any], delta: Dict[str, Any]) -> Dict[str, Any]:
     for key, value in delta.items():
         if isinstance(value, dict) and isinstance(base.get(key), dict):
             base[key] = _deep_merge(base[key], value)
+        elif isinstance(value, list) and isinstance(base.get(key), list):
+            base[key] = _merge_record_list(base[key], value, key)
         else:
-            base[key] = value
+            base[key] = deepcopy(value)
     return base
 
 
