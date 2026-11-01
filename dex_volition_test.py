@@ -11,6 +11,7 @@ from dex_volition import (
     pending_communications,
 )
 from self_state import load_self_state
+from local_llm import AMBIENT_JSON_SCHEMA
 
 
 class VolitionTests(unittest.TestCase):
@@ -29,6 +30,21 @@ class VolitionTests(unittest.TestCase):
         self.assertEqual(data["decision"], "create_goal")
         self.assertEqual(data["salience"], 0.7)
         self.assertEqual(data["goal"]["description"], "Build a persistent self-directed work cycle")
+
+    def test_ambient_schema_exposes_all_volitional_choices(self):
+        properties = AMBIENT_JSON_SCHEMA["properties"]
+        self.assertEqual(
+            set(properties["decision"]["enum"]),
+            {"think", "create_goal", "advance_goal", "create_subgoal",
+             "complete_goal", "communicate", "rest"},
+        )
+        self.assertIn("decision", AMBIENT_JSON_SCHEMA["required"])
+        self.assertIn("continue_cognition", AMBIENT_JSON_SCHEMA["required"])
+        self.assertFalse(AMBIENT_JSON_SCHEMA["additionalProperties"])
+
+    def test_missing_volitional_decision_fails_closed(self):
+        with self.assertRaisesRegex(ValueError, "valid decision"):
+            parse_volitional_output('{"thought":"A thought without a choice.","salience":0.5}')
 
     def test_goal_creation_subgoal_progress_and_completion_persist(self):
         created = apply_volitional_decision({
