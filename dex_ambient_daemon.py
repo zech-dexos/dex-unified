@@ -376,36 +376,45 @@ def _reflection_target_was_handled(target, data, volition_result, thought_text) 
 
 
 def _next_scheduled_wake_seconds(state=None):
-    """Return the next durable work deadline; None means wait for an event."""
+    """Return the next durable wake without polling cognition during deliberate rest."""
     state = state if isinstance(state, dict) else load_self_state()
     now = datetime.now(timezone.utc)
     deadlines = []
-    for collection in ("persistent_thoughts", "active_goals_state"):
-        for item in state.get(collection, []) or []:
-            if not isinstance(item, dict):
-                continue
-            if collection == "persistent_thoughts" and item.get("status") not in ("active", "deferred"):
-                continue
-            if collection == "active_goals_state" and item.get("status") != "active":
-                continue
-            due = _attention_due_at(item, now)
-            deadlines.append((due - now).total_seconds())
-    for key in ("pending_reflection_requests", "pending_cognitive_observations"):
-        for item in state.get(key, []) or []:
-            if not isinstance(item, dict) or item.get("status") != "deferred":
-                continue
-            due = _parse_time(item.get("retry_at"))
-            if due is None:
-                return 0.0
-            deadlines.append((due - now).total_seconds())
     rest_until = _parse_time(state.get("cognitive_rest_until"))
-    if rest_until is not None and rest_until > now:
+    resting = rest_until is not None and rest_until > now
+
+    # A rest decision suspends scheduled thought, goal, retry, and workspace
+    # deadlines. The event watcher remains active and can still interrupt rest.
+    if resting:
         deadlines.append((rest_until - now).total_seconds())
-    workspace = state.get("active_mental_workspace_state", {}) or {}
-    if workspace.get("is_active") and workspace.get("concept_identifier"):
-        last = _parse_time(workspace.get("last_refresh_timestamp"))
-        due = (last or now) + timedelta(seconds=AMBIENT_REVISIT_SECONDS)
-        deadlines.append((due - now).total_seconds())
+    else:
+        for collection in ("persistent_thoughts", "active_goals_state"):
+            for item in state.get(collection, []) or []:
+                if not isinstance(item, dict):
+                    continue
+                if collection == "persistent_thoughts" and item.get("status") not in ("active", "deferred"):
+                    continue
+                if collection == "active_goals_state" and item.get("status") != "active":
+                    continue
+                due = _attention_due_at(item, now)
+                deadlines.append((due - now).total_seconds())
+
+        for key in ("pending_reflection_requests", "pending_cognitive_observations"):
+            for item in state.get(key, []) or []:
+                if not isinstance(item, dict) or item.get("status") != "deferred":
+                    continue
+                due = _parse_time(item.get("retry_at"))
+                if due is None:
+                    return 0.0
+                deadlines.append((due - now).total_seconds())
+
+        workspace = state.get("active_mental_workspace_state", {}) or {}
+        if workspace.get("is_active") and workspace.get("concept_identifier"):
+            last = _parse_time(workspace.get("last_refresh_timestamp"))
+            due = (last or now) + timedelta(seconds=AMBIENT_REVISIT_SECONDS)
+            deadlines.append((due - now).total_seconds())
+
+    # Delivery is independent of internal cognition and may finish while Dex rests.
     if os.environ.get("DISCORD_TOKEN", "").strip() and os.environ.get("DEX_INITIATIVE_CHANNEL_ID", "").strip():
         for item in state.get("communication_outbox", []) or []:
             if not isinstance(item, dict):
@@ -421,6 +430,7 @@ def _next_scheduled_wake_seconds(state=None):
                 attempted = _parse_time(item.get("last_delivery_attempt_at"))
                 due = (attempted or now) + timedelta(seconds=DELIVERY_LEASE_SECONDS)
                 deadlines.append((due - now).total_seconds())
+
     return max(0.0, min(deadlines)) if deadlines else None
 
 
