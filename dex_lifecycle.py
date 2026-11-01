@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timezone, timedelta
 
 from paths import EXPERIENCES_PATH
-from self_state import update_self_state
+from self_state import load_self_state, update_self_state
 
 MAINTENANCE_INTERVAL_SECONDS = 15 * 60
 REVIEW_EXPERIENCE_LIMIT = 3
@@ -124,7 +124,7 @@ def enter_active_mode(state):
 
 def enter_resting_mode():
     """Persist Dex's explicit choice to stop the current cognition chain."""
-    previous = _load_lifecycle(update_self_state({}).get("runtime_lifecycle", {}))
+    previous = _load_lifecycle(load_self_state())
     now = _iso()
     _write_lifecycle(previous, {
         "mode": "resting",
