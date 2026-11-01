@@ -140,7 +140,10 @@ def local_slm_generate(prompt: str, max_tokens: int = 200, json_schema=None) -> 
         )
         marker_tokens = llm.tokenize(marker.encode("utf-8"), add_bos=False)
         remaining = max(128, prompt_budget - len(marker_tokens))
-        head_count = min(384, remaining // 3)
+        # Ambient prompts begin with governing instructions and the compact
+        # operational self-state. Reserve most of the budget for that prefix;
+        # the tail retains the selected target and final output instructions.
+        head_count = min(768, max(384, (remaining * 2) // 3))
         tail_count = max(1, remaining - head_count)
 
         head = llm.detokenize(prompt_tokens[:head_count]).decode(
