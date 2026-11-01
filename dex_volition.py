@@ -344,7 +344,21 @@ def pending_communications(path=SELF_STATE_PATH) -> list:
     now = datetime.now(timezone.utc)
     recovered = False
     for item in outbox:
-        if not isinstance(item, dict) or item.get("status") != "delivering":
+        if not isinstance(item, dict):
+            continue
+        if item.get("status") == "retry_wait":
+            retry_at = item.get("next_delivery_attempt_at")
+            try:
+                retry_time = datetime.fromisoformat(str(retry_at).replace("Z", "+00:00"))
+                if retry_time.tzinfo is None:
+                    retry_time = retry_time.replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                retry_time = now
+            if now >= retry_time:
+                item["status"] = "pending"
+                recovered = True
+            continue
+        if item.get("status") != "delivering":
             continue
         attempted = item.get("last_delivery_attempt_at")
         try:
@@ -435,7 +449,11 @@ async def deliver_pending_communications(path=SELF_STATE_PATH) -> dict:
             outbox = list(state.get("communication_outbox", []) or [])
             for record in outbox:
                 if record.get("message_id") == message_id:
-                    record["status"] = "pending"
+                    record["status"] = "retry_wait"
                     record["last_delivery_error"] = f"{type(exc).__name__}: {exc}"[:500]
+                    record["next_delivery_attempt_at"] = (
+                        datetime.now(timezone.utc).replace(microsecond=0)
+                        + __import__("datetime").timedelta(seconds=60)
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ")
             update_self_state({"communication_outbox": outbox}, path=path)
     return {"status": "ok", "delivered": delivered}
