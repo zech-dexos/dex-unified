@@ -147,7 +147,7 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
     thought = None if decision == "rest" else _persist_thought(data.get("thought", ""), data.get("salience", 0.35), path=path)
     events = []
     result = {"decision": decision, "thought_id": thought.get("thought_id") if thought else None,
-              "events": events, "continue_cognition": decision != "rest"}
+              "events": events, "continue_cognition": False}
 
     if decision == "create_goal":
         candidate = data.get("goal") if isinstance(data.get("goal"), dict) else {}
@@ -175,7 +175,7 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
                 events.append(("GOAL_CREATED", {"goal_id": goal["goal_id"], "goal": goal["description"],
                                                  "source": "autonomous_volition", "reason": str(data.get("reason", ""))[:500]}))
             result["goal_id"] = goal.get("goal_id")
-            result["continue_cognition"] = True
+            result["continue_cognition"] = bool(data.get("continue_cognition", False))
 
     elif decision in ("advance_goal", "complete_goal", "create_subgoal"):
         goal_id = str(data.get("goal_id") or (target or {}).get("goal_id") or "")
@@ -184,13 +184,13 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
             if goal:
                 events.append(("GOAL_CHANGED", {"goal_id": goal_id, "goal": goal.get("description", ""),
                                                  "subgoal": data.get("subgoal"), "source": "autonomous_volition"}))
-                result["continue_cognition"] = True
+                result["continue_cognition"] = bool(data.get("continue_cognition", False))
         elif decision == "advance_goal":
             goal = _record_goal_progress(goal_id, data.get("progress", ""), path=path)
             if goal:
                 events.append(("GOAL_CHANGED", {"goal_id": goal_id, "goal": goal.get("description", ""),
                                                  "progress": data.get("progress"), "source": "autonomous_volition"}))
-                result["continue_cognition"] = bool(data.get("continue_cognition", True))
+                result["continue_cognition"] = bool(data.get("continue_cognition", False))
         else:
             # Completion requires an existing success criterion and an explicit
             # evidence report; a model label alone cannot close a goal.
@@ -204,6 +204,7 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
                 if goal:
                     events.append(("GOAL_COMPLETED", {"goal_id": goal_id, "goal": goal.get("description", ""),
                                                        "result": evidence[:1200], "source": "autonomous_volition"}))
+                    result["continue_cognition"] = bool(data.get("continue_cognition", False))
             else:
                 result["completion_rejected"] = "existing success criteria and a substantive evidence report are required"
 
@@ -218,6 +219,7 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
         )
         if item:
             result["communication_id"] = item["message_id"]
+            result["continue_cognition"] = bool(data.get("continue_cognition", False))
             events.append(("COMMUNICATION_INTENT_CREATED", {
                 "message_id": item["message_id"], "message": item["message"],
                 "reason": item["reason"], "urgency": item["urgency"],
