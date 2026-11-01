@@ -144,6 +144,7 @@ def _select_target(state):
             return {
                 "kind": "goal_subtask" if subtasks else "goal",
                 "id": goal.get("goal_id"),
+                "goal_id": goal.get("goal_id"),
                 "text": text,
             }
 
@@ -383,6 +384,12 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                 "interlocutor": context.get("interlocutor", {}),
                 "experiential_continuity": context.get("experiential_continuity", {}),
                 "pending_reflection_requests": (context.get("pending_reflection_requests", []) or [])[-5:],
+                "active_intentions": (state.get("intentions", []) or state.get("active_intentions", []) or [])[-5:],
+                "pending_communications": [
+                    {"message": item.get("message"), "reason": item.get("reason"), "urgency": item.get("urgency")}
+                    for item in (state.get("communication_outbox", []) or [])[-5:]
+                    if isinstance(item, dict) and item.get("status") == "pending"
+                ],
                 "recent_narrative_records": (context.get("recent_narrative_records", []) or [])[-3:],
                 "recent_autobiography": [
                     {
