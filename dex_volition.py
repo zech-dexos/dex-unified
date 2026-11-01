@@ -144,7 +144,7 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
     decision = str(data.get("decision", "think")).lower()
     if decision not in VALID_DECISIONS:
         decision = "think"
-    thought = _persist_thought(data.get("thought", ""), data.get("salience", 0.35), path=path)
+    thought = None if decision == "rest" else _persist_thought(data.get("thought", ""), data.get("salience", 0.35), path=path)
     events = []
     result = {"decision": decision, "thought_id": thought.get("thought_id") if thought else None,
               "events": events, "continue_cognition": decision != "rest"}
