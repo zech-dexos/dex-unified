@@ -379,7 +379,24 @@ async def chat(req: ChatRequest):
     # Cognitive cycle: pick/advance a persistent thought before building the prompt.
     try:
         from ape_scheduler import run_cycle
-        cycle_result = run_cycle()
+        try:
+            from knowledge.graph_manager import get_related_knowledge_nodes
+            def kg_lookup_fn(concept_id, max_depth=2, min_relevance_score=0.7):
+                return get_related_knowledge_nodes(concept_id, max_depth=max_depth, min_relevance_score=min_relevance_score)
+        except ModuleNotFoundError:
+            def kg_lookup_fn(concept_id, max_depth=2, min_relevance_score=0.7):
+                return []
+
+        from gemini_client import generate_reflection_text
+        def llm_reflect_fn(context, concept_being_held, prior_reflections=None, desired_length="medium"):
+            return generate_reflection_text(
+                context=context,
+                concept_being_held=concept_being_held,
+                prior_reflections=prior_reflections,
+                desired_length=desired_length
+            )
+
+        cycle_result = run_cycle(kg_lookup=kg_lookup_fn, llm_reflect=llm_reflect_fn)
         print(f"[ape_scheduler] {cycle_result}")
         # Persist immediately -- don't wait for the 6-hour pulse. Cloud Run's
         # /tmp state is ephemeral, so anything not pushed before a cold start
