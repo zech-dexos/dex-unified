@@ -501,6 +501,8 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                     data.get("reason")
                     or communication.get("message")
                     or goal.get("description")
+                    or data.get("progress")
+                    or data.get("subgoal")
                     or ""
                 ).strip()
             volition_result = apply_volitional_decision(
