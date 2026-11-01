@@ -56,9 +56,11 @@ not invent messages or send periodic status reports.
 
 ## Resource behavior
 
-A self-directed sequence can contain up to three linked decisions before the
-worker yields to await a new event. This is a per-wake work bound, not a timer.
-Interactive inference keeps its existing priority over ambient inference.
+A self-directed sequence continues only when Dex explicitly requests
+another step and the preceding decision was successfully persisted. There is
+no timer that manufactures thought and no fixed three-decision ceiling.
+A deliberate rest or a decision not to continue returns the worker to the
+event watcher. Interactive inference keeps priority over ambient inference.
 The event watcher performs no inference while idle.
 
 ## Verification
