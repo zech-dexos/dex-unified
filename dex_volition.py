@@ -10,7 +10,7 @@ import json
 import os
 import uuid
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from self_state import SELF_STATE_PATH, load_self_state, update_self_state
@@ -143,11 +143,11 @@ def enqueue_communication(message: str, reason: str = "", urgency: str = "normal
     # so a busy period cannot silently evict a message Root has not received.
     pending = [
         record for record in outbox
-        if isinstance(record, dict) and record.get("status") in ("pending", "delivering")
+        if isinstance(record, dict) and record.get("status") in ("pending", "delivering", "retry_wait")
     ]
     history = [
         record for record in outbox
-        if isinstance(record, dict) and record.get("status") not in ("pending", "delivering")
+        if isinstance(record, dict) and record.get("status") not in ("pending", "delivering", "retry_wait")
     ][-100:]
     update_self_state({"communication_outbox": history + pending}, path=path)
     return item
@@ -453,7 +453,7 @@ async def deliver_pending_communications(path=SELF_STATE_PATH) -> dict:
                     record["last_delivery_error"] = f"{type(exc).__name__}: {exc}"[:500]
                     record["next_delivery_attempt_at"] = (
                         datetime.now(timezone.utc).replace(microsecond=0)
-                        + __import__("datetime").timedelta(seconds=60)
+                        + timedelta(seconds=60)
                     ).strftime("%Y-%m-%dT%H:%M:%SZ")
             update_self_state({"communication_outbox": outbox}, path=path)
     return {"status": "ok", "delivered": delivered}
