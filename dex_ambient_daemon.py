@@ -716,8 +716,8 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                 "target": target,
             }
 
-        except json.JSONDecodeError as e:
-            print(f"[Ambient Daemon] Failed to parse LLM output as JSON: {e}")
+        except (json.JSONDecodeError, ValueError) as e:
+            print(f"[Ambient Daemon] Failed to parse volitional output: {e}")
             print(f"[Ambient Daemon] Raw output: {response_text}")
             try:
                 _register_target_failure(target)
