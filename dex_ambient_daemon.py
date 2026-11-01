@@ -295,7 +295,7 @@ def _register_target_failure(target):
                 return
 
 
-async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dict[str, Any]:
+async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_driven: bool = False) -> Dict[str, Any]:
     """
     Run ONE ambient cognition tick. Cadence is owned by durable runtime
     state / the scheduler, not by a standing process in Cloud Run.
@@ -313,43 +313,32 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
         if bridge_result.get("received"):
             print(f"[Ambient Daemon] shared cognitive events: {bridge_result}")
 
-        # Durable human-paced cadence gate.
-        # The scheduler may wake us frequently, but cognition only fires
-        # when the persisted 45–90 second interval says it is due.
-        gate = claim_ambient_tick()
-
-        if not gate.get("due"):
-            return {
-                "status": gate.get("status", "not_due"),
-                "next_due": gate.get("next_due"),
-                "tick_count": gate.get("tick_count"),
-            }
+        # Cloud scheduler compatibility retains its durable cadence gate.
+        # The resident local process enters through startup, a cross-process
+        # event, or Dex's own explicit choice to continue.
+        if event_driven:
+            gate = {"due": True, "status": "event_driven", "tick_count": None}
+        else:
+            gate = claim_ambient_tick()
+            if not gate.get("due"):
+                return {
+                    "status": gate.get("status", "not_due"),
+                    "next_due": gate.get("next_due"),
+                    "tick_count": gate.get("tick_count"),
+                }
 
         state = load_self_state()
         target = _select_target(state)
 
-        # No target means Dex should rest, not invoke an LLM just to stay busy.
-        # Low-power maintenance runs on its own 15-minute cadence.
+        # No queued target is not a command to manufacture activity or sleep.
+        # It gives Dex an opportunity to examine his own state and choose.
         if target is None:
-            from dex_lifecycle import run_rest_maintenance
-
-            lifecycle_result = run_rest_maintenance(state)
-            pulse = {
-                "timestamp": _now_iso(),
-                "status": lifecycle_result.get("status", "resting"),
-                "mode": lifecycle_result.get("mode", "resting"),
-                "target": None,
-                "thought": None,
-                "salience": 0.0,
-            }
-            update_self_state({"last_ambient_pulse": pulse})
-            return {
-                **lifecycle_result,
-                "reason": "no_cognitive_work_due",
-                "tick_count": gate.get("tick_count"),
+            target = {
+                "kind": "self_directed_review",
+                "id": uuid.uuid4().hex,
+                "text": "No item has been preselected. Review my identity, current goals, intentions, open loops, recent experiences, and development. Decide whether anything genuinely deserves attention or action.",
             }
 
-        # Work has become due after a rest period; mark the wake/resume transition.
         from dex_lifecycle import enter_active_mode
         lifecycle_mode = enter_active_mode(state)
 
@@ -474,28 +463,30 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
 
         target_prompt = (
             f"{AMBIENT_PROMPT}\n\n"
-            f"SELECTED COGNITIVE TARGET ({target['kind']}):\n{target['text']}\n\n"
+            f"SUGGESTED CONTEXT ({target['kind']}; not binding):\n{target['text']}\n\n"
             + self_model_context
             + talnir_context
             + (f"{recalled_ctx}\n\n" if recalled_ctx else "")
-            + "\n\nReturn one small development of that target. Respond with ONLY the JSON object."
+            + "\n\nMake your own choice using the full context. Persist only what you actually decide. Return ONLY the requested JSON."
         )
         ambient_event_id = uuid.uuid4().hex
         response_text = await llm_callable(target_prompt)
 
         try:
-            clean_text = response_text.strip()
-            if clean_text.startswith("```json"):
-                clean_text = clean_text[7:]
-            if clean_text.startswith("```"):
-                clean_text = clean_text[3:]
-            if clean_text.endswith("```"):
-                clean_text = clean_text[:-3]
-            clean_text = clean_text.strip()
-
-            data = json.loads(clean_text)
+            from dex_volition import parse_volitional_output, apply_volitional_decision
+            data = parse_volitional_output(response_text)
             thought_text = data.get("thought", "")
             salience = float(data.get("salience", 0.0))
+            volition_result = apply_volitional_decision(
+                data,
+                target=target,
+                cycle_id=ambient_event_id,
+            )
+            print(
+                f"[Volition] decision={volition_result.get('decision')} "
+                f"goal={volition_result.get('goal_id')} "
+                f"communication={volition_result.get('communication_id')}"
+            )
 
             if thought_text:
                 # Complete a queued reflection request only after usable ambient cognition.
@@ -519,6 +510,22 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     })
 
                 add_thought(thought_text, salience)
+
+                # Apply Dex's chosen goal, subgoal, progress, or communication
+                # mutation and publish it into the same continuity fabric.
+                volition_dispatch = []
+                for event_type, payload in volition_result.get("events", []):
+                    event_payload = {
+                        **payload,
+                        "event_type": event_type,
+                        "event_id": uuid.uuid4().hex,
+                        "source_event_id": ambient_event_id,
+                    }
+                    volition_dispatch.extend(await bus.publish(event_type, event_payload))
+                if volition_result.get("communication_id"):
+                    from dex_volition import deliver_pending_communications
+                    delivery = await deliver_pending_communications()
+                    print(f"[Volition] communication delivery: {delivery}")
 
                 next_attention = (
                     datetime.now(timezone.utc)
@@ -609,6 +616,7 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "source": "ambient_pulse",
                     "target": target,
                 })
+                event_dispatch.extend(volition_dispatch)
                 self_model_persisted = False
                 self_model_event = {}
                 if ambient_packet is not None:
@@ -645,6 +653,8 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]]) -> Dic
                     "event_dispatch": event_dispatch,
                     "self_model_persisted": self_model_persisted,
                     "self_model_event": self_model_event,
+                    "volition": volition_result,
+                    "continue_cognition": bool(volition_result.get("continue_cognition")),
                     "complete": bool(
                         ambient_packet is not None
                         and dispatch_complete(
