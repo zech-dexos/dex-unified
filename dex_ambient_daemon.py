@@ -484,6 +484,15 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
             data = parse_volitional_output(response_text)
             thought_text = data.get("thought", "")
             salience = float(data.get("salience", 0.0))
+            if not thought_text and data.get("decision") != "rest":
+                communication = data.get("communication") if isinstance(data.get("communication"), dict) else {}
+                goal = data.get("goal") if isinstance(data.get("goal"), dict) else {}
+                thought_text = str(
+                    data.get("reason")
+                    or communication.get("message")
+                    or goal.get("description")
+                    or ""
+                ).strip()
             volition_result = apply_volitional_decision(
                 data,
                 target=target,
