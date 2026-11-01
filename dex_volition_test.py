@@ -56,6 +56,22 @@ class VolitionTests(unittest.TestCase):
             apply_volitional_decision({"decision": "invented"}, path=self.path)
         self.assertEqual(load_self_state(self.path)["persistent_thoughts"], [])
 
+    def test_new_volitional_thought_receives_a_future_attention_deadline(self):
+        result = apply_volitional_decision({
+            "decision": "think",
+            "thought": "I identified a meaningful unresolved architectural connection.",
+            "salience": 0.6,
+            "continue_cognition": False,
+        }, path=self.path)
+        state = load_self_state(self.path)
+        thought = next(
+            item for item in state["persistent_thoughts"]
+            if item["thought_id"] == result["thought_id"]
+        )
+        deadline = datetime.fromisoformat(thought["next_attention_at"].replace("Z", "+00:00"))
+        self.assertGreater(deadline, datetime.now(timezone.utc))
+        self.assertLessEqual(deadline, datetime.now(timezone.utc) + timedelta(seconds=310))
+
     def test_stranded_delivery_is_recovered_after_process_restart(self):
         stale = (datetime.now(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
         update_self_state({
