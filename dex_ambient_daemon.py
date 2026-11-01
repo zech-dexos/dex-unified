@@ -38,6 +38,8 @@ AMBIENT_PROMPT = (
 )
 
 AMBIENT_REVISIT_SECONDS = 300.0
+COGNITIVE_REST_SECONDS = 300.0
+DELIVERY_LEASE_SECONDS = 120.0
 
 
 def _now_iso() -> str:
@@ -381,6 +383,9 @@ def _next_scheduled_wake_seconds(state=None):
             if due is None:
                 return 0.0
             deadlines.append((due - now).total_seconds())
+    rest_until = _parse_time(state.get("cognitive_rest_until"))
+    if rest_until is not None:
+        deadlines.append((rest_until - now).total_seconds())
     workspace = state.get("active_mental_workspace_state", {}) or {}
     if workspace.get("is_active") and workspace.get("concept_identifier"):
         last = _parse_time(workspace.get("last_refresh_timestamp"))
@@ -397,11 +402,20 @@ def _next_scheduled_wake_seconds(state=None):
                 if due is None:
                     return 0.0
                 deadlines.append((due - now).total_seconds())
+            elif item.get("status") == "delivering":
+                attempted = _parse_time(item.get("last_delivery_attempt_at"))
+                due = (attempted or now) + timedelta(seconds=DELIVERY_LEASE_SECONDS)
+                deadlines.append((due - now).total_seconds())
     return max(0.0, min(deadlines)) if deadlines else None
 
 
 def _scheduled_cognition_due(state=None):
     state = state if isinstance(state, dict) else load_self_state()
+    # A rest decision suppresses scheduled cognition until its durable deadline.
+    # The event watcher still wakes on new events, which are allowed to interrupt rest.
+    rest_until = _parse_time(state.get("cognitive_rest_until"))
+    if rest_until is not None and datetime.now(timezone.utc) < rest_until:
+        return False
     return any(
         _parse_time(item.get("next_attention_at")) is None
         or datetime.now(timezone.utc) >= _parse_time(item.get("next_attention_at"))
@@ -732,12 +746,17 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
             if volition_result.get("decision") == "rest":
                 from dex_lifecycle import enter_resting_mode
                 enter_resting_mode()
+                rest_until = (
+                    datetime.now(timezone.utc) + timedelta(seconds=COGNITIVE_REST_SECONDS)
+                ).strftime("%Y-%m-%dT%H:%M:%SZ")
+                update_self_state({"cognitive_rest_until": rest_until})
                 _persist_pulse_state(
                     target=target, thought_text=thought_text or None,
                     salience=salience, status="resting"
                 )
                 return {
                     "status": "resting",
+                    "rest_until": rest_until,
                     "target": target,
                     "thought": thought_text or None,
                     "volition": volition_result,
