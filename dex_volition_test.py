@@ -72,6 +72,41 @@ class VolitionTests(unittest.TestCase):
         self.assertGreater(deadline, datetime.now(timezone.utc))
         self.assertLessEqual(deadline, datetime.now(timezone.utc) + timedelta(seconds=310))
 
+    def test_revisiting_a_persistent_target_updates_the_same_thought(self):
+        from thought import form_thought
+
+        original = form_thought(
+            "Dex should preserve an unresolved architectural question.",
+            next_attention_at="2000-01-01T00:00:00Z",
+            path=self.path,
+        )
+        result = apply_volitional_decision({
+            "decision": "think",
+            "reason": "I examined the unresolved question and found a clearer formulation.",
+            "thought": "The unresolved question is how each cognitive layer feeds its conclusions back into Dex's continuing self-model.",
+            "salience": 0.8,
+            "continue_cognition": False,
+        }, target={
+            "kind": "persistent_thought",
+            "id": original["thought_id"],
+            "text": original["content"],
+        }, path=self.path)
+
+        state = load_self_state(self.path)
+        self.assertEqual(len(state["persistent_thoughts"]), 1)
+        updated = state["persistent_thoughts"][0]
+        self.assertEqual(result["thought_id"], original["thought_id"])
+        self.assertEqual(updated["thought_id"], original["thought_id"])
+        self.assertEqual(updated["attention_count"], 2)
+        self.assertEqual(updated["status"], "active")
+        self.assertIn("feeds its conclusions back", updated["content"])
+        self.assertEqual(len(updated["revisions"]), 1)
+        self.assertEqual(
+            updated["revisions"][0]["previous_content"],
+            original["content"],
+        )
+        self.assertTrue(updated["next_attention_at"])
+
     def test_stranded_delivery_is_recovered_after_process_restart(self):
         stale = (datetime.now(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
         update_self_state({

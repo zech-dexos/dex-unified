@@ -226,7 +226,48 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
     decision = str(data.get("decision", "")).strip().lower()
     if decision not in VALID_DECISIONS:
         raise ValueError("volitional decision must contain an explicit valid decision")
-    thought = None if decision == "rest" else _persist_thought(data.get("thought", ""), data.get("salience", 0.35), path=path)
+    thought = None
+    thought_text = str(data.get("thought", "") or "").strip()
+    salience = float(data.get("salience", 0.35) or 0.35)
+
+    # A revisit is a lifecycle transition on the existing thought, not the
+    # creation of a second thought containing the model's latest wording.
+    # Record the new interpretation as a revision and retain the same ID.
+    if decision != "rest":
+        existing_target = None
+        if isinstance(target, dict) and target.get("kind") == "persistent_thought":
+            target_id = str(target.get("id") or "")
+            if target_id:
+                from thought import get_thought, revisit_thought, update_thought
+                existing_target = get_thought(target_id, path=path)
+                if existing_target and existing_target.get("status") in ("active", "deferred"):
+                    revisited = revisit_thought(target_id, path=path)
+                    if revisited:
+                        updated_content = (
+                            thought_text
+                            if len(thought_text) >= 12
+                            and _normalise(thought_text) != _normalise(existing_target.get("content", ""))
+                            else None
+                        )
+                        thought = update_thought(
+                            target_id,
+                            decision="continue",
+                            new_content=updated_content,
+                            new_confidence=salience,
+                            note=(
+                                f"Revisited through ambient volition ({decision}). "
+                                f"{str(data.get('reason', '')).strip()}"
+                            )[:700],
+                            next_attention_at=_next_attention_iso(),
+                            path=path,
+                        )
+        if thought is None and not existing_target:
+            thought = _persist_thought(thought_text, salience, path=path)
+        elif thought is None and existing_target:
+            # Preserve the existing record even if its status changed between
+            # retrieval and update; never manufacture a replacement on a race.
+            thought = existing_target
+
     events = []
     result = {"decision": decision, "thought_id": thought.get("thought_id") if thought else None,
               "events": events, "continue_cognition": False}
