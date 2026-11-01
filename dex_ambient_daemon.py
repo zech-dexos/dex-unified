@@ -706,14 +706,12 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                     "continue_cognition": False,
                 }
 
-            if (
-                thought_text
-                and _reflection_target_was_handled(
+            if thought_text:
+                if _reflection_target_was_handled(
                     target, data, volition_result, thought_text
-                )
-            ):
-                # Only the model's explicit acknowledgment of this exact request
-                # may close it. Unrelated goal/communication decisions leave it pending.
+                ):
+                    # Only the model's explicit acknowledgment of this exact request
+                    # may close it. Unrelated goal/communication decisions leave it pending.
                     current_state = load_self_state()
                     pending = list(current_state.get("pending_reflection_requests", []) or [])
                     completed = list(current_state.get("recent_reflection_requests", []) or [])
