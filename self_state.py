@@ -255,11 +255,11 @@ def _merge_record_list(base: list, delta: list, key: str) -> list:
     if key == "communication_outbox":
         pending = [
             item for item in merged
-            if item.get("status") in ("pending", "delivering")
+            if item.get("status") in ("pending", "delivering", "retry_wait")
         ]
         history = [
             item for item in merged
-            if item.get("status") not in ("pending", "delivering")
+            if item.get("status") not in ("pending", "delivering", "retry_wait")
         ][-100:]
         return history + pending
     limit = limits.get(key)
