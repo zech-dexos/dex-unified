@@ -384,7 +384,7 @@ def _next_scheduled_wake_seconds(state=None):
                 return 0.0
             deadlines.append((due - now).total_seconds())
     rest_until = _parse_time(state.get("cognitive_rest_until"))
-    if rest_until is not None:
+    if rest_until is not None and rest_until > now:
         deadlines.append((rest_until - now).total_seconds())
     workspace = state.get("active_mental_workspace_state", {}) or {}
     if workspace.get("is_active") and workspace.get("concept_identifier"):
@@ -409,12 +409,24 @@ def _next_scheduled_wake_seconds(state=None):
     return max(0.0, min(deadlines)) if deadlines else None
 
 
+def _cognitive_rest_active(state=None):
+    state = state if isinstance(state, dict) else load_self_state()
+    rest_until = _parse_time(state.get("cognitive_rest_until"))
+    return bool(rest_until is not None and datetime.now(timezone.utc) < rest_until)
+
+
+def _should_run_ambient_cycle(state=None, has_qualifying_event=False):
+    """Events may interrupt rest; scheduled work may not."""
+    return bool(has_qualifying_event or (
+        not _cognitive_rest_active(state) and _scheduled_cognition_due(state)
+    ))
+
+
 def _scheduled_cognition_due(state=None):
     state = state if isinstance(state, dict) else load_self_state()
     # A rest decision suppresses scheduled cognition until its durable deadline.
     # The event watcher still wakes on new events, which are allowed to interrupt rest.
-    rest_until = _parse_time(state.get("cognitive_rest_until"))
-    if rest_until is not None and datetime.now(timezone.utc) < rest_until:
+    if _cognitive_rest_active(state):
         return False
     return any(
         _parse_time(item.get("next_attention_at")) is None
@@ -970,10 +982,19 @@ async def ambient_pulse_loop(llm_callable: Callable[[str], Awaitable[str]]):
     first_cycle = True
     while True:
         try:
-            if not first_cycle:
+            state_at_start = await asyncio.to_thread(load_self_state)
+            if not first_cycle or _cognitive_rest_active(state_at_start):
                 # Event-journal watcher: no model calls and no thought generation.
-                while not await asyncio.to_thread(pending_events, consumer, 1):
+                while True:
+                    has_event = bool(await asyncio.to_thread(pending_events, consumer, 1))
                     state = await asyncio.to_thread(load_self_state)
+                    if _should_run_ambient_cycle(state, has_qualifying_event=has_event):
+                        break
+                    if has_event:
+                        # Non-cognitive events are consumed by the bridge without
+                        # bypassing a deliberate rest interval.
+                        await run_ambient_tick(llm_callable, event_driven=True)
+                        continue
                     if _scheduled_cognition_due(state):
                         break
                     wake_after = _next_scheduled_wake_seconds(state)
