@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 
 import os
 import requests
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request as FastAPIRequest
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -256,6 +256,42 @@ def health():
         "local_runtime": os.environ.get("DEX_LOCAL_RUNTIME") == "1",
         "ambient_process_loaded": bool(os.environ.get("DEX_AMBIENT_STATUS_FILE") and os.path.isfile(os.environ.get("DEX_AMBIENT_STATUS_FILE", ""))),
     }
+
+def _require_initiative_access(request: FastAPIRequest, supplied_key: Optional[str]) -> None:
+    """Keep the initiative outbox private unless an explicit API key is configured."""
+    expected = os.environ.get("DEX_INITIATIVE_API_KEY", "").strip()
+    if expected and supplied_key and __import__("secrets").compare_digest(supplied_key, expected):
+        return
+    remote = request.client.host if request.client else ""
+    if remote in ("127.0.0.1", "::1", "localhost", "testclient"):
+        return
+    raise HTTPException(status_code=403, detail="Initiative outbox is local-only; configure DEX_INITIATIVE_API_KEY for remote access.")
+
+
+@app.get("/initiative/outbox")
+def initiative_outbox(
+    request: FastAPIRequest,
+    x_dex_initiative_key: Optional[str] = Header(default=None),
+):
+    """Read Dex's pending out-of-turn communication intentions."""
+    _require_initiative_access(request, x_dex_initiative_key)
+    from dex_volition import pending_communications
+    return {"status": "ok", "pending": pending_communications()}
+
+
+@app.post("/initiative/outbox/{message_id}/ack")
+def acknowledge_initiative(
+    message_id: str,
+    request: FastAPIRequest,
+    x_dex_initiative_key: Optional[str] = Header(default=None),
+):
+    """Acknowledge a delivered/read initiative without deleting its history."""
+    _require_initiative_access(request, x_dex_initiative_key)
+    from dex_volition import acknowledge_communication
+    if not acknowledge_communication(message_id):
+        raise HTTPException(status_code=404, detail="Pending initiative not found.")
+    return {"status": "acknowledged", "message_id": message_id}
+
 
 @app.get("/compare")
 def compare():
