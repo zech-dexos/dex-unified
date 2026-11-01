@@ -14,10 +14,13 @@ except ImportError:
     SIGIL_ACTIVE = False
     _memory = None
 try:
-    from pathlib import Path
-    Path("/app/dexos_state").mkdir(exist_ok=True)
-    from github_persistence import pull_from_github, push_to_github
-    pull_from_github()
+    # Remote state hydration belongs to ephemeral hosted instances only.
+    # Local DexOS already owns its authoritative state directory.
+    if os.environ.get("DEX_LOCAL_RUNTIME") != "1":
+        from pathlib import Path
+        Path("/app/dexos_state").mkdir(exist_ok=True)
+        from github_persistence import pull_from_github
+        pull_from_github()
     from dexos import DexOS
     _dexos = DexOS()
     _dexos.initialize()
