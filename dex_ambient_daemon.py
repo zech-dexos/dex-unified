@@ -694,13 +694,34 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
 
 
 async def ambient_pulse_loop(llm_callable: Callable[[str], Awaitable[str]]):
-    """Local-only compatibility loop. Production Cloud Run should use /ambient-pulse."""
-    print("[Ambient Daemon] Starting local background cognition loop")
+    """Resident local cognition driven by events and Dex's own continuation choice.
+
+    The short wait watches the shared event journal only. It does not schedule
+    inference. Dex chooses whether to continue; otherwise the process remains
+    idle until a new event arrives.
+    """
+    from dex_event_bridge import pending_events
+
+    consumer = bus._consumer_id
+    print("[Ambient Daemon] Starting event-driven local cognition", flush=True)
+    first_cycle = True
     while True:
         try:
-            from random import uniform
-            await asyncio.sleep(uniform(45.0, 90.0))
-            await run_ambient_tick(llm_callable)
+            if not first_cycle:
+                # Event-journal watcher: no model calls and no thought generation.
+                while not await asyncio.to_thread(pending_events, consumer, 1):
+                    await asyncio.sleep(0.5)
+            first_cycle = False
+            result = await run_ambient_tick(llm_callable, event_driven=True)
+            steps = 1
+            while result.get("continue_cognition") and steps < 3:
+                result = await run_ambient_tick(llm_callable, event_driven=True)
+                steps += 1
+            if steps >= 3 and result.get("continue_cognition"):
+                print("[Volition] yielded after three linked decisions; waiting for a new event", flush=True)
         except asyncio.CancelledError:
-            print("[Ambient Daemon] Loop cancelled, shutting down")
+            print("[Ambient Daemon] Event-driven loop cancelled, shutting down")
             break
+        except Exception as exc:
+            print(f"[Ambient Daemon] Event-driven loop error: {exc}", flush=True)
+            await asyncio.sleep(1.0)
