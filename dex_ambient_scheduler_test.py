@@ -51,6 +51,28 @@ class AmbientSchedulerTests(unittest.TestCase):
         self.assertTrue(_scheduled_cognition_due(workspace_state))
         self.assertEqual(_next_scheduled_wake_seconds(workspace_state), 0.0)
 
+    def test_new_active_goal_is_due_and_future_goal_sets_next_wake(self):
+        new_goal = {
+            "active_goals_state": [{
+                "goal_id": "goal-1", "status": "active",
+                "description": "Continue the persistent objective",
+            }],
+            "persistent_thoughts": [],
+            "pending_reflection_requests": [],
+            "pending_cognitive_observations": [],
+            "active_mental_workspace_state": {},
+        }
+        self.assertTrue(_scheduled_cognition_due(new_goal))
+        self.assertEqual(_next_scheduled_wake_seconds(new_goal), 0.0)
+
+        future = (datetime.now(timezone.utc) + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        new_goal["active_goals_state"][0]["next_attention_at"] = future
+        self.assertFalse(_scheduled_cognition_due(new_goal))
+        delay = _next_scheduled_wake_seconds(new_goal)
+        self.assertIsNotNone(delay)
+        self.assertGreater(delay, 0)
+        self.assertLessEqual(delay, 300)
+
     def test_reflection_request_requires_matching_explicit_acknowledgment(self):
         target = {"kind": "reflection_request", "id": "request-1"}
         valid_data = {"decision": "think", "handled_target_id": "request-1"}
