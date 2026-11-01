@@ -80,6 +80,27 @@ class VolitionTests(unittest.TestCase):
         self.assertTrue(completed["events"])
         self.assertEqual(load_self_state(self.path)["active_goals_state"][0]["status"], "completed")
 
+    def test_goal_cannot_be_completed_without_success_evidence(self):
+        created = apply_volitional_decision({
+            "decision": "create_goal",
+            "thought": "A goal must have an observable completion condition.",
+            "salience": 0.5,
+            "goal": {
+                "description": "Preserve the durable cognitive direction",
+                "priority": "medium",
+                "success_criteria": "A verifiable continuity record survives process restart.",
+            },
+        }, path=self.path)
+        rejected = apply_volitional_decision({
+            "decision": "complete_goal",
+            "goal_id": created["goal_id"],
+            "progress": "Done.",
+            "thought": "I attempted to close the goal without evidence.",
+            "salience": 0.3,
+        }, path=self.path)
+        self.assertIn("completion_rejected", rejected)
+        self.assertEqual(load_self_state(self.path)["active_goals_state"][0]["status"], "active")
+
     def test_communication_is_durable_deduplicated_and_acknowledgeable(self):
         result = apply_volitional_decision({
             "decision": "communicate",
