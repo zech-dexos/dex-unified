@@ -2,6 +2,7 @@
 import json
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dex_volition import (
@@ -10,7 +11,7 @@ from dex_volition import (
     parse_volitional_output,
     pending_communications,
 )
-from self_state import load_self_state
+from self_state import load_self_state, update_self_state
 from local_llm import AMBIENT_JSON_SCHEMA
 
 
@@ -45,6 +46,42 @@ class VolitionTests(unittest.TestCase):
     def test_missing_volitional_decision_fails_closed(self):
         with self.assertRaisesRegex(ValueError, "valid decision"):
             parse_volitional_output('{"thought":"A thought without a choice.","salience":0.5}')
+
+    def test_decision_application_rejects_missing_or_invalid_choice(self):
+        with self.assertRaisesRegex(ValueError, "explicit valid decision"):
+            apply_volitional_decision({"thought": "This must not silently become a decision."}, path=self.path)
+        with self.assertRaisesRegex(ValueError, "explicit valid decision"):
+            apply_volitional_decision({"decision": "invented"}, path=self.path)
+        self.assertEqual(load_self_state(self.path)["persistent_thoughts"], [])
+
+    def test_stranded_delivery_is_recovered_after_process_restart(self):
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        update_self_state({
+            "communication_outbox": [{
+                "message_id": "stranded-message",
+                "message": "A durable message waiting for Root.",
+                "status": "delivering",
+                "last_delivery_attempt_at": stale,
+            }]
+        }, path=self.path)
+        pending = pending_communications(self.path)
+        self.assertEqual([item["message_id"] for item in pending], ["stranded-message"])
+        self.assertEqual(load_self_state(self.path)["communication_outbox"][0]["status"], "pending")
+
+    def test_pending_communications_are_never_evicted_by_history_limit(self):
+        update_self_state({
+            "communication_outbox": [
+                {"message_id": f"pending-{index}", "status": "pending", "message": "Pending item"}
+                for index in range(105)
+            ]
+        }, path=self.path)
+        result = apply_volitional_decision({
+            "decision": "communicate",
+            "communication": {"message": "A new durable message for Root."},
+        }, cycle_id="new-cycle", path=self.path)
+        self.assertTrue(result.get("communication_id"))
+        pending = pending_communications(self.path)
+        self.assertEqual(len(pending), 106)
 
     def test_goal_creation_subgoal_progress_and_completion_persist(self):
         created = apply_volitional_decision({
