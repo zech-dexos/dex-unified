@@ -24,8 +24,6 @@ except ImportError:
     _memory = None
 
 # Firestore + Vertex AI auth — XPRIZE requirements A and C
-import firebase_admin
-from firebase_admin import credentials, firestore as fs
 import datetime
 import base64, tempfile, os
 
@@ -34,8 +32,13 @@ _firestore = None
 
 def _get_firestore():
     global _fb_app, _firestore
+    # Local DexOS is designed to run without Google services or credentials.
+    if os.environ.get("DEX_LOCAL_RUNTIME") == "1":
+        return None
     if _firestore is None:
         try:
+            import firebase_admin
+            from firebase_admin import credentials, firestore as fs
             key_b64 = os.environ.get("FIREBASE_KEY_B64", "")
             key_path = os.path.join(os.path.dirname(__file__), "firebase-key.json")
             if key_b64:
@@ -164,19 +167,20 @@ async def start_continuous_substrate():
         from dex_substrate import run_substrate_loop
         from dex_events import setup_cognitive_layers
 
-        # Rehydrate Dex's durable state before any continuity/workspace
-        # subscriber can read or mutate it. Cloud Run instances are ephemeral;
-        # GitHub is the durable ledger for DexOS state.
-        try:
-            from github_persistence import pull_from_github
-            if pull_from_github():
-                print("[Continuity] Durable DexOS state rehydrated from GitHub")
-            else:
-                print("[Continuity] No GitHub state rehydrated; using existing local state")
-        except Exception as e:
-            # A persistence outage must not prevent the API from serving.
-            # Firestore interaction memory remains independently available.
-            print(f"[Continuity] GitHub state rehydration skipped: {e}")
+        # Hosted instances may rehydrate their remote continuity ledger.
+        # A local workstation owns its files directly and must not overwrite
+        # them from GitHub during startup.
+        if os.environ.get("DEX_LOCAL_RUNTIME") != "1":
+            try:
+                from github_persistence import pull_from_github
+                if pull_from_github():
+                    print("[Continuity] Durable DexOS state rehydrated from GitHub")
+                else:
+                    print("[Continuity] No GitHub state rehydrated; using existing local state")
+            except Exception as e:
+                print(f"[Continuity] GitHub state rehydration skipped: {e}")
+        else:
+            print("[Continuity] Local state is authoritative; remote rehydration disabled")
 
         # Initialize event subscriptions only after durable state is present.
         setup_cognitive_layers()
@@ -675,9 +679,10 @@ async def chat(req: ChatRequest):
         # Persist immediately -- don't wait for the 6-hour pulse. Cloud Run's
         # /tmp state is ephemeral, so anything not pushed before a cold start
         # is lost. Fire-and-forget in a thread so it doesn't block the reply.
-        import asyncio as _asyncio
-        from github_persistence import push_to_github
-        _asyncio.get_event_loop().run_in_executor(None, push_to_github)
+        if os.environ.get("DEX_LOCAL_RUNTIME") != "1":
+            import asyncio as _asyncio
+            from github_persistence import push_to_github
+            _asyncio.get_event_loop().run_in_executor(None, push_to_github)
     except Exception as e:
         print(f"[ape_scheduler] run_cycle failed: {e}")
 
