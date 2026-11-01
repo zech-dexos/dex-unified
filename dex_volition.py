@@ -5,9 +5,11 @@ result in Dex's existing SelfState, GOSDW goal ledger, and persistent thought
 ledger. Communication is an outbox: delivery is optional and never discards
 an intention when no channel is configured.
 """
+import hashlib
 import json
 import os
 import uuid
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -151,6 +153,56 @@ def enqueue_communication(message: str, reason: str = "", urgency: str = "normal
     return item
 
 
+def _verify_completion_evidence(evidence, state: dict) -> list:
+    """Verify model-supplied references against real artifacts or persisted event IDs."""
+    if not isinstance(evidence, list) or not evidence:
+        return []
+    repo_root = Path(__file__).resolve().parent
+    verified = []
+    continuity = state.get("continuity_events", []) or []
+    observations = state.get("recent_cognitive_observations", []) or []
+    experiences = state.get("recent_experiences", []) or []
+    for item in evidence[:5]:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("type")
+        claim = str(item.get("claim", "")).strip()[:300]
+        if kind == "artifact":
+            relative = str(item.get("path", "")).strip()
+            digest = str(item.get("sha256", "")).strip().lower()
+            if not relative or len(digest) != 64:
+                continue
+            try:
+                target = (repo_root / relative).resolve()
+                target.relative_to(repo_root)
+                if not target.is_file():
+                    continue
+                actual = hashlib.sha256(target.read_bytes()).hexdigest()
+            except (OSError, ValueError):
+                continue
+            if actual != digest:
+                continue
+            verified.append({
+                "type": "artifact", "path": str(target.relative_to(repo_root)),
+                "sha256": actual, "claim": claim,
+            })
+        elif kind == "event":
+            event_id = str(item.get("event_id", "")).strip()
+            if not event_id:
+                continue
+            found = any(
+                isinstance(record, dict)
+                and event_id in (
+                    record.get("event_id"), record.get("source_event_id"),
+                    record.get("experience_id"), record.get("observation_id"),
+                )
+                for record in list(continuity) + list(observations) + list(experiences)
+            )
+            if found:
+                verified.append({"type": "event", "event_id": event_id, "claim": claim})
+    return verified
+
+
 def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = None,
                                cycle_id: str = "", path=SELF_STATE_PATH) -> dict:
     """Apply one model choice to durable cognition; return auditable state changes."""
@@ -215,15 +267,44 @@ def apply_volitional_decision(data: Dict[str, Any], target: Optional[dict] = Non
             candidate_goal = next((g for g in state.get("active_goals_state", [])
                                    if g.get("goal_id") == goal_id and g.get("status") == "active"), None)
             evidence = str(data.get("progress", "")).strip()
-            if candidate_goal and len(str(candidate_goal.get("success_criteria", "")).strip()) >= 12 and len(evidence) >= 20:
+            verified_evidence = _verify_completion_evidence(
+                data.get("completion_evidence", []), state
+            )
+            if (
+                candidate_goal
+                and len(str(candidate_goal.get("success_criteria", "")).strip()) >= 12
+                and len(evidence) >= 20
+                and verified_evidence
+            ):
                 from gosdw import update_goal_status
-                goal = update_goal_status(goal_id, "completed", progress_report=evidence[:1200], path=path)
+                goal = update_goal_status(
+                    goal_id, "completed",
+                    progress_report=evidence[:1200],
+                    path=path,
+                )
                 if goal:
-                    events.append(("GOAL_COMPLETED", {"goal_id": goal_id, "goal": goal.get("description", ""),
-                                                       "result": evidence[:1200], "source": "autonomous_volition"}))
+                    goal["completion_evidence"] = verified_evidence
+                    state = load_self_state(path)
+                    goals = list(state.get("active_goals_state", []) or [])
+                    for record in goals:
+                        if record.get("goal_id") == goal_id:
+                            record["completion_evidence"] = verified_evidence
+                            break
+                    update_self_state({"active_goals_state": goals}, path=path)
+                    events.append(("GOAL_COMPLETED", {
+                        "goal_id": goal_id,
+                        "goal": goal.get("description", ""),
+                        "result": evidence[:1200],
+                        "completion_evidence": verified_evidence,
+                        "source": "autonomous_volition",
+                    }))
+                    result["completion_evidence"] = verified_evidence
                     result["continue_cognition"] = bool(data.get("continue_cognition", False))
             else:
-                result["completion_rejected"] = "existing success criteria and a substantive evidence report are required"
+                result["completion_rejected"] = (
+                    "completion requires an active goal, success criteria, a substantive report, "
+                    "and at least one verified artifact checksum or persisted event reference"
+                )
 
     elif decision == "communicate":
         candidate = data.get("communication") if isinstance(data.get("communication"), dict) else {}
