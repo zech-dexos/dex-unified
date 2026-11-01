@@ -516,6 +516,32 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                 f"communication={volition_result.get('communication_id')}"
             )
 
+            volition_dispatch = []
+            for event_type, payload in volition_result.get("events", []):
+                event_payload = {
+                    **payload,
+                    "event_type": event_type,
+                    "event_id": uuid.uuid4().hex,
+                    "source_event_id": ambient_event_id,
+                }
+                volition_dispatch.extend(await bus.publish(event_type, event_payload))
+            if volition_result.get("communication_id"):
+                from dex_volition import deliver_pending_communications
+                delivery = await deliver_pending_communications()
+                print(f"[Volition] communication delivery: {delivery}")
+
+            if volition_result.get("decision") == "rest" and not thought_text:
+                _persist_pulse_state(
+                    target=target, thought_text=None, salience=salience, status="resting"
+                )
+                return {
+                    "status": "resting",
+                    "target": target,
+                    "volition": volition_result,
+                    "event_dispatch": volition_dispatch,
+                    "continue_cognition": False,
+                }
+
             if thought_text:
                 # Complete a queued reflection request only after usable ambient cognition.
                 if target.get("kind") == "reflection_request":
@@ -538,22 +564,6 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                     })
 
                 add_thought(thought_text, salience)
-
-                # Apply Dex's chosen goal, subgoal, progress, or communication
-                # mutation and publish it into the same continuity fabric.
-                volition_dispatch = []
-                for event_type, payload in volition_result.get("events", []):
-                    event_payload = {
-                        **payload,
-                        "event_type": event_type,
-                        "event_id": uuid.uuid4().hex,
-                        "source_event_id": ambient_event_id,
-                    }
-                    volition_dispatch.extend(await bus.publish(event_type, event_payload))
-                if volition_result.get("communication_id"):
-                    from dex_volition import deliver_pending_communications
-                    delivery = await deliver_pending_communications()
-                    print(f"[Volition] communication delivery: {delivery}")
 
                 next_attention = (
                     datetime.now(timezone.utc)
