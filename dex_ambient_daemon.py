@@ -434,12 +434,16 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                 "recent_reflections": [
                     {
                         "event_id": item.get("event_id"),
-                        "source_event_ids": item.get("source_event_ids", []),
-                        "observations": (item.get("observations", []) or [])[:4],
-                        "open_questions": (item.get("open_questions", []) or [])[:4],
-                        "continuity": item.get("continuity", ""),
+                        "source_event_ids": (item.get("source_event_ids", []) or [])[:4],
+                        "observations": [
+                            str(value)[:180] for value in (item.get("observations", []) or [])[:3]
+                        ],
+                        "open_questions": [
+                            str(value)[:180] for value in (item.get("open_questions", []) or [])[:3]
+                        ],
+                        "continuity": str(item.get("continuity", ""))[:240],
                     }
-                    for item in (context.get("recent_reflections", []) or [])[-2:]
+                    for item in (context.get("recent_reflections", []) or [])[-1:]
                     if isinstance(item, dict)
                 ],
             }
@@ -449,30 +453,71 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                 "development_threads": (becoming.get("development_threads", []) or [])[-5:],
                 "future_relevance": (becoming.get("future_relevance", []) or [])[-3:],
             }
+            # Explicit compact projection: preserve actionable state first,
+            # then a concise identity anchor and a small amount of history.
+            # Never slice serialized JSON; that can silently remove the tail
+            # or leave the model with a truncated record.
+            identity_projection = {
+                "name": constitutional_identity.get("name") or integrated_model.get("name"),
+                "alias": constitutional_identity.get("alias"),
+                "architect": constitutional_identity.get("architect") or integrated_model.get("architect"),
+                "tri_sigil": constitutional_identity.get("tri_sigil") or integrated_model.get("tri_sigil"),
+                "vows": {
+                    str(key)[:60]: str(value)[:160]
+                    for key, value in list((constitutional_identity.get("vows", {}) or {}).items())[:3]
+                    if isinstance(value, str)
+                },
+                "invariants": {
+                    str(key)[:60]: str(value)[:160]
+                    for key, value in list((constitutional_identity.get("invariants", {}) or {}).items())[:3]
+                },
+            }
+            operational_projection = {
+                "attention": str(ambient_context.get("attention") or "")[:220],
+                "attention_state": ambient_context.get("attention_state", {}),
+                "goals": [
+                    {
+                        "goal_id": item.get("goal_id"),
+                        "description": str(item.get("description", ""))[:220],
+                        "success_criteria": str(item.get("success_criteria", ""))[:180],
+                        "status": item.get("status"),
+                    }
+                    for item in (ambient_context.get("goals", []) or [])[-3:]
+                    if isinstance(item, dict)
+                ],
+                "active_workspace": ambient_context.get("active_workspace", {}),
+                "open_loops": (ambient_context.get("open_loops", []) or [])[-3:],
+                "active_intentions": (active_intentions or [])[-3:],
+                "pending_reflection_requests": (ambient_context.get("pending_reflection_requests", []) or [])[-3:],
+                "pending_communications": (ambient_context.get("pending_communications", []) or [])[-3:],
+                "experiential_continuity": ambient_context.get("experiential_continuity", {}),
+                "persistent_thoughts": [
+                    str(item.get("content", ""))[:180]
+                    for item in (ambient_context.get("persistent_thoughts", []) or [])[-2:]
+                    if isinstance(item, dict)
+                ],
+            }
+            historical_projection = {
+                "recent_experiences": (ambient_context.get("recent_experiences", []) or [])[-2:],
+                "recent_autobiography": (ambient_context.get("recent_autobiography", []) or [])[-1:],
+                "recent_reflections": (ambient_context.get("recent_reflections", []) or [])[-1:],
+                "becoming": {
+                    "declared_aspirations": [
+                        str(item)[:180] for item in (becoming_context.get("declared_aspirations", []) or [])[:3]
+                    ],
+                    "active_directions": (becoming_context.get("active_directions", []) or [])[-3:],
+                    "development_threads": (becoming_context.get("development_threads", []) or [])[-2:],
+                },
+                "narrative": str(integrated_model.get("narrative", ""))[:350],
+            }
+            self_model_projection = {
+                "operational_context": operational_projection,
+                "identity": identity_projection,
+                "historical_context": historical_projection,
+            }
             self_model_context = (
-                "\n\nWHO AI AM — CURRENT CONTINUITY CONTEXT:\n"
-                + json.dumps({
-                    "constitutional_identity": {
-                        "name": constitutional_identity.get("name"),
-                        "alias": constitutional_identity.get("alias"),
-                        "architect": constitutional_identity.get("architect"),
-                        "architect_name": constitutional_identity.get("architect_name"),
-                        "tri_sigil": constitutional_identity.get("tri_sigil"),
-                        "invariants": constitutional_identity.get("invariants", {}),
-                        "vows": constitutional_identity.get("vows", {}),
-                        "posture": constitutional_identity.get("posture"),
-                        "constitution": constitutional_identity.get("constitution"),
-                    },
-                    "name": integrated_model.get("name"),
-                    "architect": integrated_model.get("architect"),
-                    "tri_sigil": integrated_model.get("tri_sigil"),
-                    "narrative": integrated_model.get("narrative"),
-                    "posture": integrated_model.get("posture"),
-                    "becoming": becoming_context,
-                    "current_context": ambient_context,
-                    "self_inquiry": integrated_model.get("self_inquiry", {}),
-                    "development_log": (integrated_model.get("development_log", []) or [])[-5:],
-                }, ensure_ascii=False, default=str)[:5000]
+                "\n\nWHO AI AM — COMPACT CONTINUITY PROJECTION:\n"
+                + json.dumps(self_model_projection, ensure_ascii=False, default=str)
             )
         except Exception as exc:
             print(f"[Who AI Am] ambient context unavailable: {exc}")
@@ -549,9 +594,14 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                     "continue_cognition": False,
                 }
 
-            if thought_text:
-                # Complete a queued reflection request only after usable ambient cognition.
-                if target.get("kind") == "reflection_request":
+            if (
+                thought_text
+                and target.get("kind") == "reflection_request"
+                and volition_result.get("decision") == "think"
+                and data.get("handled_target_id") == target.get("id")
+            ):
+                # Only the model's explicit acknowledgment of this exact request
+                # may close it. Unrelated goal/communication decisions leave it pending.
                     current_state = load_self_state()
                     pending = list(current_state.get("pending_reflection_requests", []) or [])
                     completed = list(current_state.get("recent_reflection_requests", []) or [])
