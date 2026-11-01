@@ -24,6 +24,22 @@ class FakeLLM:
 
 
 class AmbientContextFitTests(unittest.TestCase):
+    def test_ambient_schema_avoids_llamacpp_pathological_string_bounds(self):
+        def walk(value):
+            if isinstance(value, dict):
+                self.assertNotIn("maxLength", value)
+                for child in value.values():
+                    walk(child)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child)
+
+        walk(local_llm.AMBIENT_JSON_SCHEMA)
+        self.assertEqual(
+            local_llm.AMBIENT_JSON_SCHEMA["required"],
+            ["decision", "reason", "thought", "salience", "continue_cognition"],
+        )
+
     def test_final_fitted_prompt_keeps_operational_prefix_and_live_target(self):
         llm = FakeLLM()
         prompt = (
