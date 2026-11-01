@@ -420,6 +420,21 @@ AMBIENT_JSON_SCHEMA = {
         "handled_target_id": {"type": "string", "maxLength": 128},
         "subgoal": {"type": "string", "maxLength": 500},
         "progress": {"type": "string", "maxLength": 1200},
+        "completion_evidence": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": ["artifact", "event"]},
+                    "path": {"type": "string", "maxLength": 500},
+                    "sha256": {"type": "string", "maxLength": 64},
+                    "event_id": {"type": "string", "maxLength": 128},
+                    "claim": {"type": "string", "maxLength": 300},
+                },
+                "additionalProperties": False,
+            },
+            "maxItems": 5,
+        },
         "communication": {
             "type": "object",
             "properties": {
