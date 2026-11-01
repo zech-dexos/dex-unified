@@ -549,13 +549,17 @@ async def run_ambient_tick(llm_callable: Callable[[str], Awaitable[str]], event_
                 delivery = await deliver_pending_communications()
                 print(f"[Volition] communication delivery: {delivery}")
 
-            if volition_result.get("decision") == "rest" and not thought_text:
+            if volition_result.get("decision") == "rest":
+                from dex_lifecycle import enter_resting_mode
+                enter_resting_mode()
                 _persist_pulse_state(
-                    target=target, thought_text=None, salience=salience, status="resting"
+                    target=target, thought_text=thought_text or None,
+                    salience=salience, status="resting"
                 )
                 return {
                     "status": "resting",
                     "target": target,
+                    "thought": thought_text or None,
                     "volition": volition_result,
                     "event_dispatch": volition_dispatch,
                     "continue_cognition": False,
