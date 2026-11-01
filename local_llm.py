@@ -274,10 +274,44 @@ def local_chat_generate(messages, max_tokens: int = 200, on_token=None) -> str:
     while len(turns) > 1 and token_count(([system] if system else []) + turns) > prompt_budget:
         turns.pop(0)
     normalized = ([system] if system else []) + turns
-    if token_count(normalized) > prompt_budget:
+
+    # Tokenization of a compacted system prompt is not perfectly additive:
+    # detokenization plus the separator marker can add a few tokens back.
+    # Refit the system content against the *final* assembled message list,
+    # while keeping the current participant turn intact.
+    if system and token_count(normalized) > prompt_budget:
+        original_system_content = system["content"]
+        original_system_tokens = (
+            len(llm.tokenize(original_system_content.encode("utf-8"), add_bos=False))
+            if llm is not None
+            else max(1, len(original_system_content) // 3)
+        )
+        target_system_tokens = max(
+            128,
+            original_system_tokens - (token_count(normalized) - prompt_budget) - 64,
+        )
+        for _ in range(12):
+            system["content"] = trim_system_content(
+                original_system_content, target_system_tokens
+            )
+            normalized = [system] + turns
+            assembled_tokens = token_count(normalized)
+            if assembled_tokens <= prompt_budget:
+                break
+            reduction = max(32, assembled_tokens - prompt_budget + 32)
+            target_system_tokens = max(128, target_system_tokens - reduction)
+
+    # If identity plus the current user turn alone is too large, fail clearly;
+    # never silently discard the current participant contribution.
+    while len(turns) > 1 and token_count(normalized) > prompt_budget:
+        turns.pop(0)
+        normalized = ([system] if system else []) + turns
+
+    assembled_tokens = token_count(normalized)
+    if assembled_tokens > prompt_budget:
         raise ValueError(
-            f"Current turn and compacted identity exceed context window: "
-            f"{token_count(normalized)} tokens, budget {prompt_budget}"
+            f"Current turn and minimum identity exceed context window: "
+            f"{assembled_tokens} tokens, budget {prompt_budget}"
         )
 
     request = {
