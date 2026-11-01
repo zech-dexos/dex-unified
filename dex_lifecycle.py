@@ -35,6 +35,10 @@ def _parse_time(value):
 def _load_lifecycle(state):
     """Prefer the durable Firestore lifecycle record when available."""
     local = state.get("runtime_lifecycle", {})
+    # In local runtime SelfState is authoritative; do not initialize or contact
+    # Firestore for lifecycle reads.
+    if __import__("os").environ.get("DEX_LOCAL_RUNTIME") == "1":
+        return local
     try:
         from dex_memory import _get_db
         db = _get_db()
@@ -57,14 +61,15 @@ def _write_lifecycle(previous, delta):
     lifecycle = {**(previous or {}), **delta}
     updated = update_self_state({"runtime_lifecycle": lifecycle})
     lifecycle = updated.get("runtime_lifecycle", lifecycle)
-    try:
-        from dex_memory import _get_db
-        db = _get_db()
-        if db:
-            db.collection("dex_runtime").document("lifecycle").set(lifecycle)
-    except Exception as exc:
-        # Local atomic state remains available; report the missing durable copy.
-        print(f"[Dex Lifecycle] durable lifecycle write unavailable: {exc}")
+    if __import__("os").environ.get("DEX_LOCAL_RUNTIME") != "1":
+        try:
+            from dex_memory import _get_db
+            db = _get_db()
+            if db:
+                db.collection("dex_runtime").document("lifecycle").set(lifecycle)
+        except Exception as exc:
+            # Local atomic state remains available; report the missing durable copy.
+            print(f"[Dex Lifecycle] durable lifecycle write unavailable: {exc}")
     return updated
 
 
